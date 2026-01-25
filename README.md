@@ -11,6 +11,7 @@ Zsh configuration
 - [File Tracking System](#file-tracking-system)
 - [Development Guidelines](#development-guidelines)
 - [Examples & Use Cases](#examples--use-cases)
+- [ZSH.md](ZSH.md) - guidelines for writing idiomatic zsh code.
 
 ---
 
@@ -47,7 +48,7 @@ When working on changes to this zsh configuration:
    - The naming conventions (see [Naming Conventions](#naming-conventions))
    - The file tracking pattern (see [File Tracking System](#file-tracking-system))
 
-4. **For coding style**, follow the zsh idioms in **[CLAUDE_ZSH.md](CLAUDE_ZSH.md)** - this is critical for writing proper zsh code (not bash)
+4. **For coding style**, follow the zsh idioms in **[ZSH.md](ZSH.md)** - this is critical for writing proper zsh code (not bash)
 
 ---
 
@@ -1006,7 +1007,7 @@ fi
 
 - **Always** use tracking in sourced files
 - **Always** check installation before configuring
-- **Always** follow zsh coding style (see [CLAUDE_ZSH.md](CLAUDE_ZSH.md))
+- **Always** follow zsh coding style (see [ZSH.md](ZSH.md))
 - **Always** test functions before committing
 - Use `is_installed` before configuring tools
 - Use `is_debug` for conditional logging
@@ -1024,7 +1025,7 @@ fi
 - Don't put heavy operations in `.zshenv`
 - Don't use subshells when not needed
 
-*For zsh coding do's and don'ts, see [CLAUDE_ZSH.md](CLAUDE_ZSH.md)*
+*For zsh coding do's and don'ts, see [ZSH.md](ZSH.md)*
 
 ---
 
