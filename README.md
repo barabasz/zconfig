@@ -22,6 +22,8 @@ This is a modular, performance-optimized zsh configuration focused on maintainab
 **Key Features:**
 - File tracking system with performance monitoring
 - Modular library of helper functions
+- Lightweight plugin system (no Oh-My-Zsh dependency)
+- Automatic plugin compilation for faster loading
 - Lazy loading for heavy applications
 - Dynamic loading of all library and app files
 - Autoloaded user functions
@@ -31,7 +33,7 @@ This is a modular, performance-optimized zsh configuration focused on maintainab
 
 ---
 
-## Instructions for Claude
+## Instructions for changes and improvements
 
 When working on changes to this zsh configuration:
 
@@ -44,11 +46,15 @@ When working on changes to this zsh configuration:
 2. **Before modifying app integrations**, read:
    - `apps/*.zsh` - to understand existing configurations
 
-3. **For any changes**, familiarize yourself with:
+3. **Before adding plugins**, read:
+   - `lib/plugins.zsh` - plugin management functions
+   - `plugins/*.zsh` - existing plugin wrappers
+
+4. **For any changes**, familiarize yourself with:
    - The naming conventions (see [Naming Conventions](#naming-conventions))
    - The file tracking pattern (see [File Tracking System](#file-tracking-system))
 
-4. **For coding style**, follow the zsh idioms in **[ZSH.md](ZSH.md)** - this is critical for writing proper zsh code (not bash)
+5. **For coding style**, follow the zsh idioms in **[ZSH.md](ZSH.md)** - this is critical for writing proper zsh code (not bash)
 
 ---
 
@@ -131,9 +137,9 @@ When working on changes to this zsh configuration:
 │   ├── system.zsh       # OS detection & info
 │   ├── strings.zsh      # String manipulation
 │   ├── shell.zsh        # Shell info functions
+│   ├── plugins.zsh      # Plugin management functions
 │   └── varia.zsh        # Miscellaneous helpers
 ├── apps/             # Application integrations
-│   ├── _omz.zsh         # Oh-my-zsh (with _ to be loaded first)
 │   ├── brew.zsh         # Homebrew
 │   ├── omp.zsh          # Oh My Posh (prompt engine)
 │   └── ...              # Other apps
@@ -142,6 +148,10 @@ When working on changes to this zsh configuration:
 │   ├── logininfo        # Login details
 │   ├── zfiles           # Show tracked files (with -b flag for bar viz)
 │   └── ...              # Other functions
+├── plugins/          # Zsh plugins
+│   ├── f-sy-h.zsh       # Plugin wrapper (configuration)
+│   ├── f-sy-h/          # Plugin repository (git clone, in .gitignore)
+│   └── ...              # Other plugins
 └── cache/            # Runtime cache
     └── sessions/     # Zsh sessions
 ```
@@ -474,6 +484,73 @@ is_installed CMD... # True if all commands exist
 try_source FILE [CALLER] # Source file with error handling
 ```
 
+#### `lib/plugins.zsh` - Plugin Management
+
+Lightweight plugin system without Oh-My-Zsh dependency. Plugins are git repositories cloned to `$ZPLUGDIR/<name>/` with wrapper files for configuration.
+
+**Architecture:**
+```
+plugins/
+├── f-sy-h.zsh       ← Wrapper file (versioned, your config)
+└── f-sy-h/          ← Git clone (in .gitignore)
+    ├── *.zsh
+    └── *.zsh.zwc    ← Compiled for speed
+```
+
+**Functions:**
+
+| Function | Description |
+|----------|-------------|
+| `install_plugin <name> <repo>` | Clone plugin from GitHub or URL |
+| `update_plugin <name>` | Update plugin (git pull + recompile) |
+| `update_plugins` | Update all installed plugins |
+| `remove_plugin <name>` | Remove plugin |
+| `load_plugin <name>` | Load plugin (compile if needed + source) |
+| `compile_plugin <name>` | Compile all .zsh files in plugin |
+| `compile_plugins` | Compile all installed plugins |
+| `clean_plugin <name>` | Remove .zwc files from plugin |
+| `clean_plugins` | Remove .zwc files from all plugins |
+| `is_plugin_loaded <name>` | Check if plugin is loaded |
+| `is_plugin_installed <name>` | Check if plugin is installed |
+| `list_plugins` | List installed plugins with status |
+
+**Usage:**
+```zsh
+# Install a plugin (GitHub shorthand or full URL)
+install_plugin f-sy-h z-shell/F-Sy-H
+install_plugin f-sy-h https://github.com/z-shell/F-Sy-H
+
+# Update all plugins
+update_plugins
+
+# Check status
+list_plugins
+```
+
+**Plugin wrapper example (`plugins/f-sy-h.zsh`):**
+```zsh
+#!/bin/zsh
+zfile_track_start ${0:A}
+
+# Configuration BEFORE loading (plugin reads these)
+typeset -gA FAST_HIGHLIGHT
+FAST_HIGHLIGHT[git-hierarchical]=1
+
+# Load plugin
+load_plugin f-sy-h
+
+# Configuration AFTER loading (uses plugin functions)
+fast-theme XDG:catppuccin-mocha 2>/dev/null
+
+zfile_track_end ${0:A}
+```
+
+**Compilation:**
+- Plugins are automatically compiled to `.zwc` bytecode for ~30-40% faster loading
+- Compilation happens automatically on `install_plugin`, `update_plugin`, and `load_plugin`
+- `.zwc` files are stored alongside `.zsh` files (inside plugin directories)
+- Plugin directories are in `.gitignore`, so `.zwc` files are not versioned
+
 ### 18. `apps/` - Application Integrations
 
 **Purpose:** Configure external tools and applications. Loaded last in `.zshrc`.
@@ -485,7 +562,6 @@ try_source FILE [CALLER] # Source file with error handling
 **Current Apps:**
 | File | Purpose |
 |------|---------|
-| `_omz.zsh` | Oh My Zsh (loaded first for OMP hooks) |
 | `acme.zsh` | ACME.sh SSL certificates |
 | `bat.zsh` | bat (cat replacement) |
 | `brew.zsh` | Homebrew |
@@ -515,7 +591,51 @@ fi
 zfile_track_end ${0:A}
 ```
 
-### 19. `functions/` - Autoloaded Functions
+### 19. `plugins/` - Zsh Plugins
+
+**Purpose:** Zsh plugins managed without Oh-My-Zsh. Each plugin has a wrapper file for configuration.
+
+**Structure:**
+- `plugins/<name>.zsh` - Wrapper file (versioned in git)
+- `plugins/<name>/` - Plugin repository (git clone, in `.gitignore`)
+
+**Current Plugins:**
+| Wrapper | Plugin | Description |
+|---------|--------|-------------|
+| `f-sy-h.zsh` | [F-Sy-H](https://github.com/z-shell/F-Sy-H) | Feature-rich syntax highlighting |
+
+**Why no Oh-My-Zsh?**
+- Faster startup (OMZ loads many unused features)
+- Simpler dependencies
+- Full control over what gets loaded
+- Automatic `.zwc` compilation for speed
+
+**Adding a new plugin:**
+
+1. Install: `install_plugin <name> <github-user/repo>`
+2. Create wrapper: `plugins/<name>.zsh`
+3. In wrapper, call `load_plugin <name>` and add any configuration
+
+**Wrapper template:**
+```zsh
+#!/bin/zsh
+zfile_track_start ${0:A}
+
+# Plugin Name - short description
+# https://github.com/user/repo
+
+# Pre-load configuration (optional)
+# export PLUGIN_VAR=value
+
+load_plugin <name>
+
+# Post-load configuration (optional)
+# plugin_command --setup
+
+zfile_track_end ${0:A}
+```
+
+### 20. `functions/` - Autoloaded Functions
 
 **Purpose:** Complex user functions that are autoloaded on demand.
 
@@ -530,7 +650,7 @@ zfile_track_end ${0:A}
 | `uptimeh` | Get uptime in human format |
 | `zfiles` | Show loaded files report (supports -b flag for bar visualization) |
 
-### 20. `.zshrc` - Interactive Shell
+### 21. `.zshrc` - Interactive Shell
 
 **Purpose:** Set up interactive shell features.
 
@@ -546,10 +666,11 @@ zfile_track_end ${0:A}
   → autoload functions/*
   → inc/aliases.zsh
   → apps/*.zsh (all apps)
+  → plugins/*.zsh (all plugin wrappers)
   → inc/hashdirs.zsh
 ```
 
-### 21. `.zlogin` - Post-Login
+### 22. `.zlogin` - Post-Login
 
 **Purpose:** Actions after login shell initialization.
 
@@ -612,7 +733,10 @@ zfile_track_end ${0:A}
 - Examples: `files.zsh`, `system.zsh`, `strings.zsh`
 
 **App Files:** `{tool}.zsh` or `_{tool}.zsh` (for priority loading)
-- Examples: `brew.zsh`, `fzf.zsh`, `_omz.zsh`
+- Examples: `brew.zsh`, `fzf.zsh`, `omp.zsh`
+
+**Plugin Wrappers:** `{plugin-name}.zsh`
+- Examples: `f-sy-h.zsh`, `zsh-autosuggestions.zsh`
 
 **Include Files:** `{purpose}.zsh`
 - Examples: `zsh.zsh`, `bootstrap.zsh`, `colors.zsh`, `folders.zsh`, `history.zsh`, `path.zsh`, `aliases.zsh`
@@ -743,7 +867,7 @@ Zsh Shell Configuration Load Time Report
    - Info: `*_name`, `*_version` → print string
    - Actions: `get_*`, `try_*`
 
-3. **Follow zsh coding style** - see [CLAUDE_ZSH.md](CLAUDE_ZSH.md)
+3. **Follow zsh coding style** - see [ZSH.md](ZSH.md)
 
 4. **Add tracking:**
    ```zsh
@@ -784,7 +908,7 @@ Zsh Shell Configuration Load Time Report
    zfile_track_end ${0:A}
    ```
 
-3. **For priority loading:** Use `_` prefix (e.g., `_omz.zsh` loads before `omp.zsh`)
+3. **For priority loading:** Use `_` prefix (e.g., `_brew.zsh` loads before `fzf.zsh`)
 
 4. **Check installation:**
    ```zsh
@@ -805,6 +929,51 @@ Zsh Shell Configuration Load Time Report
        slowtool "$@"
    }
    ```
+
+### Adding New Plugin
+
+1. **Install the plugin:**
+   ```zsh
+   install_plugin <name> <github-user/repo>
+   # Example:
+   install_plugin zsh-autosuggestions zsh-users/zsh-autosuggestions
+   ```
+
+2. **Create wrapper file:** `plugins/<name>.zsh`
+   ```zsh
+   #!/bin/zsh
+   zfile_track_start ${0:A}
+
+   # Plugin Name - short description
+   # https://github.com/user/repo
+
+   # Pre-load configuration (if plugin reads env vars at load time)
+   # export PLUGIN_OPTION=value
+
+   load_plugin <name>
+
+   # Post-load configuration (if plugin provides setup commands)
+   # plugin_setup_command
+
+   zfile_track_end ${0:A}
+   ```
+
+3. **Test:**
+   ```zsh
+   source ~/.zshrc
+   list_plugins  # should show new plugin as "loaded"
+   ```
+
+4. **Update `.gitignore`** (if not already):
+   ```gitignore
+   /plugins/*/
+   ```
+
+**Notes:**
+- Plugin directories (`plugins/<name>/`) are git clones and should be in `.gitignore`
+- Only wrapper files (`plugins/<name>.zsh`) are versioned
+- Plugins are automatically compiled to `.zwc` for faster loading
+- Use `update_plugins` to update all plugins at once
 
 ### Adding New User Function
 
@@ -999,6 +1168,28 @@ if is_installed heavytool; then
 fi
 ```
 
+### Example 6: Plugin with Configuration
+
+```zsh
+# plugins/zsh-autosuggestions.zsh
+#!/bin/zsh
+zfile_track_start ${0:A}
+
+# zsh-autosuggestions - Fish-like autosuggestions
+# https://github.com/zsh-users/zsh-autosuggestions
+
+# Configuration before loading
+ZSH_AUTOSUGGEST_STRATEGY=(history completion)
+ZSH_AUTOSUGGEST_BUFFER_MAX_SIZE=20
+
+load_plugin zsh-autosuggestions
+
+# Keybinding after loading
+bindkey '^[[Z' autosuggest-accept  # Shift+Tab to accept
+
+zfile_track_end ${0:A}
+```
+
 ---
 
 ## Best Practices Summary
@@ -1015,6 +1206,8 @@ fi
 - Keep functions small and focused
 - Prefer builtins over external commands
 - Use lazy loading for slow tools
+- Use `load_plugin` for loading plugins (handles compilation)
+- Keep plugin directories in `.gitignore`
 
 ### Don'ts ❌
 
@@ -1024,6 +1217,7 @@ fi
 - Don't create dependencies between lib files
 - Don't put heavy operations in `.zshenv`
 - Don't use subshells when not needed
+- Don't commit plugin directories (only wrappers)
 
 *For zsh coding do's and don'ts, see [ZSH.md](ZSH.md)*
 

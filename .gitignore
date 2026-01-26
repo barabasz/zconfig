@@ -1,0 +1,4 @@
+.zsh_history
+
+# Ignore subdirectories inside /plugins/
+/plugins/*/
