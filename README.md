@@ -1,5 +1,6 @@
 # zsh-config
-Zsh configuration
+
+This is a modular, performance-optimized zsh configuration focused on maintainability, tracking, and fast startup times. The configuration is split across multiple specialized directories with a clear separation of concerns.
 
 ## Table of Contents
 
@@ -13,13 +14,8 @@ Zsh configuration
 - [Examples & Use Cases](#examples--use-cases)
 - [ZSH.md](ZSH.md) - guidelines for writing idiomatic zsh code.
 
----
+## Key Features
 
-## Overview
-
-This is a modular, performance-optimized zsh configuration focused on maintainability, tracking, and fast startup times. The configuration is split across multiple specialized directories with a clear separation of concerns.
-
-**Key Features:**
 - File tracking system with performance monitoring
 - Modular library of helper functions
 - Lightweight plugin system (no Oh-My-Zsh dependency)
@@ -28,10 +24,6 @@ This is a modular, performance-optimized zsh configuration focused on maintainab
 - Dynamic loading of all library and app files
 - Autoloaded user functions
 - Comprehensive aliasing system
-
-**Version:** Tracked via `$ZSH_CONFIG_VERSION` in `inc/zsh.zsh`
-
----
 
 ## Instructions for changes and improvements
 
@@ -55,8 +47,6 @@ When working on changes to this zsh configuration:
    - The file tracking pattern (see [File Tracking System](#file-tracking-system))
 
 5. **For coding style**, follow the zsh idioms in **[ZSH.md](ZSH.md)** - this is critical for writing proper zsh code (not bash)
-
----
 
 ## Philosophy & Principles
 
@@ -103,8 +93,6 @@ When working on changes to this zsh configuration:
 - **Tracking everywhere** - Every file reports loading time
 - **Dynamic loading** - All files in `lib/` and `apps/` are sourced dynamically at shell startup
 - **Explicit module loading** - All zsh modules loaded upfront in `inc/zsh.zsh`
-
----
 
 ## Directory Structure
 
@@ -155,8 +143,6 @@ When working on changes to this zsh configuration:
 └── cache/            # Runtime cache
     └── sessions/     # Zsh sessions
 ```
-
----
 
 ## Core Components
 
@@ -681,8 +667,6 @@ zfile_track_end ${0:A}
 - Calculate total load time
 - Cleanup tracking variables
 
----
-
 ## Naming Conventions
 
 ### Function Names
@@ -743,8 +727,6 @@ zfile_track_end ${0:A}
 
 **Functions:** No extension, lowercase
 - Examples: `sysinfo`, `logininfo`, `zfiles`
-
----
 
 ## File Tracking System
 
@@ -848,8 +830,6 @@ Zsh Shell Configuration Load Time Report
 - White: 1-5ms
 - Yellow: 5-10ms
 - Red: > 10ms
-
----
 
 ## Development Guidelines
 
@@ -1090,8 +1070,6 @@ Zsh Shell Configuration Load Time Report
    - PATH not set correctly
    - Function name conflicts
 
----
-
 ## Examples & Use Cases
 
 ### Example 1: OS-Specific Configuration
@@ -1190,8 +1168,6 @@ bindkey '^[[Z' autosuggest-accept  # Shift+Tab to accept
 zfile_track_end ${0:A}
 ```
 
----
-
 ## Best Practices Summary
 
 ### Do's ✅
@@ -1220,8 +1196,6 @@ zfile_track_end ${0:A}
 - Don't commit plugin directories (only wrappers)
 
 *For zsh coding do's and don'ts, see [ZSH.md](ZSH.md)*
-
----
 
 ## Troubleshooting
 
@@ -1255,18 +1229,9 @@ zfile_track_end ${0:A}
 
 ## Future Enhancements
 
-### Planned Features
-
-- [ ] Network detection functions (`is_connected`, `get_gateway`)
-- [ ] Package manager abstraction (`pkg_install`, `pkg_update`)
-- [ ] Git helper functions (`git_current_branch`, `git_is_dirty`)
-- [ ] More string functions (`trim`, `lowercase`, `uppercase`)
-- [ ] Math functions (`min`, `max`, `avg`)
-- [ ] Array utilities (`array_contains`, `array_unique`)
-
 ### Performance Goals
 
-- Total startup time < 100ms
+- Total startup time < 50ms
 - Library load time < 10ms
 - Individual file load < 5ms
 
@@ -1276,8 +1241,6 @@ zfile_track_end ${0:A}
 - Remove unused app configurations
 - Archive old functions
 - Update documentation
-
----
 
 ## References
 
