@@ -230,7 +230,7 @@ get_wifi_ssid() {
 # Usage: is_valid_ip "192.168.1.1"
 # Returns: 0 (true) or 1 (false)
 is_valid_ip() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     local ip=$1
 
     # IPv4 validation
@@ -310,7 +310,7 @@ is_domain_valid() {
 # Usage: is_port_open "localhost" 80
 # Returns: 0 (true) if open, 1 (false) otherwise
 is_port_open() {
-    [[ $# -eq 2 ]] || return 1
+    (( ARGC == 2 )) || return 1
     local host=$1
     local port=$2
 
@@ -318,7 +318,7 @@ is_port_open() {
     ztcp "$host" "$port" 2>/dev/null
     local fd=$REPLY
     
-    if [[ $fd -gt 0 ]]; then
+    if (( fd > 0 )); then
         ztcp -c $fd # Close the connection immediately
         return 0
     fi

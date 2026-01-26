@@ -33,7 +33,7 @@ fi
 local tmpfile=${TMPDIR:-/tmp}/execs.$$.$RANDOM
 
 # Execute command in background, capturing stdout
-"$@" > "$tmpfile" 2>&1 &
+$@ > $tmpfile 2>&1 &
 local pid=$!
 
 # Hide cursor for clean animation

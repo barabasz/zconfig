@@ -52,7 +52,7 @@ get_default_shell() {
 # Usage: set_default_shell /path/to/shell
 # Returns: 0 on success, 1 on failure
 set_default_shell() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     local new_shell="$1"
 
     # Check executable permissions
@@ -64,7 +64,7 @@ set_default_shell() {
     # Check if shell is in /etc/shells using pure Zsh reading
     # (f) splits by line, check if new_shell is in the array
     local -a valid_shells=("${(@f)$(</etc/shells)}")
-    if [[ ${valid_shells[(Ie)$new_shell]} -eq 0 ]]; then
+    if (( ${valid_shells[(Ie)$new_shell]} == 0 )); then
         printe "Shell '$new_shell' is not in /etc/shells"
         return 1
     fi

@@ -10,7 +10,7 @@ is_installed thefuck || return
 fuck() {
     unfunction fuck
     eval $(thefuck --alias)
-    fuck "$@"
+    fuck $@
 }
 
 # shell files tracking - keep at the end

@@ -10,7 +10,7 @@ is_installed yazi || return
 
 y() {
     local tmp="$(mktemp -t "yazi-cwd.XXXXXX")"
-    yazi "$@" --cwd-file="$tmp"
+    yazi $@ --cwd-file=$tmp
     # Check if the file exists and has content
     if [[ -f "$tmp" ]]; then
         local cwd="$(<"$tmp")"

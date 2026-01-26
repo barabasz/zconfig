@@ -23,7 +23,7 @@ clip_copy() {
     fi
 
     if [[ -n "$cmd" ]]; then
-        if [[ $# -eq 0 ]]; then
+        if (( ARGC == 0 )); then
             # Read from stdin
             cat | eval "$cmd"
         elif [[ -f "$1" ]]; then
@@ -87,7 +87,7 @@ copypath() {
 # Usage: copyfile file.txt
 # Returns: 0 on success, 1 on failure
 copyfile() {
-    if [[ $# -ne 1 ]]; then
+    if (( ARGC != 1 )); then
         # Info: Usage hint
         printi "Usage: copyfile <file>"
         return 1

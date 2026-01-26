@@ -6,7 +6,7 @@
 #   <start> <end>: Show statistics table for a range of numbers
 
 # Validate argument count
-if (( $# < 1 || $# > 2 )); then
+if (( ARGC < 1 || ARGC > 2 )); then
     printe "Usage: collatz <number> OR collatz <start> <end>"
     return 1
 fi
@@ -23,7 +23,7 @@ integer end_num=$start_num # Default to single mode (start == end)
 local mode="single"
 
 # Parse and validate second argument (Range Mode)
-if (( $# == 2 )); then
+if (( ARGC == 2 )); then
     local arg2="$2"
     if [[ "$arg2" != <-> ]]; then
         printe "Error: Second argument must be a positive integer."

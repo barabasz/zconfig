@@ -45,7 +45,7 @@ fi
 
 # Validate remaining arguments
 local arg
-for arg in "$@"; do
+for arg in $@; do
     if [[ "$arg" == -* ]]; then
         print -u2 "get_random: unknown option: $arg"
         print -u2 "Try 'get_random --help' for usage."
@@ -60,16 +60,16 @@ done
 # Calculate logic
 local result_val
 
-if (( $# == 0 )); then
+if (( ARGC == 0 )); then
     # Raw number
     cwg_next
     result_val=$REPLY
-elif (( $# == 1 )); then
+elif (( ARGC == 1 )); then
     # Range [0, max] (inclusive)
     local max=$1
     cwg_next
     (( result_val = REPLY % (max + 1) ))
-elif (( $# == 2 )); then
+elif (( ARGC == 2 )); then
     # Range [min, max] (inclusive)
     local min=$1
     local max=$2

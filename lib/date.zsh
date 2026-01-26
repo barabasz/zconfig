@@ -30,7 +30,7 @@ now_iso_full() {
 # Usage: now_format "%Y/%m/%d"
 # Returns: 2024/01/06 (Format depends on user input)
 now_format() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     strftime "$1" $EPOCHSECONDS
 }
 
@@ -104,7 +104,7 @@ current_second() {
 # Usage: format_timestamp 1704556800 "%Y-%m-%d"
 # Returns: 2024-01-06
 format_timestamp() {
-    [[ $# -eq 2 ]] || return 1
+    (( ARGC == 2 )) || return 1
     strftime "$2" $1
 }
 
@@ -112,7 +112,7 @@ format_timestamp() {
 # Usage: date_to_timestamp "2024-01-06"
 # Returns: 1704556800
 date_to_timestamp() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     # Use built-in reverse strftime (-r) to parse date.
     strftime -r "%Y-%m-%d" "$1"
 }
@@ -121,7 +121,7 @@ date_to_timestamp() {
 # Usage: add_days 7
 # Returns: timestamp for 7 days from now
 add_days() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     print -- $(( EPOCHSECONDS + ($1 * 86400) ))
 }
 
@@ -129,7 +129,7 @@ add_days() {
 # Usage: sub_days 7
 # Returns: timestamp for 7 days ago
 sub_days() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     print -- $(( EPOCHSECONDS - ($1 * 86400) ))
 }
 
@@ -137,7 +137,7 @@ sub_days() {
 # Usage: days_between 1704556800 1704643200
 # Returns: 1 (absolute value)
 days_between() {
-    [[ $# -eq 2 ]] || return 1
+    (( ARGC == 2 )) || return 1
     local diff=$(( $2 - $1 ))
     # Use float division for accuracy then truncate to int
     print -- $(( ( ${diff#-} ) / 86400 ))
@@ -147,7 +147,7 @@ days_between() {
 # Usage: hours_between 1704556800 1704560400
 # Returns: 1 (absolute value)
 hours_between() {
-    [[ $# -eq 2 ]] || return 1
+    (( ARGC == 2 )) || return 1
     local diff=$(( $2 - $1 ))
     print -- $(( ( ${diff#-} ) / 3600 ))
 }
@@ -156,7 +156,7 @@ hours_between() {
 # Usage: minutes_between 1704556800 1704556860
 # Returns: 1 (absolute value)
 minutes_between() {
-    [[ $# -eq 2 ]] || return 1
+    (( ARGC == 2 )) || return 1
     local diff=$(( $2 - $1 ))
     print -- $(( ( ${diff#-} ) / 60 ))
 }
@@ -165,7 +165,7 @@ minutes_between() {
 # Usage: seconds_between 1704556800 1704556801
 # Returns: 1 (absolute value)
 seconds_between() {
-    [[ $# -eq 2 ]] || return 1
+    (( ARGC == 2 )) || return 1
     local diff=$(( $2 - $1 ))
     print -- ${diff#-}
 }
@@ -174,7 +174,7 @@ seconds_between() {
 # Usage: is_leap_year 2024
 # Returns: 0 (true) or 1 (false)
 is_leap_year() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     local year=$1
     # Logic: divisible by 4 AND (not divisible by 100 OR divisible by 400)
     (( year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) ))
@@ -184,7 +184,7 @@ is_leap_year() {
 # Usage: days_in_month 2 2024
 # Returns: 29 (February 2024 is a leap year)
 days_in_month() {
-    [[ $# -eq 2 ]] || return 1
+    (( ARGC == 2 )) || return 1
     local month=$1
     local year=$2
 
@@ -202,7 +202,7 @@ days_in_month() {
 # Usage: age_from_date "1990-01-06"
 # Returns: 34
 age_from_date() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     local birth_date="$1"
     
     # Mathematical method (YYYYMMDD) is more accurate than seconds division
@@ -279,7 +279,7 @@ start_of_year() {
 # Usage: is_today 1704556800
 # Returns: 0 (true) or 1 (false)
 is_today() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     local input_date
     local today_date
     
@@ -293,7 +293,7 @@ is_today() {
 # Usage: is_past 1704556800
 # Returns: 0 (true) or 1 (false)
 is_past() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     (( $1 < EPOCHSECONDS ))
 }
 
@@ -301,7 +301,7 @@ is_past() {
 # Usage: is_future 1704556800
 # Returns: 0 (true) or 1 (false)
 is_future() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     (( $1 > EPOCHSECONDS ))
 }
 
@@ -309,7 +309,7 @@ is_future() {
 # Usage: relative_time 1704556800
 # Returns: "2 hours ago" or "in 3 days"
 relative_time() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     local ts=$1
     local now=$EPOCHSECONDS
     local diff=$(( now - ts ))
@@ -407,7 +407,7 @@ format_time() {
 # Usage: format_duration 3665
 # Returns: "1.0 h" or "1 day 2h 30m"
 format_duration() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     local sec=$1
     local d h m
 

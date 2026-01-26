@@ -12,14 +12,14 @@ zmodload zsh/stat
 # Usage: is_file "/path/to/file"
 # Returns: 0 (true) or 1 (false)
 is_file() {
-    [[ $# -eq 1 && -f "$1" ]]
+    (( ARGC == 1 )) && [[ -f $1 ]]
 }
 
 # Check if path exists and is a directory
 # Usage: is_dir "/path/to/dir"
 # Returns: 0 (true) or 1 (false)
 is_dir() {
-    [[ $# -eq 1 && -d "$1" ]]
+    (( ARGC == 1 )) && [[ -d $1 ]]
 }
 functions[is_folder]=$functions[is_dir]
 
@@ -27,14 +27,14 @@ functions[is_folder]=$functions[is_dir]
 # Usage: is_link "/path/to/symlink"
 # Returns: 0 (true) or 1 (false)
 is_link() {
-    [[ $# -eq 1 && -L "$1" ]]
+    (( ARGC == 1 )) && [[ -L $1 ]]
 }
 
 # Alias for is_link
 # Usage: is_symlink "/path/to/symlink"
 # Returns: 0 (true) or 1 (false)
 is_symlink() {
-    is_link "$@"
+    is_link $@
 }
 
 # Check if file is a hard link (has link count > 1)
@@ -42,7 +42,7 @@ is_symlink() {
 # Usage: is_hardlink "/path/to/file"
 # Returns: 0 (true) or 1 (false)
 is_hardlink() {
-    [[ $# -eq 1 && -f "$1" ]] || return 1
+    (( ARGC == 1 )) && [[ -f $1 ]] || return 1
     # +nlink retrieves the number of hard links
     local links
     zstat -A links +nlink "$1" 2>/dev/null
@@ -53,35 +53,35 @@ is_hardlink() {
 # Usage: is_exists "/path/to/anything"
 # Returns: 0 (true) or 1 (false)
 is_exists() {
-    [[ $# -eq 1 && -e "$1" ]]
+    (( ARGC == 1 )) && [[ -e $1 ]]
 }
 
 # Check if path is a block device
 # Usage: is_block_device "/dev/sda"
 # Returns: 0 (true) or 1 (false)
 is_block_device() {
-    [[ $# -eq 1 && -b "$1" ]]
+    (( ARGC == 1 )) && [[ -b $1 ]]
 }
 
 # Check if path is a character device
 # Usage: is_char_device "/dev/tty"
 # Returns: 0 (true) or 1 (false)
 is_char_device() {
-    [[ $# -eq 1 && -c "$1" ]]
+    (( ARGC == 1 )) && [[ -c $1 ]]
 }
 
 # Check if path is a named pipe (FIFO)
 # Usage: is_pipe "/path/to/pipe"
 # Returns: 0 (true) or 1 (false)
 is_pipe() {
-    [[ $# -eq 1 && -p "$1" ]]
+    (( ARGC == 1 )) && [[ -p $1 ]]
 }
 
 # Check if path is a socket
 # Usage: is_socket "/path/to/socket.sock"
 # Returns: 0 (true) or 1 (false)
 is_socket() {
-    [[ $# -eq 1 && -S "$1" ]]
+    (( ARGC == 1 )) && [[ -S $1 ]]
 }
 
 # --- Permissions Checks ---
@@ -90,21 +90,21 @@ is_socket() {
 # Usage: is_readable "/path/to/file"
 # Returns: 0 (true) or 1 (false)
 is_readable() {
-    [[ $# -eq 1 && -r "$1" ]]
+    (( ARGC == 1 )) && [[ -r $1 ]]
 }
 
 # Check if path is writable
 # Usage: is_writable "/path/to/file"
 # Returns: 0 (true) or 1 (false)
 is_writable() {
-    [[ $# -eq 1 && -w "$1" ]]
+    (( ARGC == 1 )) && [[ -w $1 ]]
 }
 
 # Check if path is executable
 # Usage: is_executable "/path/to/script.sh"
 # Returns: 0 (true) or 1 (false)
 is_executable() {
-    [[ $# -eq 1 && -x "$1" ]]
+    (( ARGC == 1 )) && [[ -x $1 ]]
 }
 
 # --- Content/Metadata Checks ---
@@ -114,7 +114,7 @@ is_executable() {
 # Returns: 0 (true) if empty, 1 (false) otherwise
 is_zero_size() {
     # -s returns true if size > 0, so we invert logic
-    [[ $# -eq 1 && -s "$1" ]] && return 1
+    (( ARGC == 1 )) && [[ -s $1 ]] && return 1
     return 0
 }
 
@@ -122,7 +122,7 @@ is_zero_size() {
 # Usage: is_dir_empty "/path/to/dir"
 # Returns: 0 (true) if empty, 1 (false) otherwise
 is_dir_empty() {
-    [[ $# -eq 1 && -d "$1" ]] || return 1
+    (( ARGC == 1 )) && [[ -d $1 ]] || return 1
     # Check if there is at least one file inside
     # Uses Zsh glob qualifiers: D (dotfiles), N (nullglob), [1] (stop after 1 match)
     local -a files=("$1"/*(DN[1]))
@@ -133,7 +133,7 @@ is_dir_empty() {
 # Usage: get_file_size "file.txt"
 # Returns: file size in bytes (e.g., 1024)
 get_file_size() {
-    [[ $# -eq 1 && -f "$1" ]] || return 1
+    (( ARGC == 1 )) && [[ -f $1 ]] || return 1
     zstat +size "$1"
 }
 
@@ -143,7 +143,7 @@ get_file_size() {
 # Usage: get_filename "/path/to/file.txt"
 # Returns: "file.txt"
 get_filename() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     print -- "${1:t}"
 }
 
@@ -151,7 +151,7 @@ get_filename() {
 # Usage: get_dirname "/path/to/file.txt"
 # Returns: "/path/to"
 get_dirname() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     print -- "${1:h}"
 }
 
@@ -159,7 +159,7 @@ get_dirname() {
 # Usage: get_extension "image.jpg"
 # Returns: "jpg"
 get_extension() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     print -- "${1:e}"
 }
 
@@ -167,7 +167,7 @@ get_extension() {
 # Usage: get_filename_no_ext "image.jpg"
 # Returns: "image"
 get_filename_no_ext() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     print -- "${1:t:r}"
 }
 
@@ -175,7 +175,7 @@ get_filename_no_ext() {
 # Usage: get_abs_path "../file.txt"
 # Returns: "/full/path/to/file.txt"
 get_abs_path() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     # :A modifier resolves absolute path with symlinks
     print -- "${1:A}"
 }

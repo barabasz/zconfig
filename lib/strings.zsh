@@ -93,7 +93,7 @@ title_case() {
             result+=("${(C)word}")
         elif (( len >= 5 )); then
             result+=("${(C)word}")
-        elif [[ ${minor_words[(I)$word]} -gt 0 ]]; then
+        elif (( ${minor_words[(I)$word]} > 0 )); then
             result+=("$word")
         else
             result+=("${(C)word}")

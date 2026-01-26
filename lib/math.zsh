@@ -9,7 +9,7 @@ zmodload zsh/mathfunc
 # Usage: min 5 3 8 1
 # Returns: 1
 min() {
-    [[ $# -ge 1 ]] || return 1
+    (( ARGC >= 1 )) || return 1
     # Sort arguments numerically (n) and print the first element
     print -- ${${(n)@}[1]}
 }
@@ -18,7 +18,7 @@ min() {
 # Usage: max 5 3 8 1
 # Returns: 8
 max() {
-    [[ $# -ge 1 ]] || return 1
+    (( ARGC >= 1 )) || return 1
     # Sort arguments numerically (n) and print the last element
     print -- ${${(n)@}[-1]}
 }
@@ -27,11 +27,11 @@ max() {
 # Usage: sum 1 2 3 4 5
 # Returns: 15
 sum() {
-    [[ $# -ge 1 ]] || return 1
+    (( ARGC >= 1 )) || return 1
     local total=0
     local num
     
-    for num in "$@"; do
+    for num in $@; do
         (( total += num ))
     done
     print -- $total
@@ -41,39 +41,39 @@ sum() {
 # Usage: avg 1 2 3 4 5
 # Returns: 3
 avg() {
-    [[ $# -ge 1 ]] || return 1
+    (( ARGC >= 1 )) || return 1
     local total=0
     local num
     
-    for num in "$@"; do
+    for num in $@; do
         (( total += num ))
     done
     
     # Integer division
-    print -- $(( total / $# ))
+    print -- $(( total / ARGC ))
 }
 
 # Calculate average with floating point
 # Usage: avgf 1 2 3 4 5
 # Returns: 3.00
 avgf() {
-    [[ $# -ge 1 ]] || return 1
+    (( ARGC >= 1 )) || return 1
     local total=0
     local num
     
-    for num in "$@"; do
+    for num in $@; do
         (( total += num ))
     done
     
     # Force float context by multiplying by 1.0 or using typeset -F
-    printf "%.2f\n" $(( total * 1.0 / $# ))
+    printf "%.2f\n" $(( total * 1.0 / ARGC ))
 }
 
 # Get absolute value
 # Usage: abs -5
 # Returns: 5
 abs() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     local num=$1
     # Ternary operator inside arithmetic expansion
     print -- $(( num < 0 ? -num : num ))
@@ -83,7 +83,7 @@ abs() {
 # Usage: pow 2 8
 # Returns: 256
 pow() {
-    [[ $# -eq 2 ]] || return 1
+    (( ARGC == 2 )) || return 1
     # Zsh has a built-in power operator
     print -- $(( $1 ** $2 ))
 }
@@ -92,7 +92,7 @@ pow() {
 # Usage: sqrt 16
 # Returns: 4.0
 sqrt() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     # Uses zsh/mathfunc
     print -- $(( sqrt($1) ))
 }
@@ -101,7 +101,7 @@ sqrt() {
 # Usage: random 1 100
 # Returns: random number between 1 and 100
 random() {
-    [[ $# -eq 2 ]] || return 1
+    (( ARGC == 2 )) || return 1
     local min=$1
     local max=$2
     
@@ -117,7 +117,7 @@ random() {
 # Usage: is_even 4
 # Returns: 0 (true) or 1 (false)
 is_even() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     (( $1 % 2 == 0 ))
 }
 
@@ -125,7 +125,7 @@ is_even() {
 # Usage: is_odd 3
 # Returns: 0 (true) or 1 (false)
 is_odd() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     (( $1 % 2 != 0 ))
 }
 
@@ -133,7 +133,7 @@ is_odd() {
 # Usage: is_positive 5
 # Returns: 0 (true) or 1 (false)
 is_positive() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     (( $1 > 0 ))
 }
 
@@ -141,7 +141,7 @@ is_positive() {
 # Usage: is_negative -5
 # Returns: 0 (true) or 1 (false)
 is_negative() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     (( $1 < 0 ))
 }
 
@@ -149,7 +149,7 @@ is_negative() {
 # Usage: is_zero 0
 # Returns: 0 (true) or 1 (false)
 is_zero() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     (( $1 == 0 ))
 }
 
@@ -157,7 +157,7 @@ is_zero() {
 # Usage: round 3.7
 # Returns: 4
 round() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     # rint() is from zsh/mathfunc (round to nearest integer)
     print -- $(( int(rint($1)) ))
 }
@@ -166,7 +166,7 @@ round() {
 # Usage: ceil 3.1
 # Returns: 4
 ceil() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     # ceil() from zsh/mathfunc
     print -- $(( int(ceil($1)) ))
 }
@@ -175,7 +175,7 @@ ceil() {
 # Usage: floor 3.9
 # Returns: 3
 floor() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     # floor() from zsh/mathfunc
     print -- $(( int(floor($1)) ))
 }
@@ -184,7 +184,7 @@ floor() {
 # Usage: factorial 5
 # Returns: 120
 factorial() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     local num=$1
     local result=1
 
@@ -203,7 +203,7 @@ factorial() {
 # Usage: percent 25 200
 # Returns: 50.00
 percent() {
-    [[ $# -eq 2 ]] || return 1
+    (( ARGC == 2 )) || return 1
     # Floating point calculation naturally
     printf "%.2f\n" $(( $1 * $2 / 100.0 ))
 }
@@ -212,7 +212,7 @@ percent() {
 # Usage: in_range 5 1 10
 # Returns: 0 (true) if 5 is between 1 and 10
 in_range() {
-    [[ $# -eq 3 ]] || return 1
+    (( ARGC == 3 )) || return 1
     (( $1 >= $2 && $1 <= $3 ))
 }
 
@@ -220,7 +220,7 @@ in_range() {
 # Usage: clamp 15 0 10
 # Returns: 10
 clamp() {
-    [[ $# -eq 3 ]] || return 1
+    (( ARGC == 3 )) || return 1
     local val=$1
     local min=$2
     local max=$3
@@ -238,7 +238,7 @@ clamp() {
 # Usage: gcd 48 18
 # Returns: 6
 gcd() {
-    [[ $# -eq 2 ]] || return 1
+    (( ARGC == 2 )) || return 1
     local a=$1
     local b=$2
     local temp
@@ -254,7 +254,7 @@ gcd() {
 # Usage: lcm 12 18
 # Returns: 36
 lcm() {
-    [[ $# -eq 2 ]] || return 1
+    (( ARGC == 2 )) || return 1
     local a=$1
     local b=$2
     local gcd_val
@@ -273,7 +273,7 @@ lcm() {
 # Usage: deg2rad 180
 # Returns: 3.14159...
 deg2rad() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     # 4 * atan(1) is a precise way to get PI using zsh/mathfunc
     printf "%.8f\n" $(( $1 * (4 * atan(1.0)) / 180.0 ))
 }
@@ -282,7 +282,7 @@ deg2rad() {
 # Usage: rad2deg 3.14159
 # Returns: 180.00...
 rad2deg() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     printf "%.8f\n" $(( $1 * 180.0 / (4 * atan(1.0)) ))
 }
 
@@ -290,7 +290,7 @@ rad2deg() {
 # Usage: fibonacci 10
 # Returns: 55
 fibonacci() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     local n=$1
 
     if (( n <= 0 )); then

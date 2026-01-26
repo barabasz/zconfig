@@ -19,7 +19,7 @@ etime() {
     [[ "$1" = "-v" ]] && local verbose=1 && shift
     (( ARGC == 0 )) && return 1
     local start=$EPOCHREALTIME
-    "$@" > /dev/null 2>&1
+    $@ > /dev/null 2>&1
     local exit_code=$status
     # Calculate duration
     local formatted

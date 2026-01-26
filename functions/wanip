@@ -9,7 +9,7 @@ local -A opts
 zparseopts -D -E -A opts 6 v t: || return 1
 
 # Check for unknown arguments
-if (( $# > 0 )); then
+if (( ARGC > 0 )); then
     printe "Unknown argument(s): $*"
     return 1
 fi

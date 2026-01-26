@@ -8,7 +8,7 @@ zfile_track_start ${0:A}
 # Usage: extract archive.tar.gz
 # Returns: 0 on success, 1 on failure
 extract() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     local file="$1"
 
     if [[ ! -f "$file" ]]; then
@@ -43,7 +43,7 @@ extract() {
 # Usage: compress target_name source_file_or_dir
 # Returns: 0 on success
 compress() {
-    [[ $# -eq 2 ]] || return 1
+    (( ARGC == 2 )) || return 1
     local target="$1"
     local source="$2"
 
@@ -63,7 +63,7 @@ compress() {
 # Usage: zip_folder archive_name source_folder
 # Returns: 0 on success
 zip_folder() {
-    [[ $# -eq 2 ]] || return 1
+    (( ARGC == 2 )) || return 1
     local target="$1"
     local source="$2"
 

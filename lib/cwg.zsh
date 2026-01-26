@@ -19,7 +19,7 @@ typeset -gi _cwg_inc=-7046029254386353131
 
 # Function to initialize the generator with a custom seed
 cwg_seed() {
-    if (( $# > 0 )); then
+    if (( ARGC > 0 )); then
         (( _cwg_x = $1 ))
     else
         # Use EPOCHREALTIME (remove dot) for high entropy seeding

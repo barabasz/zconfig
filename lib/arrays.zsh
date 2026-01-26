@@ -6,7 +6,7 @@ zfile_track_start ${0:A}
 # Usage: array_contains arr_name "element"
 # Returns: 0 (true) or 1 (false)
 array_contains() {
-    [[ $# -eq 2 ]] || return 1
+    (( ARGC == 2 )) || return 1
     # (Ie) flag: I=Reverse scan returning index, e=exact matching
     # If index is non-zero, element exists
     (( ${${(P)1}[(Ie)$2]} ))
@@ -16,7 +16,7 @@ array_contains() {
 # Usage: array_unique arr_name result_arr_name
 # Sets result_arr to unique elements
 array_unique() {
-    [[ $# -eq 2 ]] || return 1
+    (( ARGC == 2 )) || return 1
     # (u) flag: unique elements
     set -A $2 "${(u)${(P)1}}"
 }
@@ -25,7 +25,7 @@ array_unique() {
 # Usage: array_length arr_name
 # Returns: number of elements
 array_length() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     print -- ${#${(P)1}}
 }
 
@@ -33,7 +33,7 @@ array_length() {
 # Usage: array_is_empty arr_name
 # Returns: 0 (true) or 1 (false)
 array_is_empty() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     (( ${#${(P)1}} == 0 ))
 }
 
@@ -41,7 +41,7 @@ array_is_empty() {
 # Usage: is_array_initialized arr_name
 # Returns: 0 (true) if initialized, 1 (false) otherwise
 is_array_initialized() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     # Check if parameter is set
     (( ${+parameters[$1]} ))
 }
@@ -50,7 +50,7 @@ is_array_initialized() {
 # Usage: array_first arr_name
 # Returns: first element
 array_first() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     # Zsh arrays are 1-based
     print -- "${${(P)1}[1]}"
 }
@@ -59,7 +59,7 @@ array_first() {
 # Usage: array_last arr_name
 # Returns: last element
 array_last() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     # Negative index accesses from end
     print -- "${${(P)1}[-1]}"
 }
@@ -68,7 +68,7 @@ array_last() {
 # Usage: array_push arr_name "element"
 # Returns: 0 on success (modifies array)
 array_push() {
-    [[ $# -eq 2 ]] || return 1
+    (( ARGC == 2 )) || return 1
     # Ordinary assignment works by appending to name
     eval "$1+=('$2')"
 }
@@ -77,7 +77,7 @@ array_push() {
 # Usage: array_pop arr_name
 # Returns: last element and modifies array
 array_pop() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     local name=$1
     local val="${${(P)name}[-1]}"
     
@@ -93,7 +93,7 @@ array_pop() {
 # Usage: array_shift arr_name
 # Returns: first element and modifies array
 array_shift() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     local name=$1
     local val="${${(P)name}[1]}"
     
@@ -109,7 +109,7 @@ array_shift() {
 # Usage: array_unshift arr_name "element"
 # Returns: 0 on success (modifies array)
 array_unshift() {
-    [[ $# -eq 2 ]] || return 1
+    (( ARGC == 2 )) || return 1
     local name=$1
     local val=$2
     # Prepend to array
@@ -120,7 +120,7 @@ array_unshift() {
 # Usage: array_reverse arr_name result_arr_name
 # Sets result_arr to reversed array
 array_reverse() {
-    [[ $# -eq 2 ]] || return 1
+    (( ARGC == 2 )) || return 1
     # (Oa) flag: reverse array order
     set -A $2 "${(Oa)${(P)1}}"
 }
@@ -129,7 +129,7 @@ array_reverse() {
 # Usage: array_sort arr_name result_arr_name
 # Sets result_arr to sorted array
 array_sort() {
-    [[ $# -eq 2 ]] || return 1
+    (( ARGC == 2 )) || return 1
     # (o) flag: sort ascending
     set -A $2 "${(o)${(P)1}}"
 }
@@ -138,7 +138,7 @@ array_sort() {
 # Usage: array_sort_reverse arr_name result_arr_name
 # Sets result_arr to reverse sorted array
 array_sort_reverse() {
-    [[ $# -eq 2 ]] || return 1
+    (( ARGC == 2 )) || return 1
     # (O) flag: sort descending
     set -A $2 "${(O)${(P)1}}"
 }
@@ -147,7 +147,7 @@ array_sort_reverse() {
 # Usage: array_index_of arr_name "element"
 # Returns: index (1-based) or -1 if not found
 array_index_of() {
-    [[ $# -eq 2 ]] || return 1
+    (( ARGC == 2 )) || return 1
     local idx
     # (ie) flag: returns index of exact match, or length+1 if not found
     idx=${${(P)1}[(ie)$2]}
@@ -164,14 +164,14 @@ array_index_of() {
 # Usage: array_slice arr_name start [length] result_arr_name
 # Sets result_arr to sliced array
 array_slice() {
-    [[ $# -ge 3 && $# -le 4 ]] || return 1
+    (( ARGC >= 3 && ARGC <= 4 )) || return 1
     local source=$1
     local start=$2
     local len=$3
     local target=${4:-$3}
     
     # Handling optional length argument logic
-    if [[ $# -eq 3 ]]; then
+    if (( ARGC == 3 )); then
         target=$3
         # Slice from start to end
         set -A $target "${(@)${(P)source}[$start,-1]}"
@@ -185,7 +185,7 @@ array_slice() {
 # Usage: array_filter arr_name "pattern" result_arr_name
 # Sets result_arr to elements matching pattern
 array_filter() {
-    [[ $# -eq 3 ]] || return 1
+    (( ARGC == 3 )) || return 1
     # (M) flag: Match - keep elements matching pattern
     set -A $3 "${(M)${(P)1}:#${~2}}"
 }
@@ -194,7 +194,7 @@ array_filter() {
 # Usage: array_map arr_name function_name result_arr_name
 # Sets result_arr to transformed elements
 array_map() {
-    [[ $# -eq 3 ]] || return 1
+    (( ARGC == 3 )) || return 1
     local src=$1
     local func=$2
     local target=$3
@@ -212,7 +212,7 @@ array_map() {
 # Usage: array_join arr_name ","
 # Returns: joined string
 array_join() {
-    [[ $# -eq 2 ]] || return 1
+    (( ARGC == 2 )) || return 1
     # (j) flag: join with separator
     # Fixed syntax: use ${(P)var} to dereference array content first
     print -- "${(j[$2])${(P)1}}"
@@ -222,7 +222,7 @@ array_join() {
 # Usage: array_remove arr_name "element"
 # Modifies array by removing all occurrences
 array_remove() {
-    [[ $# -eq 2 ]] || return 1
+    (( ARGC == 2 )) || return 1
     # :# pattern removal operator (empty replacement removes element)
     # (@) flag preserves array structure
     set -A $1 "${(@)${(P)1}:#$2}"
@@ -232,7 +232,7 @@ array_remove() {
 # Usage: array_remove_at arr_name index
 # Modifies array by removing element at index
 array_remove_at() {
-    [[ $# -eq 2 ]] || return 1
+    (( ARGC == 2 )) || return 1
     local idx=$2
     # Setting an element to empty list () removes it in Zsh
     eval "$1[$idx]=()"
@@ -243,7 +243,7 @@ array_remove_at() {
 # the goal is to split string elements containing spaces.
 # Usage: array_flatten arr_name result_arr_name
 array_flatten() {
-    [[ $# -eq 2 ]] || return 1
+    (( ARGC == 2 )) || return 1
     # ${=var} performs word splitting on expansion
     # Fixed syntax: use ${(P)var} for reliable indirect expansion
     set -A $2 ${=${(P)1}}
@@ -252,8 +252,8 @@ array_flatten() {
 # Concatenate multiple arrays
 # Usage: array_concat arr1 arr2 [arr3...] result_arr_name
 array_concat() {
-    [[ $# -ge 3 ]] || return 1
-    local -a arrays=("${@:1:$#-1}")
+    (( ARGC >= 3 )) || return 1
+    local -a arrays=("${@:1:ARGC-1}")
     local target="${@: -1}"
     local -a result=()
     local arr
@@ -268,7 +268,7 @@ array_concat() {
 # Usage: array_every arr_name function_name
 # Returns: 0 (true) if all match, 1 (false) otherwise
 array_every() {
-    [[ $# -eq 2 ]] || return 1
+    (( ARGC == 2 )) || return 1
     local func=$2
     local item
     for item in "${(@P)1}"; do
@@ -281,7 +281,7 @@ array_every() {
 # Usage: array_some arr_name function_name
 # Returns: 0 (true) if any match, 1 (false) otherwise
 array_some() {
-    [[ $# -eq 2 ]] || return 1
+    (( ARGC == 2 )) || return 1
     local func=$2
     local item
     for item in "${(@P)1}"; do
@@ -294,7 +294,7 @@ array_some() {
 # Usage: array_intersect arr1_name arr2_name result_arr_name
 # Sets result_arr to common elements
 array_intersect() {
-    [[ $# -eq 3 ]] || return 1
+    (( ARGC == 3 )) || return 1
     # :* is the array intersection operator in Zsh
     set -A $3 "${(@)${(P)1}:*${(P)2}}"
 }
@@ -303,7 +303,7 @@ array_intersect() {
 # Usage: array_diff arr1_name arr2_name result_arr_name
 # Sets result_arr to difference (subtracts arr2 from arr1)
 array_diff() {
-    [[ $# -eq 3 ]] || return 1
+    (( ARGC == 3 )) || return 1
     # :| is the array difference operator in Zsh
     set -A $3 "${(@)${(P)1}:|${(P)2}}"
 }
@@ -311,7 +311,7 @@ array_diff() {
 # Print array elements (for debugging)
 # Usage: array_print arr_name
 array_print() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     # print -l prints elements on separate lines
     print -l -- "${(@P)1}"
 }

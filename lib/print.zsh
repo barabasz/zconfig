@@ -109,7 +109,7 @@ printd() {
 # Example: printkv "IP Address" "192.168.1.1"
 # Returns: Prints "Key: Value" with formatting to stdout
 printkv() {
-    [[ $# -ge 2 ]] || return 1
+    (( ARGC >= 2 )) || return 1
     local key="$1"
     local val="$2"
     local kc="${3:-$b}" # Key Color (default: blue)
@@ -123,7 +123,7 @@ printkv() {
 # Example: printa sys_info
 # Returns: Prints list of key-values to stdout
 printa() {
-    [[ $# -ge 1 ]] || return 1
+    (( ARGC >= 1 )) || return 1
     local arr_name="$1"
     local kc="${2:-$b}" # Key Color (default: blue)
     local vc="${3:-$x}" # Value Color (default: reset)
@@ -171,11 +171,11 @@ printc() {
 # Usage: printul "Item 1" "Item 2" "Item 3"
 # Returns: Prints bulleted list to stdout
 printul() {
-    [[ $# -ge 1 ]] || return 1
+    (( ARGC >= 1 )) || return 1
     local item
     local bullet="•" 
     
-    for item in "$@"; do
+    for item in $@; do
         print -- " ${b}${bullet}${x} ${item}"
     done
 }
@@ -202,7 +202,7 @@ printq() {
 # Example: printt "Alert" $r $y
 # Returns: Prints formatted box to stdout
 printt() {
-    [[ $# -ge 1 ]] || return 1
+    (( ARGC >= 1 )) || return 1
     local text="$1"
     local ct="${2:-$x}" # Color Text (defaults to $x)
     local cb="${3:-$x}" # Color Border (defaults to $x)
@@ -262,7 +262,7 @@ printl() {
 # Example: printh "Title" $r $g "="
 # Returns: Prints text and underline to stdout
 printh() {
-    [[ $# -ge 1 ]] || return 1
+    (( ARGC >= 1 )) || return 1
     local text="$1"
     local tc="${2:-$x}"   # Text Color (defaults to reset)
     local lc="${3:-$x}"   # Line Color (defaults to reset)
