@@ -1,7 +1,11 @@
-# zsh history file
+# cache contents (keep folder structure)                                                                                                                                       
+cache/*                                                                                                                                                                        
+!cache/.gitkeep 
+
+# history file
 .zsh_history
 
-# zsh sessions folder
+# sessions folder
 .zsh_sessions/
 
 # subdirectories inside /plugins/
