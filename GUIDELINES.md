@@ -89,6 +89,40 @@ Plugin directories (`plugins/<name>/`) are git clones and must be in `.gitignore
 2. Add tracking calls
 3. Source it in `.zshenv` or `.zshrc`
 
+## Configuration Variables
+
+Configuration variables in `inc/zsh.zsh` control shell behavior. Useful for debugging:
+
+```zsh
+# Start shell without apps (debug app issues)
+ZSH_LOAD_APPS=0 zsh
+
+# Start shell without plugins (debug plugin issues)
+ZSH_LOAD_PLUGINS=0 zsh
+
+# Minimal shell
+ZSH_LOAD_APPS=0 ZSH_LOAD_PLUGINS=0 ZSH_AUTOCOMPILE=0 zsh
+```
+
+See [README.md](README.md#configuration-variables) for full list.
+
+## Bytecode Compilation
+
+Files in `lib/`, `inc/`, `apps/` are automatically compiled to `.zwc` bytecode on shell startup (when `ZSH_AUTOCOMPILE=1`).
+
+**No manual action needed** - after editing any `.zsh` file:
+1. First shell startup uses the source file (newer) and recompiles
+2. Subsequent startups use the compiled `.zwc` (faster)
+
+**Manual commands** (in `lib/compile.zsh`):
+```zsh
+compile_zsh_config      # Compile lib/, inc/, apps/ with output
+compile_zsh_config -q   # Compile quietly
+clean_zsh_config        # Remove all .zwc files
+compile_dir <dir>       # Compile single directory
+clean_dir <dir>         # Clean single directory
+```
+
 ## Performance Optimization
 
 1. **Measure:** `zfiles` or `ZSH_DEBUG=1 zsh -lic "exit"`

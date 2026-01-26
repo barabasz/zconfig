@@ -32,10 +32,10 @@ source $ZINCDIR/aliases.zsh
 source "$ZINCDIR/hashdirs.zsh"
 
 # App configurations
-source_zsh_dir "$ZAPPDIR"
+(( ZSH_LOAD_APPS )) && source_zsh_dir "$ZAPPDIR"
 
 # Plugin configurations
-source_zsh_dir "$ZPLUGDIR"
+(( ZSH_LOAD_PLUGINS )) && source_zsh_dir "$ZPLUGDIR"
 
 # shell files tracking - keep at the end
 zfile_track_end "$ZDOTDIR/.zshrc"

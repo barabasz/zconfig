@@ -2,52 +2,21 @@
 # Shell files tracking - keep at the top
 zfile_track_start ${0:A}
 
-# Helper functions for zsh plugins
+# Zsh plugin management functions
 # Plugins are stored in $ZPLUGDIR/<name>/ (git clones, ignored in .gitignore)
 # Wrapper files $ZPLUGDIR/<name>.zsh handle loading and configuration
+#
+# Depends on: compile.zsh (for compile_dir, clean_dir, needs_compile)
 
 # Registry of loaded plugins (associative array: name → main file path)
 typeset -gA ZPLUGINS_LOADED
 
 # =============================================================================
-# Compilation - low level
-# =============================================================================
-
-# Check if a .zsh file needs (re)compilation
-# Usage: needs_compile <file.zsh>
-# Returns: 0 if needs compile, 1 if up-to-date
-needs_compile() {
-    (( ARGC == 1 )) || return 1
-    local src=$1 zwc=$1.zwc
-    local src_mtime zwc_mtime
-
-    # No .zwc exists → needs compile
-    [[ -f $zwc ]] || return 0
-
-    # Compare modification times using zstat
-    zstat -A src_mtime +mtime "$src" 2>/dev/null || return 1
-    zstat -A zwc_mtime +mtime "$zwc" 2>/dev/null || return 0
-
-    # Source newer than compiled → needs recompile
-    (( src_mtime > zwc_mtime ))
-}
-
-# Compile a single .zsh file
-# Usage: compile_file <file.zsh>
-# Returns: 0 on success, 1 on failure
-compile_file() {
-    (( ARGC == 1 )) || return 1
-    [[ -f $1 && $1 == *.zsh ]] || return 1
-    zcompile "$1" 2>/dev/null
-}
-
-# =============================================================================
-# Compilation - high level
+# Plugin compilation (wrappers for compile.zsh functions)
 # =============================================================================
 
 # Compile all .zsh files in a plugin directory
 # Usage: compile_plugin <name>
-# Returns: 0 on success (or nothing to compile), 1 on failure
 compile_plugin() {
     (( ARGC == 1 )) || {
         printe "Usage: compile_plugin <name>"
@@ -55,14 +24,14 @@ compile_plugin() {
     }
     local name=$1
     local target=$ZPLUGDIR/$name
-    local file compiled=0 failed=0
 
     [[ -d $target ]] || {
         printe "Plugin '$name' not found"
         return 1
     }
 
-    # Find all .zsh files recursively
+    # Compile recursively (plugins may have subdirectories)
+    local file compiled=0 failed=0
     for file in $target/**/*.zsh(N.); do
         if needs_compile "$file"; then
             if compile_file "$file"; then
@@ -80,7 +49,6 @@ compile_plugin() {
 
 # Compile all installed plugins
 # Usage: compile_plugins
-# Returns: 0 if all succeeded, 1 if any failed
 compile_plugins() {
     local name failed=0
     local -a dirs=($ZPLUGDIR/*(N/:t))
@@ -97,13 +65,8 @@ compile_plugins() {
     (( failed == 0 ))
 }
 
-# =============================================================================
-# Cleaning
-# =============================================================================
-
 # Remove all .zwc files from a plugin directory
 # Usage: clean_plugin <name>
-# Returns: 0 on success, 1 on failure
 clean_plugin() {
     (( ARGC == 1 )) || {
         printe "Usage: clean_plugin <name>"
@@ -127,7 +90,6 @@ clean_plugin() {
 
 # Remove all .zwc files from all plugins
 # Usage: clean_plugins
-# Returns: 0 on success, 1 if any failed
 clean_plugins() {
     local name failed=0
     local -a dirs=($ZPLUGDIR/*(N/:t))
@@ -151,10 +113,6 @@ clean_plugins() {
 # Install a plugin from git repository
 # Usage: install_plugin <name> <repo>
 # Repo can be: user/repo (GitHub shorthand) or full URL
-# Examples:
-#   install_plugin f-sy-h z-shell/F-Sy-H
-#   install_plugin f-sy-h https://github.com/z-shell/F-Sy-H
-# Returns: 0 on success, 1 on failure
 install_plugin() {
     (( ARGC == 2 )) || {
         printe "Usage: install_plugin <name> <repo>"
@@ -191,10 +149,8 @@ install_plugin() {
 # Updating
 # =============================================================================
 
-# Update a plugin (git pull)
-# Recompiles after update (clean + compile)
+# Update a plugin (git pull + recompile)
 # Usage: update_plugin <name>
-# Returns: 0 on success, 1 on failure
 update_plugin() {
     (( ARGC == 1 )) || {
         printe "Usage: update_plugin <name>"
@@ -221,7 +177,6 @@ update_plugin() {
 
 # Update all installed plugins
 # Usage: update_plugins
-# Returns: 0 if all succeeded, 1 if any failed
 update_plugins() {
     local name failed=0
     local -a dirs=($ZPLUGDIR/*(N/:t))
@@ -245,7 +200,6 @@ update_plugins() {
 
 # Remove a plugin
 # Usage: remove_plugin <name>
-# Returns: 0 on success, 1 on failure
 remove_plugin() {
     (( ARGC == 1 )) || {
         printe "Usage: remove_plugin <name>"
@@ -275,7 +229,6 @@ remove_plugin() {
 # Find the main plugin file
 # Usage: find_plugin_file <plugin-dir>
 # Sets REPLY to the path of the main file, or empty if not found
-# Common patterns: *.plugin.zsh, init.zsh, <name>.zsh
 find_plugin_file() {
     (( ARGC == 1 )) || return 1
     local dir=$1 name=${1:t}
@@ -294,15 +247,8 @@ find_plugin_file() {
 }
 
 # Load a plugin by name
-# Automatically compiles .zsh files if needed for faster loading
-# If plugin not installed and repo provided, auto-installs when ZPLUGINS_AUTO_INSTALL=1
+# Automatically compiles .zsh files if needed
 # Usage: load_plugin <name> [repo]
-# Repo can be: user/repo (GitHub shorthand) or full URL
-# Examples:
-#   load_plugin f-sy-h
-#   load_plugin f-sy-h z-shell/F-Sy-H
-#   load_plugin f-sy-h https://github.com/z-shell/F-Sy-H
-# Returns: 0 on success, 1 on failure
 load_plugin() {
     (( ARGC >= 1 && ARGC <= 2 )) || {
         printe "Usage: load_plugin <name> [repo]"
@@ -317,7 +263,7 @@ load_plugin() {
 
     # Not installed - try auto-install if repo provided and enabled
     if [[ ! -d $target ]]; then
-        if [[ -n $repo && ${ZPLUGINS_AUTO_INSTALL:-0} == 1 ]]; then
+        if [[ -n $repo && ${ZSH_PLUGINS_AUTOINSTALL:-0} == 1 ]]; then
             install_plugin "$name" "$repo" || return 1
         else
             printe "Plugin '$name' not installed"
@@ -331,7 +277,7 @@ load_plugin() {
         return 1
     }
 
-    # Compile if needed (lazy compilation for speed)
+    # Compile if needed
     compile_plugin "$name"
 
     source "$REPLY" || {
@@ -347,41 +293,34 @@ load_plugin() {
 # =============================================================================
 
 # Register a standalone plugin (single file, no repo)
-# Call this in your standalone plugin files to register them
 # Usage: register_plugin <name>
-# Example: register_plugin sudo-esc
-# Returns: 0 on success, 1 on failure
 register_plugin() {
     (( ARGC == 1 )) || {
         printe "Usage: register_plugin <name>"
         return 1
     }
     local name=$1
-    # Get caller file path from funcfiletrace
     local caller=${funcfiletrace[1]%:*}
     ZPLUGINS_LOADED[$name]=$caller
 }
 
 # Check if a plugin is loaded
 # Usage: is_plugin_loaded <name>
-# Returns: 0 if loaded, 1 otherwise
 is_plugin_loaded() {
     (( ARGC == 1 )) && (( ${+ZPLUGINS_LOADED[$1]} ))
 }
 
 # Check if a plugin is installed (directory exists)
 # Usage: is_plugin_installed <name>
-# Returns: 0 if installed, 1 otherwise
 is_plugin_installed() {
     (( ARGC == 1 )) && [[ -d $ZPLUGDIR/$1 ]]
 }
 
-# List all plugins (repo-based and standalone files)
+# List all plugins
 # Usage: list_plugins
-# Prints list of plugins with type and status
 list_plugins() {
     local name state type path
-    local -a repo_plugins file_plugins all_plugins
+    local -a repo_plugins all_plugins
     local -A plugin_types
 
     # Find repo-based plugins (directories)
@@ -390,7 +329,7 @@ list_plugins() {
         plugin_types[$name]="repo"
     done
 
-    # Find standalone plugins from ZPLUGINS_LOADED that are not repo-based
+    # Find standalone plugins from ZPLUGINS_LOADED
     for name path in ${(kv)ZPLUGINS_LOADED}; do
         if [[ ! -d $ZPLUGDIR/$name ]]; then
             plugin_types[$name]="file"

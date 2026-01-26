@@ -21,12 +21,12 @@ fi
 zfile_track_end ${0:A}
 ```
 
-## Conditional Feature Loading
+## Optional File Loading
 
 ```zsh
-# Using try_source for optional files
-try_source "$HOME/.secrets" "${0:t}"
-try_source "$HOME/.local.zsh" "${0:t}"
+# Source file only if it exists
+[[ -f "$HOME/.secrets" ]] && source "$HOME/.secrets"
+[[ -f "$HOME/.local.zsh" ]] && source "$HOME/.local.zsh"
 ```
 
 ## Custom Autoloaded Function
@@ -88,4 +88,23 @@ load_plugin zsh-autosuggestions
 bindkey '^[[Z' autosuggest-accept
 
 zfile_track_end ${0:A}
+```
+
+## Manual Compilation
+
+```zsh
+# Compile entire configuration
+compile_zsh_config
+
+# Compile quietly (as done automatically on startup)
+compile_zsh_config -q
+
+# Compile single directory
+compile_dir "$ZLIBDIR"
+
+# Clean all compiled files
+clean_zsh_config
+
+# Check if file needs recompilation
+needs_compile lib/strings.zsh && echo "needs compile"
 ```

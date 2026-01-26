@@ -15,8 +15,8 @@ Part of [zsh-config](README.md) documentation. Conventions for naming functions,
 - Examples: `os_name`, `shell_ver`, `os_icon`
 
 **Action Functions:**
-- Verb prefix: `get_`, `try_`
-- Examples: `get_version`, `try_source`
+- Verb prefix: `get_`, `compile_`, `clean_`
+- Examples: `get_version`, `compile_dir`, `clean_dir`
 
 **Utility Functions:**
 - Short, descriptive names

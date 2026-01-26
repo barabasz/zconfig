@@ -19,10 +19,10 @@ get_version() {
 }
 
 # Trim whitespace from both ends of string
-# Usage: trim "  hello world  "
+# Usage: trim "   hello world  "
 # Returns: "hello world"
 trim() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     # Nested expansion: remove leading space, then remove trailing space
     print -- "${${1##[[:space:]]#}%%[[:space:]]#}"
 }
@@ -31,7 +31,7 @@ trim() {
 # Usage: ltrim "  hello world"
 # Returns: "hello world"
 ltrim() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     print -- "${1##[[:space:]]#}"
 }
 
@@ -39,7 +39,7 @@ ltrim() {
 # Usage: rtrim "hello world  "
 # Returns: "hello world"
 rtrim() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     print -- "${1%%[[:space:]]#}"
 }
 
@@ -47,7 +47,7 @@ rtrim() {
 # Usage: lowercase "HELLO World"
 # Returns: "hello world"
 lowercase() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     print -- "${1:l}"
 }
 
@@ -55,7 +55,7 @@ lowercase() {
 # Usage: uppercase "hello World"
 # Returns: "HELLO WORLD"
 uppercase() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     print -- "${1:u}"
 }
 
@@ -63,7 +63,7 @@ uppercase() {
 # Usage: capitalize "hello WORLD"
 # Returns: "Hello world"
 capitalize() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     # 1. Take 1st char and uppercase it: ${(U)1[1]}
     # 2. Take rest of string (2 to end) and lowercase it: ${1[2,-1]:l}
     print -- "${(U)1[1]}${1[2,-1]:l}"
@@ -73,7 +73,7 @@ capitalize() {
 # Usage: title_case "nothing to be afraid of"
 # Returns: "Nothing to Be Afraid Of"
 title_case() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     local str="${1:l}"
     local -a words=(${(s: :)str})
     local -a result=()
@@ -104,7 +104,7 @@ title_case() {
 # Usage: str_contains "hello world" "world"
 # Returns: 0 (true) or 1 (false)
 str_contains() {
-    [[ $# -eq 2 ]] || return 1
+    (( ARGC == 2 )) || return 1
     # Using Zsh pattern matching
     [[ "$1" == *"$2"* ]]
 }
@@ -113,7 +113,7 @@ str_contains() {
 # Usage: str_starts_with "hello world" "hello"
 # Returns: 0 (true) or 1 (false)
 str_starts_with() {
-    [[ $# -eq 2 ]] || return 1
+    (( ARGC == 2 )) || return 1
     [[ "$1" == "$2"* ]]
 }
 
@@ -121,7 +121,7 @@ str_starts_with() {
 # Usage: str_ends_with "hello world" "world"
 # Returns: 0 (true) or 1 (false)
 str_ends_with() {
-    [[ $# -eq 2 ]] || return 1
+    (( ARGC == 2 )) || return 1
     [[ "$1" == *"$2" ]]
 }
 
@@ -129,7 +129,7 @@ str_ends_with() {
 # Usage: str_length "hello"
 # Returns: 5
 str_length() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     print -- ${#1}
 }
 
@@ -137,7 +137,7 @@ str_length() {
 # Usage: str_repeat "-" 10
 # Returns: "----------"
 str_repeat() {
-    [[ $# -eq 2 ]] || return 1
+    (( ARGC == 2 )) || return 1
     local str="$1"
     local count=$2
 
@@ -152,7 +152,7 @@ str_repeat() {
 # Usage: str_reverse "hello"
 # Returns: "olleh"
 str_reverse() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     # Zsh magic:
     # (s::) - split string into characters (empty separator)
     # (Oa)  - reverse array order
@@ -164,7 +164,7 @@ str_reverse() {
 # Usage: str_split "a:b:c" ":" arr
 # Sets array variable arr=(a b c)
 str_split() {
-    [[ $# -eq 3 ]] || return 1
+    (( ARGC == 3 )) || return 1
     local str="$1"
     local delim="$2"
     local arr_name="$3"
@@ -178,7 +178,7 @@ str_split() {
 # Usage: str_join ":" arr
 # Returns: "a:b:c" (where arr=(a b c))
 str_join() {
-    [[ $# -eq 2 ]] || return 1
+    (( ARGC == 2 )) || return 1
     local delim="$1"
     local arr_name="$2"
 
@@ -190,7 +190,7 @@ str_join() {
 # Usage: str_replace "hello world" "world" "zsh"
 # Returns: "hello zsh"
 str_replace() {
-    [[ $# -eq 3 ]] || return 1
+    (( ARGC == 3 )) || return 1
     print -- "${1/$2/$3}"
 }
 
@@ -198,7 +198,7 @@ str_replace() {
 # Usage: str_replace_all "hello world world" "world" "zsh"
 # Returns: "hello zsh zsh"
 str_replace_all() {
-    [[ $# -eq 3 ]] || return 1
+    (( ARGC == 3 )) || return 1
     print -- "${1//$2/$3}"
 }
 
@@ -206,7 +206,7 @@ str_replace_all() {
 # Usage: is_empty "  "
 # Returns: 0 (true) for empty/whitespace-only, 1 (false) otherwise
 is_empty() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     # Use modifier directly inside test, no need for subshell/function call
     [[ -z "${${1##[[:space:]]#}%%[[:space:]]#}" ]]
 }
@@ -215,7 +215,7 @@ is_empty() {
 # Usage: is_numeric "123"
 # Returns: 0 (true) or 1 (false)
 is_numeric() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     # <-> matches any range of numbers in Zsh globbing (if extended_glob is on),
     # but regex is safer for strict numeric check including negatives
     [[ "$1" =~ '^-?[0-9]+$' ]]
@@ -225,7 +225,7 @@ is_numeric() {
 # Usage: is_alphanumeric "abc123"
 # Returns: 0 (true) or 1 (false)
 is_alphanumeric() {
-    [[ $# -eq 1 ]] || return 1
+    (( ARGC == 1 )) || return 1
     [[ "$1" =~ '^[[:alnum:]]+$' ]]
 }
 
@@ -234,7 +234,7 @@ is_alphanumeric() {
 # Returns: "world" (start at position 6, length 5)
 # Note: Zsh variable slicing ${var:offset:length} is 0-based
 substring() {
-    [[ $# -ge 2 && $# -le 3 ]] || return 1
+    (( ARGC >= 2 && ARGC <= 3 )) || return 1
     local str="$1"
     local start=$2
     local length=${3:-${#str}}

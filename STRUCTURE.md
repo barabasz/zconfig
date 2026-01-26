@@ -29,6 +29,7 @@ Part of [zsh-config](README.md) documentation.
 │   └── locales.zsh         # Locale settings
 │
 ├── lib/                 # Helper function library
+│   ├── compile.zsh         # Bytecode compilation
 │   ├── files.zsh           # File/path tests
 │   ├── system.zsh          # OS detection & info
 │   ├── strings.zsh         # String manipulation

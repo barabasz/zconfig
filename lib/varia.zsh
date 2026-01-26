@@ -17,10 +17,10 @@ is_debug() {
 # Returns: prints time in ms to stdout
 etime() {
     [[ "$1" = "-v" ]] && local verbose=1 && shift
-    [[ $# -eq 0 ]] && return 1
+    (( ARGC == 0 )) && return 1
     local start=$EPOCHREALTIME
     "$@" > /dev/null 2>&1
-    local exit_code=$?
+    local exit_code=$status
     # Calculate duration
     local formatted
     printf -v formatted "%.2f" $(( (EPOCHREALTIME - start) * 1000 ))
@@ -37,14 +37,14 @@ etime() {
 # Returns: 0 if all commands exist, 1 otherwise
 is_installed() {
     # Fast path for single argument
-    if [[ $# -eq 1 ]]; then
+    if (( ARGC == 1 )); then
         (( ${+commands[$1]} ))
         return
     fi
 
     # Loop for multiple arguments
     local cmd
-    for cmd in "$@"; do
+    for cmd in $argv; do
         (( ${+commands[$cmd]} )) || return 1
     done
     return 0

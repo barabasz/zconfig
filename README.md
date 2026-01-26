@@ -18,7 +18,7 @@ A modular, performance-optimized zsh configuration focused on maintainability an
 - File tracking system with performance monitoring (`zfiles` command)
 - Modular library of helper functions (`lib/`)
 - Lightweight plugin system (no Oh-My-Zsh dependency)
-- Automatic plugin compilation for faster loading
+- Automatic bytecode compilation (`.zwc`) for faster loading
 - Lazy loading for heavy applications
 - Dynamic loading of all library and app files
 - Autoloaded user functions (`functions/`)
@@ -103,6 +103,7 @@ Fast utility functions loaded in `.zshenv`. See individual files for available f
 
 | File | Category |
 |------|----------|
+| `compile.zsh` | Bytecode compilation (`compile_zsh_config`, `compile_dir`, etc.) |
 | `files.zsh` | File system tests (`is_file`, `is_dir`, `is_link`, etc.) |
 | `system.zsh` | OS detection (`is_macos`, `is_linux`, `os_name`, etc.) |
 | `strings.zsh` | String manipulation (`trim`, `lowercase`, `str_contains`, etc.) |
@@ -154,6 +155,57 @@ See `lib/plugins.zsh` for all available functions.
 ### User Functions (`functions/`)
 
 Autoloaded functions available on-demand. No function declaration needed in files - just write the function body directly.
+
+## Configuration Variables
+
+All configuration variables are defined in `inc/zsh.zsh` with sensible defaults. Override them by setting before shell startup (e.g., `ZSH_DEBUG=0 zsh`).
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ZSH_DEBUG` | 1 | Enable debug messages |
+| `ZSH_ZFILE_DEBUG` | 0 | Enable file tracking debug messages |
+| `ZSH_LOGIN_INFO` | 0 | Show login info on startup |
+| `ZSH_SYS_INFO` | 0 | Show system info on startup |
+| `ZSH_AUTOCOMPILE` | 1 | Auto-compile `.zsh` to `.zwc` bytecode |
+| `ZSH_LOAD_APPS` | 1 | Load app configurations from `apps/` |
+| `ZSH_LOAD_PLUGINS` | 1 | Load plugins from `plugins/` |
+| `ZSH_PLUGINS_AUTOINSTALL` | 1 | Auto-install missing plugins |
+
+**Examples:**
+```zsh
+# Minimal shell (no apps, no plugins)
+ZSH_LOAD_APPS=0 ZSH_LOAD_PLUGINS=0 zsh
+
+# Debug a plugin issue
+ZSH_LOAD_PLUGINS=0 zsh
+
+# Quiet mode (no debug output)
+ZSH_DEBUG=0 zsh
+```
+
+## Bytecode Compilation
+
+Zsh files are automatically compiled to `.zwc` bytecode for faster loading (~10% speedup).
+
+**How it works:**
+- On shell startup, `compile_zsh_config -q` checks all files in `lib/`, `inc/`, `apps/`
+- Only changed files are recompiled (compares timestamps)
+- Overhead: ~0.3ms (negligible)
+- Zsh automatically uses `.zwc` when newer than `.zsh`
+- Controlled by `ZSH_AUTOCOMPILE` variable
+
+**After editing a file:**
+1. First shell startup → uses `.zsh` (newer), then recompiles
+2. Next shell startup → uses `.zwc` (faster)
+
+**Manual commands:**
+```zsh
+compile_zsh_config      # Compile with output
+compile_zsh_config -q   # Compile quietly
+clean_zsh_config        # Remove all .zwc files
+```
+
+See `lib/compile.zsh` for all compilation functions.
 
 ## Best Practices
 

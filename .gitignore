@@ -1,6 +1,9 @@
-# cache contents (keep folder structure)                                                                                                                                       
-cache/*                                                                                                                                                                        
-!cache/.gitkeep 
+# compiled zsh files
+*.zwc
+
+# cache contents (keep folder structure)
+cache/*
+!cache/.gitkeep
 
 # history file
 .zsh_history
