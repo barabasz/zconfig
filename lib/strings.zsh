@@ -23,7 +23,7 @@ get_version() {
 # Returns: "hello world"
 trim() {
     (( ARGC == 1 )) || return 1
-    # Nested expansion: remove leading space, then remove trailing space
+    setopt local_options extended_glob
     print -- "${${1##[[:space:]]#}%%[[:space:]]#}"
 }
 
@@ -32,6 +32,7 @@ trim() {
 # Returns: "hello world"
 ltrim() {
     (( ARGC == 1 )) || return 1
+    setopt local_options extended_glob
     print -- "${1##[[:space:]]#}"
 }
 
@@ -40,6 +41,7 @@ ltrim() {
 # Returns: "hello world"
 rtrim() {
     (( ARGC == 1 )) || return 1
+    setopt local_options extended_glob
     print -- "${1%%[[:space:]]#}"
 }
 
@@ -207,7 +209,7 @@ str_replace_all() {
 # Returns: 0 (true) for empty/whitespace-only, 1 (false) otherwise
 is_empty() {
     (( ARGC == 1 )) || return 1
-    # Use modifier directly inside test, no need for subshell/function call
+    setopt local_options extended_glob
     [[ -z "${${1##[[:space:]]#}%%[[:space:]]#}" ]]
 }
 
