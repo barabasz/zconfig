@@ -29,7 +29,7 @@ done
 if (( show_bar )); then
     printt "$title " $w $y
 else
-    printf "$by%6s %s %21s %7s$x\n" "err" "file" "time" "dir"
+    printf "$by%6s %s %26s %7s$x\n" "err" "file" "time" "dir"
 fi
 
 for filepath in $ZFILES_ORDER; do
@@ -89,7 +89,7 @@ for filepath in $ZFILES_ORDER; do
     fi
 
     # Print line
-    printf "${w}%${width}d.${x} %s ${name_color}%-20s${x} ${time_color}%6.2f ms${x}  ${folder_color}%-5s${x} %s\n" \
+    printf "${w}%${width}d.${x} %s ${name_color}%-25s${x} ${time_color}%6.2f ms${x}  ${folder_color}%-5s${x} %s\n" \
         "$i" "$icon" "${indent}${filename}" "$time_ms" "$folder" "$bar"
 done
 
@@ -97,7 +97,7 @@ done
 if (( show_bar )); then
     printl $y "" 44
 fi
-printf "${by}%27s%6.2f ms  %s$x\n" "" "$total" "total"
+printf "${by}%32s%6.2f ms  %s$x\n" "" "$total" "total"
 
 # Error reporting using printe
 if (( errors > 0 )); then
