@@ -1,6 +1,6 @@
 # zsh-config: Directory Structure
 
-Part of [zsh-config](README.md) documentation.
+Part of [zsh-config](../README.md) documentation.
 
 ```
 ~/.config/zsh/

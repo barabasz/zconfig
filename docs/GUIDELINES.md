@@ -1,9 +1,9 @@
 # zsh-config: Development Guidelines
 
-Part of [zsh-config](README.md) documentation. Guidelines for contributing to this configuration.
+Part of [zsh-config](../README.md) documentation. Guidelines for contributing to this configuration.
 
 See also:
-- [README.md](README.md) - Architecture overview
+- [README.md](../README.md) - Architecture overview
 - [ZSH.md](ZSH.md) - Zsh coding style
 - [NAMING.md](NAMING.md) - Naming conventions
 
@@ -104,7 +104,7 @@ ZSH_LOAD_PLUGINS=0 zsh
 ZSH_LOAD_APPS=0 ZSH_LOAD_PLUGINS=0 ZSH_AUTOCOMPILE=0 zsh
 ```
 
-See [README.md](README.md#configuration-variables) for full list.
+See [README.md](../README.md#configuration-variables) for full list.
 
 ## Bytecode Compilation
 

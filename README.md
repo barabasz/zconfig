@@ -2,18 +2,18 @@
 
 A modular, performance-optimized zsh configuration focused on maintainability and fast startup times. The configuration is split across specialized directories with clear separation of concerns.
 
-For installation instructions, see [INSTALL.md](INSTALL.md).
+For installation instructions, see [INSTALL.md](docs/INSTALL.md).
 
 ## Documentation
 
 | File | Description |
 |------|-------------|
-| [STRUCTURE.md](STRUCTURE.md) | Directory structure |
-| [GUIDELINES.md](GUIDELINES.md) | Development guidelines |
-| [NAMING.md](NAMING.md) | Naming conventions |
-| [ZSH.md](ZSH.md) | Zsh coding style |
-| [ZFILES.md](ZFILES.md) | File tracking system |
-| [EXAMPLES.md](EXAMPLES.md) | Examples & use cases |
+| [STRUCTURE.md](docs/STRUCTURE.md) | Directory structure |
+| [GUIDELINES.md](docs/GUIDELINES.md) | Development guidelines |
+| [NAMING.md](docs/NAMING.md) | Naming conventions |
+| [ZSH.md](docs/ZSH.md) | Zsh coding style |
+| [ZFILES.md](docs/ZFILES.md) | File tracking system |
+| [EXAMPLES.md](docs/EXAMPLES.md) | Examples & use cases |
 
 ## Key Features
 
@@ -24,22 +24,6 @@ For installation instructions, see [INSTALL.md](INSTALL.md).
 - Lazy loading for heavy applications
 - Dynamic loading of all library and app files
 - Autoloaded user functions (`functions/`)
-
-## Quick Start
-
-```zsh
-# Show loaded files and timing
-zfiles
-
-# With bar visualization
-zfiles -b
-
-# Debug mode
-ZSH_DEBUG=1 zsh -lic "exit"
-
-# Measure startup time
-time zsh -lic "exit"
-```
 
 ## Philosophy
 
@@ -65,7 +49,7 @@ time zsh -lic "exit"
 └── cache/            # Runtime cache
 ```
 
-See [STRUCTURE.md](STRUCTURE.md) for detailed structure.
+See [STRUCTURE.md](docs/STRUCTURE.md) for detailed structure.
 
 ## Core Components
 
@@ -219,7 +203,7 @@ See `lib/compile.zsh` for all compilation functions.
 
 - Always use tracking in sourced files (`zfile_track_start`/`zfile_track_end`)
 - Check installation before configuring (`is_installed`)
-- Follow zsh coding style (see [ZSH.md](ZSH.md))
+- Follow zsh coding style (see [ZSH.md](docs/ZSH.md))
 - Use `zparseopts` for parsing command-line options (not `case`/`getopts`)
 - Use lazy loading for slow tools
 - Use `load_plugin` for plugins (handles compilation)

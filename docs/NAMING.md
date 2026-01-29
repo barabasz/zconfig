@@ -1,6 +1,6 @@
 # zsh-config: Naming Conventions
 
-Part of [zsh-config](README.md) documentation. Conventions for naming functions, variables, and files.
+Part of [zsh-config](../README.md) documentation. Conventions for naming functions, variables, and files.
 
 ## Functions
 

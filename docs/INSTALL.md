@@ -1,6 +1,6 @@
 # zsh-config: Installation Instructions
 
-This is a part of [zsh-config](README.md) documentation. 
+This is a part of [zsh-config](../README.md) documentation. 
 Instructions for installing and setting up the zsh configuration. 
 
 ## Requirements
