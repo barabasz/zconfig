@@ -1,0 +1,139 @@
+# Git wrapper for bulk operations on repositories defined in $GHDIR
+# Usage: zgit <command>
+# Commands: pull, push, push-force, list, reset, status, help
+
+# Ensure configuration is present
+if [[ -z "$GHDIR" ]]; then
+    printe "Error: \$GHDIR is not set."
+    return 1
+fi
+
+local cmd="$1"
+shift # Remove command from arguments to pass remaining args if needed
+
+# Define repository list glob pattern (cached literal, evaluated only when needed)
+# (/) qualifier selects only directories
+local repo_glob="$GHDIR/*(/)"
+
+case "$cmd" in
+    pull)
+        local -a repos=($~repo_glob)
+        local count=${#repos}
+        (( count == 0 )) && { printe "No repositories found in $GHDIR."; return 1; }
+
+        printi "Pulling $count repositories from the remote."
+
+        local i=1 repo
+        for repo in $repos; do
+            printh "$i/$count ${repo:t}" $y $x "-"
+            printc "$(git -C "$repo" remote get-url origin)" $c
+
+            # Capture stderr to filter known benign errors
+            git -C "$repo" pull --rebase 2>&1 | while read line; do
+                if [[ "$line" == *"error:"* ]]; then
+                    print -- "$r$line$x"
+                else
+                    print -- "$line"
+                fi
+            done
+            ((i++))
+        done
+        ;;
+
+    push)
+        local -a repos=($~repo_glob)
+        local count=${#repos}
+        (( count == 0 )) && { printe "No repositories found in $GHDIR."; return 1; }
+
+        printh "Pushing $count repositories to the remote." $b
+
+        local i=1 repo
+        for repo in $repos; do
+            printh "$i/$count ${repo:t}" $y $x "-"
+            printc "$(git -C "$repo" remote get-url origin)" $c
+            
+            git -C "$repo" add --all
+            # Suppress message if nothing to commit, allowing loop to continue
+            git -C "$repo" commit -m "update" >/dev/null 2>&1
+            git -C "$repo" push
+            ((i++))
+        done
+        ;;
+
+    push-force)
+        # Operates on CURRENT DIRECTORY (exception to bulk logic)
+        printi "Running force push sequence on CURRENT directory..."
+        
+        git add --all
+        git commit -m "update"
+        # Assume rebase is in progress or skip if not needed? 
+        # Original script had --continue. We try it, ignore error if no rebase in progress.
+        git rebase --continue 2>/dev/null
+        git push origin HEAD:main --force
+        ;;
+
+    list)
+        print -l $~repo_glob
+        ;;
+
+    reset)
+        local -a repos=($~repo_glob)
+        local count=${#repos}
+        (( count == 0 )) && { printe "No repositories found in $GHDIR."; return 1; }
+
+        printe "WARNING: This will reset ALL $count repositories to the latest commit on the main branch."
+        
+        # Native Zsh confirmation (read single char -q)
+        if ! read -q "?${y}Are you sure you want to continue? [y/N] ${x}"; then
+            print "" # Newline
+            return 1
+        fi
+        print "" # Newline after confirmation
+
+        local i=1 repo
+        for repo in $repos; do
+            printh "$i/$count ${repo:t}" $y $x "-"
+            printc "$(git -C "$repo" remote get-url origin)" $c
+            
+            git -C "$repo" fetch origin
+            git -C "$repo" checkout main
+            git -C "$repo" reset --hard origin/main
+            git -C "$repo" pull
+            ((i++))
+        done
+        ;;
+
+    status)
+        local -a repos=($~repo_glob)
+        local count=${#repos}
+        (( count == 0 )) && { printe "No repositories found in $GHDIR."; return 1; }
+
+        printh "Checking status for $count repositories." $b
+
+        local i=1 repo
+        for repo in $repos; do
+            printh "$i/$count ${repo:t}" $y $x "-"
+            git -C "$repo" status -s # -s for short format is usually better for bulk
+            ((i++))
+        done
+        ;;
+
+    help|-h|--help|*)
+        printt "zgit - Git Bulk Operations" $b $x
+        print "Usage: zgit <command>"
+        print ""
+        printul "pull        : Pull --rebase all repos in \$GHDIR" \
+                "push        : Commit 'update' and push all repos in \$GHDIR" \
+                "push-force  : Force push CURRENT directory (rebase workflow)" \
+                "list        : List all repositories in \$GHDIR" \
+                "reset       : Hard reset all repos in \$GHDIR to origin/main" \
+                "status      : Show git status for all repos in \$GHDIR" \
+                "help        : Show this message"
+        
+        if [[ "$cmd" != "help" && "$cmd" != "-h" && "$cmd" != "--help" && -n "$cmd" ]]; then
+            print ""
+            printe "Unknown command: $cmd"
+            return 1
+        fi
+        ;;
+esac
