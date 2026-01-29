@@ -120,9 +120,9 @@ compile_zsh_config() {
 
     (( quiet )) || printi "Compiling zsh configuration..."
 
-    compile_dir "$ZLIBDIR" $quiet || (( failed++ ))
-    compile_dir "$ZINCDIR" $quiet || (( failed++ ))
-    compile_dir "$ZAPPDIR" $quiet || (( failed++ ))
+    compile_dir "$ZSH_LIB_DIR" $quiet || (( failed++ ))
+    compile_dir "$ZSH_INC_DIR" $quiet || (( failed++ ))
+    compile_dir "$ZSH_APPS_DIR" $quiet || (( failed++ ))
 
     if (( failed == 0 )); then
         (( quiet )) || prints "Zsh configuration compiled successfully"
@@ -138,9 +138,9 @@ compile_zsh_config() {
 clean_zsh_config() {
     printi "Cleaning compiled zsh files..."
 
-    clean_dir "$ZLIBDIR"
-    clean_dir "$ZINCDIR"
-    clean_dir "$ZAPPDIR"
+    clean_dir "$ZSH_LIB_DIR"
+    clean_dir "$ZSH_INC_DIR"
+    clean_dir "$ZSH_APPS_DIR"
 
     prints "Compiled files cleaned"
 }

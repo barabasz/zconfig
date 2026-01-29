@@ -3,39 +3,40 @@
 zfile_track_start "$ZDOTDIR/.zshrc"
 
 # History configuration
-source "$ZINCDIR/history.zsh"
+source "$ZSH_INC_DIR/history.zsh"
 
 # Colors variables
-source "$ZINCDIR/colors.zsh"
+source "$ZSH_INC_DIR/colors.zsh"
 
 # Icons and glyphs
-source "$ZINCDIR/icons.zsh"
+source "$ZSH_INC_DIR/icons.zsh"
 
 # PROMPT fallback
-source "$ZINCDIR/prompt.zsh"
+source "$ZSH_INC_DIR/prompt.zsh"
 
 # Editors and pager
-source "$ZINCDIR/editors.zsh"
+source "$ZSH_INC_DIR/editors.zsh"
 
-# Autoloaded functions
-## Zsh functions
-autoload -Uz zmv
-autoload -Uz colors && colors
-## User functions
-fpath=($ZFNCDIR $fpath)
-autoload -Uz $ZFNCDIR/[^_.]*(N.:t)
+# Zsh functions
+source "$ZSH_INC_DIR/functions.zsh"
+
+# User functions
+if (( ZSH_LOAD_FUNCS )); then
+    fpath=($ZSH_FUNCS_DIR $fpath)
+    autoload -Uz $ZSH_FUNCS_DIR/[^_.]*(N.:t)
+fi
 
 # Aliases
-source $ZINCDIR/aliases.zsh
+source $ZSH_INC_DIR/aliases.zsh
 
 # Directory hashes
-source "$ZINCDIR/hashdirs.zsh"
+source "$ZSH_INC_DIR/hashdirs.zsh"
 
 # App configurations
-(( ZSH_LOAD_APPS )) && source_zsh_dir "$ZAPPDIR"
+(( ZSH_LOAD_APPS )) && source_zsh_dir "$ZSH_APPS_DIR"
 
 # Plugin configurations
-(( ZSH_LOAD_PLUGINS )) && source_zsh_dir "$ZPLUGDIR"
+(( ZSH_LOAD_PLUGINS )) && source_zsh_dir "$ZSH_PLUGINS_DIR"
 
 # shell files tracking - keep at the end
 zfile_track_end "$ZDOTDIR/.zshrc"

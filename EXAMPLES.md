@@ -100,7 +100,7 @@ compile_zsh_config
 compile_zsh_config -q
 
 # Compile single directory
-compile_dir "$ZLIBDIR"
+compile_dir "$ZSH_LIB_DIR"
 
 # Clean all compiled files
 clean_zsh_config

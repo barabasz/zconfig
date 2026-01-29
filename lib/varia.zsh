@@ -56,7 +56,6 @@ is_installed() {
 backup_file() {
     [[ -f "$1" ]] || return 1
     local ts
-    zmodload zsh/datetime
     strftime -s ts "%Y%m%d_%H%M%S" $EPOCHSECONDS
     
     if cp -a "$1" "${1}.${ts}"; then

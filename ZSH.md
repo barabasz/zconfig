@@ -10,6 +10,11 @@ Part of [zsh-config](README.md) documentation. Guidelines for writing idiomatic 
 
 ---
 
+## Script Comments
+
+- `##` = Section header (logical level, not Markdown syntax)
+- `#` = Regular comments
+
 ## Special Variables
 
 Use zsh-native special variables instead of POSIX equivalents:

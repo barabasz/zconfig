@@ -2,9 +2,6 @@
 # Shell files tracking - keep at the top
 zfile_track_start ${0:A}
 
-# Load Zsh TCP module for native network operations
-zmodload zsh/net/tcp
-
 # --- Connectivity Checks ---
 
 # Check if network is connected (interface check)
@@ -357,6 +354,28 @@ is_domain_valid() {
     # Basic regex: alphanumeric parts separated by dots, min 2 chars TLD
     local pattern='^([a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
     [[ $domain =~ $pattern ]]
+}
+
+# Check if string is a valid URL (supports http, https, ftp, ftps)
+# Usage: is_url_valid "https://example.com:8080/path"
+is_url_valid() {
+    (( ARGC == 1 )) || return 1
+
+    # Scheme: http, https, ftp, ftps
+    local scheme='(https?|ftps?)'
+
+    # Host: Alphanumeric, dots, hyphens, and common special chars.
+    # Changed {1,256} to + to avoid "invalid repetition count" errors on some BSD systems.
+    local host='[-a-zA-Z0-9@:%._+~#=]+'
+
+    # Port (optional): e.g. :80 or :8080
+    local port='(:[0-9]+)?'
+
+    # Resource path/query (optional)
+    local resource='([/?#][-a-zA-Z0-9@:%_+.~#?&//=]*)?'
+
+    # Compose and match
+    [[ $1 =~ ^$scheme://$host$port$resource$ ]]
 }
 
 # --- Utilities ---

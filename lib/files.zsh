@@ -2,11 +2,9 @@
 # Shell files tracking - keep at the top
 zfile_track_start ${0:A}
 
-# Load Zsh stat module for cross-platform file statistics without external 'stat' command
-zmodload -F zsh/stat b:zstat
-
 # Filesystem related functions
 # zsh-specific functions - requires zsh, will not work in bash
+# Uses built-in zsh/stat module as `zstat` command
 
 # Check if path exists and is a regular file
 # Usage: is_file "/path/to/file"
@@ -108,7 +106,7 @@ get_file_owner() {
     # +uid is numeric, but we want name. zstat doesn't resolve names by default easily via +flags alone
     # in pure zstat without external 'id' command, sticking to ls -ld or zstat +uid is safer.
     # However, zsh/stat can return user name if configured, but typically returns uid.
-    # Let's return UID to be safe and pure, or use zstat's string output mode.
+    # Let's return UID to be safe and pure, or use stat's string output mode.
     zstat -s +uid "$1" 2>/dev/null
 }
 

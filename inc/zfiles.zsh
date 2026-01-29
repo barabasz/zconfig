@@ -3,7 +3,6 @@
 # Shell files tracking infrastructure
 
 zmodload zsh/datetime
-
 typeset -A ZFILES
 typeset -A ZFILES_TIME
 typeset -A ZFILES_START

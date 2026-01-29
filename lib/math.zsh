@@ -2,9 +2,6 @@
 # Shell files tracking - keep at the top
 zfile_track_start ${0:A}
 
-# Load Zsh math functions (sqrt, ceil, floor, sin, cos, atan, etc.)
-zmodload zsh/mathfunc
-
 # --- Basic Math Operations ---
 
 # Evaluate mathematical expression and print result

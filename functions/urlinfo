@@ -162,7 +162,7 @@ local ssl_file="$tmp_dir/ssl"
 trap "rm -rf $tmp_dir" EXIT
 
 # Hide cursor and show progress
-tput civis 2>/dev/null
+echotc vi 2>/dev/null
 printf "${by}⏳${x} Fetching ${b}%s${x}..." "$url"
 
 # Setup curl arguments (no -v, cleaner output)
@@ -198,7 +198,7 @@ local -i curl_status=$?
 printf "\r\033[K"
 
 if (( curl_status != 0 )); then
-    tput cnorm 2>/dev/null
+    echotc ve 2>/dev/null
     # Human-readable curl error messages
     local curl_error
     case $curl_status in
@@ -270,7 +270,7 @@ if [[ $scheme == HTTPS ]]; then
 fi
 
 # Restore cursor
-tput cnorm 2>/dev/null
+echotc ve 2>/dev/null
 
 # Mute mode - exit early
 if (( ${+opts[-m]} )); then

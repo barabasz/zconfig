@@ -6,26 +6,29 @@ zfile_track_start ${0:A}
 # Zsh core configuration
 source "$HOME/.config/zsh/inc/zsh.zsh"
 
+# Zsh module loading
+source "$ZSH_INC_DIR/modules.zsh"
+
 # Zsh bootstrap functions
-source "$ZINCDIR/bootstrap.zsh"
+source "$ZSH_INC_DIR/bootstrap.zsh"
 
 # XDG directories
-source "$ZINCDIR/xdg.zsh"
+source "$ZSH_INC_DIR/xdg.zsh"
 
 # User folders
-source "$ZINCDIR/folders.zsh"
+source "$ZSH_INC_DIR/folders.zsh"
 
 # Environment variables
-source "$ZINCDIR/variables.zsh"
+source "$ZSH_INC_DIR/variables.zsh"
 
 # Helper library
-source_zsh_dir "$ZLIBDIR"
+(( ZSH_LOAD_LIB )) && source_zsh_dir "$ZSH_LIB_DIR"
 
 # PATH
-source "$ZINCDIR/path.zsh"
+source "$ZSH_INC_DIR/path.zsh"
 
 # Locale
-source "$ZINCDIR/locales.zsh"
+source "$ZSH_INC_DIR/locales.zsh"
 
 # Auto-compile changed files (for next shell startup)
 (( ZSH_AUTOCOMPILE )) && compile_zsh_config -q

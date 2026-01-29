@@ -3,8 +3,8 @@
 zfile_track_start ${0:A}
 
 # Zsh plugin management functions
-# Plugins are stored in $ZPLUGDIR/<name>/ (git clones, ignored in .gitignore)
-# Wrapper files $ZPLUGDIR/<name>.zsh handle loading and configuration
+# Plugins are stored in $ZSH_PLUGINS_DIR/<name>/ (git clones, ignored in .gitignore)
+# Wrapper files $ZSH_PLUGINS_DIR/<name>.zsh handle loading and configuration
 #
 # Depends on: compile.zsh (for compile_dir, clean_dir, needs_compile)
 
@@ -23,7 +23,7 @@ compile_plugin() {
         return 1
     }
     local name=$1
-    local target=$ZPLUGDIR/$name
+    local target=$ZSH_PLUGINS_DIR/$name
 
     [[ -d $target ]] || {
         printe "Plugin '$name' not found"
@@ -51,7 +51,7 @@ compile_plugin() {
 # Usage: compile_plugins
 compile_plugins() {
     local name failed=0
-    local -a dirs=($ZPLUGDIR/*(N/:t))
+    local -a dirs=($ZSH_PLUGINS_DIR/*(N/:t))
 
     (( ${#dirs} == 0 )) && {
         printi "No plugins installed"
@@ -73,7 +73,7 @@ clean_plugin() {
         return 1
     }
     local name=$1
-    local target=$ZPLUGDIR/$name
+    local target=$ZSH_PLUGINS_DIR/$name
     local -a zwc_files
 
     [[ -d $target ]] || {
@@ -92,7 +92,7 @@ clean_plugin() {
 # Usage: clean_plugins
 clean_plugins() {
     local name failed=0
-    local -a dirs=($ZPLUGDIR/*(N/:t))
+    local -a dirs=($ZSH_PLUGINS_DIR/*(N/:t))
 
     (( ${#dirs} == 0 )) && {
         printi "No plugins installed"
@@ -119,7 +119,7 @@ install_plugin() {
         return 1
     }
     local name=$1 repo=$2 url
-    local target=$ZPLUGDIR/$name
+    local target=$ZSH_PLUGINS_DIR/$name
 
     [[ -d $target ]] && {
         printe "Plugin '$name' already installed at $target"
@@ -157,7 +157,7 @@ update_plugin() {
         return 1
     }
     local name=$1
-    local target=$ZPLUGDIR/$name
+    local target=$ZSH_PLUGINS_DIR/$name
 
     [[ -d $target/.git ]] || {
         printe "Plugin '$name' not found or not a git repo"
@@ -179,7 +179,7 @@ update_plugin() {
 # Usage: update_plugins
 update_plugins() {
     local name failed=0
-    local -a dirs=($ZPLUGDIR/*(N/:t))
+    local -a dirs=($ZSH_PLUGINS_DIR/*(N/:t))
 
     (( ${#dirs} == 0 )) && {
         printi "No plugins installed"
@@ -206,7 +206,7 @@ remove_plugin() {
         return 1
     }
     local name=$1
-    local target=$ZPLUGDIR/$name
+    local target=$ZSH_PLUGINS_DIR/$name
 
     [[ -d $target ]] || {
         printe "Plugin '$name' not found"
@@ -256,7 +256,7 @@ load_plugin() {
     }
     local name=$1
     local repo=${2:-}
-    local target=$ZPLUGDIR/$name
+    local target=$ZSH_PLUGINS_DIR/$name
 
     # Already loaded?
     (( ${+ZPLUGINS_LOADED[$name]} )) && return 0
@@ -313,7 +313,7 @@ is_plugin_loaded() {
 # Check if a plugin is installed (directory exists)
 # Usage: is_plugin_installed <name>
 is_plugin_installed() {
-    (( ARGC == 1 )) && [[ -d $ZPLUGDIR/$1 ]]
+    (( ARGC == 1 )) && [[ -d $ZSH_PLUGINS_DIR/$1 ]]
 }
 
 # List all plugins
@@ -324,14 +324,14 @@ list_plugins() {
     local -A plugin_types
 
     # Find repo-based plugins (directories)
-    repo_plugins=($ZPLUGDIR/*(N/:t))
+    repo_plugins=($ZSH_PLUGINS_DIR/*(N/:t))
     for name in $repo_plugins; do
         plugin_types[$name]="repo"
     done
 
     # Find standalone plugins from ZPLUGINS_LOADED
     for name path in ${(kv)ZPLUGINS_LOADED}; do
-        if [[ ! -d $ZPLUGDIR/$name ]]; then
+        if [[ ! -d $ZSH_PLUGINS_DIR/$name ]]; then
             plugin_types[$name]="file"
         fi
     done

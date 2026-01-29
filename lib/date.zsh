@@ -2,9 +2,6 @@
 # Shell files tracking - keep at the top
 zfile_track_start ${0:A}
 
-# Load the Zsh datetime module for native strftime support
-zmodload zsh/datetime
-
 # Get current timestamp (Unix epoch)
 # Usage: now_timestamp
 # Returns: 1704556800

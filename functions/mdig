@@ -54,7 +54,7 @@ if ! whence dig >/dev/null 2>&1; then
 fi
 
 # Hide cursor for cleaner output
-tput civis 2>/dev/null
+echotc vi 2>/dev/null
 
 # Collect results with progress feedback
 local name ip output time_ms answer
@@ -87,7 +87,7 @@ done
 printf "\r\033[K"
 
 # Restore cursor
-tput cnorm 2>/dev/null
+echotc ve 2>/dev/null
 
 # Header
 printf "${b}%-28s %-14s %s${x}\n" "DNS" "Time (ms)" "Answer"

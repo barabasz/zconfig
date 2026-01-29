@@ -26,7 +26,7 @@ Part of [zsh-config](README.md) documentation. Conventions for naming functions,
 
 **Environment Variables:**
 - Uppercase, descriptive
-- Examples: `ZDOTDIR`, `ZINCDIR`, `HOMEBREW_PREFIX`
+- Examples: `ZDOTDIR`, `ZSH_INC_DIR`, `HOMEBREW_PREFIX`
 
 **Local Variables:**
 - Lowercase, snake_case

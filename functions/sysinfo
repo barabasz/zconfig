@@ -5,7 +5,7 @@
 local os=$(os_name)
 local icon=$(os_icon)
 local shell_v=$(shell_ver)
-local arch=$(get_arch)
+local arch=$(get_cpu_arch)
 local uptime=$(get_uptime)
 local version=$(os_version)
 local codename=$(os_codename)

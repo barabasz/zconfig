@@ -37,7 +37,7 @@ $@ > $tmpfile 2>&1 &
 local pid=$!
 
 # Hide cursor for clean animation
-tput civis 2>/dev/null
+echotc vi 2>/dev/null
 
 # Animate spinner while process is running
 while kill -0 $pid 2>/dev/null; do
@@ -57,7 +57,7 @@ local exit_code=$?
 printf "\r\033[K"
 
 # Restore cursor visibility
-tput cnorm 2>/dev/null
+echotc ve 2>/dev/null
 
 # Display captured output
 [[ -s "$tmpfile" ]] && cat "$tmpfile"
