@@ -1,38 +1,17 @@
 # Show loaded shell files in order
-# Usage: zfiles [-b]
-#   -b: Show time bar visualization
+zfiles() {
+  (( ARGC != 0 )) && {
+    printe "zfiles: No positional arguments or options expected"
+    return 1
+  }
 
-local filepath filename fstatus icon time_ms total=0
-local time_color name_color indent folder
-local i=0 count=${#ZFILES_ORDER} errors=0
-local width=${#count}
-local folder_color
-local title="Zsh Shell Configuration Load Time Report"
+  local filepath filename fstatus icon time_ms total=0
+  local time_color name_color indent folder
+  local i=0 count=${#ZFILES_ORDER} errors=0
+  local width=${#count}
+  local folder_color
 
-# Argument parsing
-local show_bar=0
-while [[ "$1" == -* ]]; do
-    case "$1" in
-        -b) show_bar=1 ;;
-        *) 
-            if (( ${+functions[printe]} )); then
-                printe "Unknown option: $1"
-            else
-                print -u2 "Unknown option: $1"
-            fi
-            return 1 
-            ;;
-    esac
-    shift
-done
-
-if (( show_bar )); then
-    printt "$title " $w $y
-else
-    printf "$by%6s %s %26s %7s$x\n" "err" "file" "time" "dir"
-fi
-
-for filepath in $ZFILES_ORDER; do
+  for filepath in $ZFILES_ORDER; do
     (( i++ ))
     filename=${filepath:t}
     fstatus=$ZFILES[$filepath]
@@ -40,76 +19,55 @@ for filepath in $ZFILES_ORDER; do
 
     # Status icon
     if (( fstatus == 1 )); then
-        icon="${g}✓${x}"
+      icon="${g}✓${x}"
     else
-        icon="${r}✗${x}"
-        (( errors++ ))
+      icon="${r}✗${x}"
+      (( errors++ ))
     fi
 
     # Time color determination
     local int_time=$(( ${time_ms%.*} ))
     
     if (( int_time > 10 )); then
-        time_color=$r
+      time_color=$r
     elif (( int_time > 5 )); then
-        time_color=$y
+      time_color=$y
     elif (( int_time > 1 )); then
-        time_color=$w
+      time_color=$w
     else
-        time_color=$g
+      time_color=$g
     fi
 
     # Main files vs sourced files
     if [[ $filename == ${ZCONFIG:t} ]]; then
-        name_color=$c
-        indent="  "
-        folder="zsh"
-        folder_color=$w
+      name_color=$c
+      indent="  "
+      folder="zsh"
+      folder_color=$w
     elif [[ $filename == .z* ]]; then
-        name_color=$y
-        indent=""
-        folder="zsh"
-        folder_color=$w
-        total=$(( total + time_ms ))
+      name_color=$y
+      indent=""
+      folder="zsh"
+      folder_color=$w
+      total=$(( total + time_ms ))
     else
-        name_color=$c
-        indent="  "
-        folder="${filepath:h:t}"
-        folder_color=$w
-    fi
-
-    # Time Bar Logic (Only if -b is passed)
-    local bar=""
-    if (( show_bar )); then
-        if (( int_time < 1 )); then
-            bar="${g}│${x}"
-        else
-            local filler_len=$(( int_time / 5 ))
-            local filler=""
-            if (( filler_len > 0 )); then
-                repeat $filler_len filler+="━"
-            fi
-            bar="${time_color}┝${filler}${x}"
-        fi
+      name_color=$c
+      indent="  "
+      folder="${filepath:h:t}"
+      folder_color=$w
     fi
 
     # Print line
-    printf "${w}%${width}d.${x} %s ${name_color}%-25s${x} ${time_color}%6.2f ms${x}  ${folder_color}%-5s${x} %s\n" \
-        "$i" "$icon" "${indent}${filename}" "$time_ms" "$folder" "$bar"
-done
+    printf "${w}%${width}d.${x} %s ${name_color}%-25s${x} ${time_color}%6.2f ms${x}  ${folder_color}%-5s${x}\n" \
+      "$i" "$icon" "${indent}${filename}" "$time_ms" "$folder"
+  done
 
-# Footer
-if (( show_bar )); then
-    printl $y "" 44
-fi
-printf "${by}%32s%6.2f ms  %s$x\n" "" "$total" "total"
+  # Footer
+  printf "${by}%32s%6.2f ms  %s$x\n" "" "$total" "total"
 
-# Error reporting using printe
-if (( errors > 0 )); then
+  # Error reporting
+  if (( errors > 0 )); then
     print "" # Spacer
-    if (( ${+functions[printe]} )); then
-        printe "$errors file(s) failed to load"
-    else
-        printf "${r}Errors: %d file(s) failed to load${x}\n" "$errors"
-    fi
-fi
+    printe "$errors file(s) failed to load"
+  fi
+}
