@@ -8,8 +8,13 @@ if [[ -z "$GHDIR" ]]; then
     return 1
 fi
 
-local cmd="$1"
-shift # Remove command from arguments to pass remaining args if needed
+local cmd="help"
+
+# Safe argument parsing to avoid shift error if no args provided
+if (( ARGC > 0 )); then
+    cmd="$1"
+    shift # Remove command from arguments to pass remaining args if needed
+fi
 
 # Define repository list glob pattern (cached literal, evaluated only when needed)
 # (/) qualifier selects only directories
@@ -21,11 +26,11 @@ case "$cmd" in
         local count=${#repos}
         (( count == 0 )) && { printe "No repositories found in $GHDIR."; return 1; }
 
-        printi "Pulling $count repositories from the remote."
+        printc "Pulling $count repositories from the remote." $y
 
         local i=1 repo
         for repo in $repos; do
-            printh "$i/$count ${repo:t}" $y $x "-"
+            printc "$i/$count ${repo:t}" $g
             printc "$(git -C "$repo" remote get-url origin)" $c
 
             # Capture stderr to filter known benign errors
@@ -45,11 +50,11 @@ case "$cmd" in
         local count=${#repos}
         (( count == 0 )) && { printe "No repositories found in $GHDIR."; return 1; }
 
-        printh "Pushing $count repositories to the remote." $b
+        printc "Pushing $count repositories to the remote." $y
 
         local i=1 repo
         for repo in $repos; do
-            printh "$i/$count ${repo:t}" $y $x "-"
+            printc "$i/$count ${repo:t}" $g
             printc "$(git -C "$repo" remote get-url origin)" $c
             
             git -C "$repo" add --all
@@ -62,12 +67,11 @@ case "$cmd" in
 
     push-force)
         # Operates on CURRENT DIRECTORY (exception to bulk logic)
-        printi "Running force push sequence on CURRENT directory..."
+        printc "Running force push sequence on CURRENT directory..." $y
         
         git add --all
         git commit -m "update"
-        # Assume rebase is in progress or skip if not needed? 
-        # Original script had --continue. We try it, ignore error if no rebase in progress.
+        # Try continuing rebase if active, ignore error if not
         git rebase --continue 2>/dev/null
         git push origin HEAD:main --force
         ;;
@@ -92,7 +96,7 @@ case "$cmd" in
 
         local i=1 repo
         for repo in $repos; do
-            printh "$i/$count ${repo:t}" $y $x "-"
+            printc "$i/$count ${repo:t}" $g
             printc "$(git -C "$repo" remote get-url origin)" $c
             
             git -C "$repo" fetch origin
@@ -108,18 +112,18 @@ case "$cmd" in
         local count=${#repos}
         (( count == 0 )) && { printe "No repositories found in $GHDIR."; return 1; }
 
-        printh "Checking status for $count repositories." $b
+        printc "Checking status for $count repositories." $y
 
         local i=1 repo
         for repo in $repos; do
-            printh "$i/$count ${repo:t}" $y $x "-"
+            printc "$i/$count ${repo:t}" $g
             git -C "$repo" status -s # -s for short format is usually better for bulk
             ((i++))
         done
         ;;
 
     help|-h|--help|*)
-        printt "zgit - Git Bulk Operations" $b $x
+        printc "zgit - Git Bulk Operations" $y
         print "Usage: zgit <command>"
         print ""
         printul "pull        : Pull --rebase all repos in \$GHDIR" \
