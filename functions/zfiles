@@ -60,7 +60,12 @@ for filepath in $ZFILES_ORDER; do
     fi
 
     # Main files vs sourced files
-    if [[ $filename == .z* ]]; then
+    if [[ $filename == ${ZCONFIG:t} ]]; then
+        name_color=$c
+        indent="  "
+        folder="zsh"
+        folder_color=$w
+    elif [[ $filename == .z* ]]; then
         name_color=$y
         indent=""
         folder="zsh"
