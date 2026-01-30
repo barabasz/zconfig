@@ -1,18 +1,94 @@
-# Open the file defined in $ZCONFIG using the default editor
-# Usage: zconfig
+# Edit zsh-config file using the default editor
+# Usage: zconfig [option]
 
-# Ensure no arguments are provided
-(( ARGC == 0 )) || {
-    printe "Error: zconfig accepts no arguments."
-    return 1
+local -A opts
+local zsh_dir="${ZDOTDIR:-${XDG_CONFIG_HOME:-$HOME/.config}/zsh}"
+local target=""
+
+# Help function
+_zconfig_help() {
+    print "${y}zconfig${x} - edit zsh-config file using the default editor"
+    print ""
+    print "${c}Usage:${x} zconfig [option]"
+    print ""
+    print "${c}Config files:${x}"
+    print "  ${g}-a, --aliases${x}    inc/aliases.zsh"
+    print "  ${g}-C, --colors${x}     inc/colors.zsh"
+    print "  ${g}-c, --config${x}     .zconfig"
+    print "  ${g}-e, --env${x}        .zshenv"
+    print "  ${g}-H, --history${x}    inc/history.zsh"
+    print "  ${g}-i, --icons${x}      inc/icons.zsh"
+    print "  ${g}-L, --locales${x}    inc/locales.zsh"
+    print "  ${g}-l, --login${x}      .zlogin"
+    print "  ${g}-o, --logout${x}     .zlogout"
+    print "  ${g}-m, --modules${x}    inc/modules.zsh"
+    print "  ${g}-p, --path${x}       inc/path.zsh"
+    print "  ${g}-P, --plugins${x}    inc/plugins.zsh"
+    print "  ${g}-R, --profile${x}    .zprofile"
+    print "  ${g}-t, --prompt${x}     inc/prompt.zsh"
+    print "  ${g}-r, --rc${x}         .zshrc"
+    print "  ${g}-x, --xdg${x}        inc/xdg.zsh"
+    print ""
+    print "${c}Other:${x}"
+    print "  ${g}-h, --help${x}       Show this help message"
 }
 
-# Ensure the target variable is actually set
-if [[ -z $ZCONFIG ]]; then
-    printe "Error: \$ZCONFIG variable is not set."
+# Parse options
+zparseopts -D -A opts \
+    a -aliases \
+    C -colors \
+    c -config \
+    e -env \
+    H -history \
+    i -icons \
+    L -locales \
+    l -login \
+    o -logout \
+    m -modules \
+    p -path \
+    P -plugins \
+    R -profile \
+    t -prompt \
+    r -rc \
+    x -xdg \
+    h -help
+
+# Count options (excluding help)
+local opt_count=0
+(( ${+opts[-a]} || ${+opts[--aliases]} )) && { target="$zsh_dir/inc/aliases.zsh"; (( opt_count++ )); }
+(( ${+opts[-C]} || ${+opts[--colors]} ))  && { target="$zsh_dir/inc/colors.zsh"; (( opt_count++ )); }
+(( ${+opts[-c]} || ${+opts[--config]} ))  && { target="$zsh_dir/.zconfig"; (( opt_count++ )); }
+(( ${+opts[-e]} || ${+opts[--env]} ))     && { target="$zsh_dir/.zshenv"; (( opt_count++ )); }
+(( ${+opts[-H]} || ${+opts[--history]} )) && { target="$zsh_dir/inc/history.zsh"; (( opt_count++ )); }
+(( ${+opts[-i]} || ${+opts[--icons]} ))   && { target="$zsh_dir/inc/icons.zsh"; (( opt_count++ )); }
+(( ${+opts[-L]} || ${+opts[--locales]} )) && { target="$zsh_dir/inc/locales.zsh"; (( opt_count++ )); }
+(( ${+opts[-l]} || ${+opts[--login]} ))   && { target="$zsh_dir/.zlogin"; (( opt_count++ )); }
+(( ${+opts[-o]} || ${+opts[--logout]} ))  && { target="$zsh_dir/.zlogout"; (( opt_count++ )); }
+(( ${+opts[-m]} || ${+opts[--modules]} )) && { target="$zsh_dir/inc/modules.zsh"; (( opt_count++ )); }
+(( ${+opts[-p]} || ${+opts[--path]} ))    && { target="$zsh_dir/inc/path.zsh"; (( opt_count++ )); }
+(( ${+opts[-P]} || ${+opts[--plugins]} )) && { target="$zsh_dir/inc/plugins.zsh"; (( opt_count++ )); }
+(( ${+opts[-R]} || ${+opts[--profile]} )) && { target="$zsh_dir/.zprofile"; (( opt_count++ )); }
+(( ${+opts[-t]} || ${+opts[--prompt]} ))  && { target="$zsh_dir/inc/prompt.zsh"; (( opt_count++ )); }
+(( ${+opts[-r]} || ${+opts[--rc]} ))      && { target="$zsh_dir/.zshrc"; (( opt_count++ )); }
+(( ${+opts[-x]} || ${+opts[--xdg]} ))     && { target="$zsh_dir/inc/xdg.zsh"; (( opt_count++ )); }
+
+# Show help if no options, -h, or --help
+if (( ${+opts[-h]} || ${+opts[--help]} || opt_count == 0 )); then
+    _zconfig_help
+    return 0
+fi
+
+# Only one option allowed
+if (( opt_count > 1 )); then
+    print -u2 "Error: only one option allowed at a time"
     return 1
 fi
 
-# Execute the editor on the file
-# ${EDITOR:-vi} uses $EDITOR if set and not null, otherwise defaults to 'vi'
-"${EDITOR:-vi}" "$ZCONFIG"
+# Check if file exists
+if [[ ! -f "$target" ]]; then
+    print -u2 "Error: file not found: $target"
+    return 1
+fi
+
+# Open in editor
+"${EDITOR:-vi}" "$target"

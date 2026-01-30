@@ -1,0 +1,62 @@
+# Display helpful commands and documentation for zsh-config
+# Usage: zhelp
+
+# Helper to print a section header
+_zhelp_section() {
+    print ""
+    print "${y}$1${x}"
+    print ""
+}
+
+# Helper to print a command entry: command [args] - description
+# Usage: _zhelp_cmd "command" "args" "description"
+#    or: _zhelp_cmd "command" "" "description"
+_zhelp_cmd() {
+    local cmd="$1" args="$2" desc="$3"
+    if [[ -n "$args" ]]; then
+        printf "  ${g}%-16s${x}${c}%-15s${x} ${w}%s${x}\n" "$cmd" "$args" "$desc"
+    else
+        printf "  ${g}%-31s${x} ${w}%s${x}\n" "$cmd" "$desc"
+    fi
+}
+
+# Helper to print a file entry: filename - description
+_zhelp_file() {
+    local file="$1" desc="$2"
+    printf "  ${g}%-31s${x} ${w}%s${x}\n" "$file" "$desc"
+}
+
+## System Information
+print ""
+(( ${+functions[sysinfo]} )) && sysinfo
+print ""
+(( ${+functions[logininfo]} )) && logininfo
+
+## Commands Section
+_zhelp_section "Useful Commands"
+
+_zhelp_cmd "man"      "<command>"   "Show manual page for a command"
+_zhelp_cmd "zconfig"  "[option]"    "Edit zsh config file"
+_zhelp_cmd "zinfo"    "<function>"  "Display help for a zsh-config function"
+_zhelp_cmd "zfiles"   ""            "Show loaded shell files with status and load time"
+_zhelp_cmd "zman"     "[keyword]"   "List all zsh-config functions"
+_zhelp_cmd "zupdate"  ""            "Update zsh-config and all plugins"
+
+## Plugins Section
+_zhelp_section "Plugin Management"
+
+_zhelp_cmd "list_plugins"    ""           "List installed plugins"
+_zhelp_cmd "install_plugin"  "<name> <repo>"  "Install a plugin from GitHub"
+_zhelp_cmd "update_plugins"  ""           "Update all plugins"
+
+## Documentation Section
+_zhelp_section "Documentation"
+
+_zhelp_file "README.md"          "General project documentation"
+_zhelp_file "docs/EXAMPLES.md"   "Examples & use cases"
+_zhelp_file "docs/GUIDELINES.md" "Development guidelines"
+_zhelp_file "docs/NAMING.md"     "Naming conventions"
+_zhelp_file "docs/STRUCTURE.md"  "Directory structure"
+_zhelp_file "docs/ZSH.md"        "Zsh coding style"
+
+print ""

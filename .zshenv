@@ -1,34 +1,17 @@
 #!/bin/zsh
 
-# Configuration version
-export ZSH_CONFIG_VERSION="20260129v1"
-# Directories configuration
-export CONFDIR=$HOME/.config
-export ZDOTDIR=$CONFDIR/zsh
-# Zsh configuration file
-export ZCONFIG=$ZDOTDIR/.zconfig
-
-# Shell files tracking initialization
-source "$ZDOTDIR/inc/zfiles.zsh"
+# Shell files tracking initialization - keep at the top
+source "$HOME/.config/zsh/inc/zfiles.zsh"
 zfile_track_start ${0:A}
 
-# Zsh core configuration
-source $ZCONFIG
+# Zsh-config core environment variables
+source "$HOME/.config/zsh/env.zsh"
 
 # Zsh module loading
 source "$ZSH_INC_DIR/modules.zsh"
 
-# Zsh bootstrap functions
-source "$ZSH_INC_DIR/bootstrap.zsh"
-
 # XDG directories
 source "$ZSH_INC_DIR/xdg.zsh"
-
-# User folders
-source "$ZSH_INC_DIR/folders.zsh"
-
-# Environment variables
-source "$ZSH_INC_DIR/variables.zsh"
 
 # Helper library
 (( ZSH_LOAD_LIB )) && source_zsh_dir "$ZSH_LIB_DIR"

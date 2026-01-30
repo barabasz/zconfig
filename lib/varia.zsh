@@ -12,6 +12,16 @@ is_debug() {
     [[ $ZSH_DEBUG == 1 || $DEBUG == 1 ]]
 }
 
+# Source all .zsh files in a directory
+# Usage: source_zsh_dir "/path/to/dir"
+# Returns: none
+source_zsh_dir() {
+    local f
+    for f in $1/*.zsh(N); do
+        source "$f"
+    done
+}
+
 # Measure execution time of a command
 # Usage: etime [-v] command [args...]
 # Returns: prints time in ms to stdout

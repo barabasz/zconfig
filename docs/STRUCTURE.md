@@ -10,7 +10,7 @@ Part of [zsh-config](../README.md) documentation.
 ├── .zlogin              # Post-login actions
 ├── .zlogout             # Logout cleanup
 ├── .zsh_history         # Command history
-├── .zconfig             # Core configuration variables
+├── env.zsh             # Core configuration variables
 │
 ├── inc/                 # Core configuration modules
 │   ├── zfiles.zsh          # File tracking infrastructure
@@ -22,7 +22,6 @@ Part of [zsh-config](../README.md) documentation.
 │   ├── variables.zsh       # Environment variables
 │   ├── colors.zsh          # ANSI color codes
 │   ├── icons.zsh           # Icon/glyph exports
-│   ├── editors.zsh         # Editor configuration
 │   ├── history.zsh         # History options
 │   ├── prompt.zsh          # Fallback prompt
 │   ├── path.zsh            # PATH configuration

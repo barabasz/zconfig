@@ -1,4 +1,4 @@
-# Show loaded shell files in order
+# Show loaded shell files in order with status and load time
 # Usage: zfiles
 
 zfiles() {
@@ -41,12 +41,7 @@ zfiles() {
     fi
 
     # Main files vs sourced files
-    if [[ $filename == ${ZCONFIG:t} ]]; then
-      name_color=$c
-      indent="  "
-      folder="zsh"
-      folder_color=$w
-    elif [[ $filename == .z* ]]; then
+    if [[ $filename == .z* ]]; then
       name_color=$y
       indent=""
       folder="zsh"

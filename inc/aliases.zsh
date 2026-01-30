@@ -16,6 +16,10 @@ alias cls='clear'
 alias myip='curl icanhazip.com'
 alias ds='du -sh ./*/'
 
+# Internal functions
+
+alias help='zhelp'
+
 # Applications - Unconditional Aliases
 # (Defining these is virtually free. If the tool is missing, the alias just fails when run)
 

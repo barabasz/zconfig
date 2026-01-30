@@ -31,3 +31,13 @@ zfile_source_time() {
     local file_time="$2"
     printf "%-15s — %8.2f ms\n" "$file_name" "$file_time"
 }
+
+# Source all .zsh files in a directory
+# Needed to be defined here to be available in .zshenv
+# (will be overridden in lib/varia.zsh)
+source_zsh_dir() {
+    local f
+    for f in $1/*.zsh(N); do
+        source "$f"
+    done
+}

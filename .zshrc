@@ -14,9 +14,6 @@ source "$ZSH_INC_DIR/icons.zsh"
 # PROMPT fallback
 source "$ZSH_INC_DIR/prompt.zsh"
 
-# Editors and pager
-source "$ZSH_INC_DIR/editors.zsh"
-
 # Zsh functions
 source "$ZSH_INC_DIR/functions.zsh"
 

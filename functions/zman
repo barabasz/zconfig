@@ -1,9 +1,10 @@
 # List all user functions from lib/ and functions/ directories
-# Usage: zman [-g|--group] [-m|--markdown] [keyword]
+# Usage: zman [-g|--group] [-m|--markdown] [-h|--help] [keyword]
 #
 #   -g, --group:     Group functions by source file/directory
 #   -m, --markdown:  Output as markdown table (excludes -g)
-#   keyword:         Filter results to show only lines containing keyword
+#   -h, --help:      Show this help message
+#   keyword:         Filter results (case-insensitive)
 
 local -A opts
 local grouped=0
@@ -11,7 +12,29 @@ local markdown=0
 local keyword=""
 
 # Parse options
-zparseopts -D -A opts g -group m -markdown
+zparseopts -D -A opts g -group m -markdown h -help
+
+# Show help
+if (( ${+opts[-h]} || ${+opts[--help]} )); then
+    print "${y}zman${x} - list all user functions from lib/ and functions/"
+    print ""
+    print "${c}Usage:${x} zman [options] [keyword]"
+    print ""
+    print "${c}Options:${x}"
+    print "  ${g}-g, --group${x}     Group functions by source file/directory"
+    print "  ${g}-m, --markdown${x}  Output as markdown table (excludes -g)"
+    print "  ${g}-h, --help${x}      Show this help message"
+    print ""
+    print "${c}Arguments:${x}"
+    print "  ${g}keyword${x}         Filter results (case-insensitive)"
+    print ""
+    print "${c}Examples:${x}"
+    print "  zman              List all functions"
+    print "  zman array        Filter functions containing 'array'"
+    print "  zman -g           Group by source file"
+    print "  zman -m > funcs.md  Export to markdown"
+    return 0
+fi
 
 # Check if -g or --group was provided
 (( ${+opts[-g]} || ${+opts[--group]} )) && grouped=1

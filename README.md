@@ -41,7 +41,7 @@ For installation instructions, see [INSTALL.md](docs/INSTALL.md).
 ├── .zshrc            # Interactive shell setup
 ├── .zprofile         # Login shell initialization
 ├── .zlogin           # Post-login actions
-├── .zconfig          # Core configuration variables
+├── zsh.env           # Core configuration variables
 ├── inc/              # Core configuration modules
 ├── lib/              # Helper function library
 ├── apps/             # Application integrations
@@ -72,13 +72,10 @@ Core configuration split by responsibility. Each file handles one concern.
 | `zfiles.zsh` | File tracking infrastructure |
 | `modules.zsh` | Zsh module loading (`zmodload`) |
 | `functions.zsh` | Zsh autoloaded functions (`autoload`) |
-| `bootstrap.zsh` | Bootstrap functions (`is_debug`, `source_zsh_dir`) |
 | `xdg.zsh` | XDG Base Directory variables |
 | `folders.zsh` | User folder path variables |
-| `variables.zsh` | Environment variables |
 | `colors.zsh` | ANSI color code variables |
 | `icons.zsh` | Icon/glyph variables |
-| `editors.zsh` | Editor configuration (EDITOR, VISUAL, PAGER) |
 | `history.zsh` | History configuration and options |
 | `prompt.zsh` | Fallback prompt |
 | `path.zsh` | PATH configuration |
@@ -147,7 +144,7 @@ Autoloaded functions available on-demand. No function declaration needed in file
 
 ## Configuration Variables
 
-All configuration variables are defined in `.zconfig` with sensible defaults. Override them by setting before shell startup (e.g., `ZSH_DEBUG=0 zsh`).
+All configuration variables are defined in `zsh.env` with sensible defaults. Override them by setting before shell startup (e.g., `ZSH_DEBUG=0 zsh`).
 
 | Variable | Default | Description |
 |----------|---------|-------------|
