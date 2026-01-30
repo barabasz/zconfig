@@ -31,9 +31,7 @@ fi
 # --- Core Functions ---
 
 # Copy input to system clipboard
-# Usage: echo "hello" | clip_copy
-# Usage: clip_copy file.txt
-# Usage: clip_copy "some string"
+# Usage: echo "hello" | clip_copy OR clip_copy file.txt OR clip_copy "some string"
 # Returns: 0 on success, 1 on failure
 clip_copy() {
     if [[ -z "$_CLIP_COPY_CMD" ]]; then

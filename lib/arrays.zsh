@@ -48,7 +48,7 @@ is_array_initialized() {
     (( ${+parameters[$1]} ))
 }
 
-# Get first element of array
+# Get first element of an array
 # Usage: array_first arr_name
 # Returns: first element
 array_first() {
@@ -243,6 +243,7 @@ array_remove_at() {
 
 # Flatten nested arrays (split string elements by space)
 # Usage: array_flatten arr_name result_arr_name
+# Sets result_arr to flattened array
 array_flatten() {
     (( ARGC == 2 )) || return 1
     # ${=var} performs word splitting on expansion
@@ -251,6 +252,7 @@ array_flatten() {
 
 # Concatenate multiple arrays
 # Usage: array_concat arr1 arr2 [arr3...] result_arr_name
+# Sets result_arr to concatenated arrays
 array_concat() {
     (( ARGC >= 3 )) || return 1
     # Zsh slicing [1,-2] to get all but last arg
@@ -311,6 +313,7 @@ array_diff() {
 
 # Print array elements (for debugging)
 # Usage: array_print arr_name
+# Prints each element on a new line
 array_print() {
     (( ARGC == 1 )) || return 1
     # print -l prints elements on separate lines

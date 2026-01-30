@@ -399,7 +399,6 @@ get_day_of_year() {
 
 # Format seconds (with sub-second precision) into human readable time
 # Usage: format_time 0.0005    → "500 μs"
-#        format_time 0.125     → "125.0 ms"
 #        format_time 2.5       → "2.50 s"
 format_time() {
     (( ARGC == 1 )) || return 1

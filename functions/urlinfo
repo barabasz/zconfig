@@ -1,4 +1,4 @@
-# urlinfo - URL information tool (zsh port of PHP version)
+# uURL information tool (zsh port of PHP version)
 # Query URL and display detailed connection, SSL, and timing information
 #
 # Usage: urlinfo [options] URL

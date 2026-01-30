@@ -43,9 +43,6 @@ compile_file() {
 
 # Compile all .zsh files in a directory
 # Usage: compile_dir <dir> [quiet]
-# Arguments:
-#   dir    Directory to compile
-#   quiet  If 1, suppress output
 # Returns: 0 on success, 1 on failure
 compile_dir() {
     (( ARGC >= 1 && ARGC <= 2 )) || {
@@ -53,7 +50,7 @@ compile_dir() {
         return 1
     }
     local dir=$1
-    local quiet=${2:-0}
+    local quiet=${2:-0} # default to 0 (not quiet), if 1 suppress output
     local file compiled=0 failed=0
 
     [[ -d $dir ]] || {
@@ -107,8 +104,7 @@ clean_dir() {
 
 # Compile entire zsh configuration (lib/, inc/, apps/)
 # Usage: compile_zsh_config [-q|--quiet]
-# Options:
-#   -q, --quiet    Suppress output (for use at shell startup)
+# Options: -q/--quiet = Suppress output (for use at shell startup)
 compile_zsh_config() {
     local -A opts
     zparseopts -D -A opts q -quiet
@@ -135,6 +131,7 @@ compile_zsh_config() {
 
 # Clean .zwc files from entire zsh configuration
 # Usage: clean_zsh_config
+# Returns: 0 on success, 1 on failure
 clean_zsh_config() {
     printi "Cleaning compiled zsh files..."
 

@@ -1,6 +1,4 @@
-#!/bin/zsh
-
-# Put the Mac to sleep
+# Put the computer to sleep
 # Usage: sleepme
 
 if is_macos; then

@@ -27,13 +27,7 @@ functions[is_folder]=$functions[is_dir]
 is_link() {
     (( ARGC == 1 )) && [[ -L $1 ]]
 }
-
-# Alias for is_link
-# Usage: is_symlink "/path/to/symlink"
-is_symlink() {
-    # Fix: Pass arguments correctly, avoiding $@ bashism
-    is_link $argv
-}
+functions[is_symlink]=$functions[is_link]
 
 # Check if file is a hard link (has link count > 1)
 # Uses built-in zstat with array storage to avoid subshells
@@ -50,24 +44,28 @@ is_hardlink() {
 
 # Check if file is executable
 # Usage: is_executable "/path/to/file"
+# Returns: 0 (true) or 1 (false)
 is_executable() {
     (( ARGC == 1 )) && [[ -x $1 ]]
 }
 
 # Check if file/dir is writable
 # Usage: is_writable "/path/to/file"
+# Returns: 0 (true) or 1 (false)
 is_writable() {
     (( ARGC == 1 )) && [[ -w $1 ]]
 }
 
 # Check if file/dir is readable
 # Usage: is_readable "/path/to/file"
+# Returns: 0 (true) or 1 (false)
 is_readable() {
     (( ARGC == 1 )) && [[ -r $1 ]]
 }
 
 # Check if directory is empty
 # Usage: is_empty_dir "/path/to/dir"
+# Returns: 0 (true) or 1 (false)
 is_empty_dir() {
     (( ARGC == 1 )) && [[ -d $1 ]] || return 1
     # Check if there is at least one file inside
@@ -121,6 +119,7 @@ resolve_link() {
 
 # Get modification time (epoch)
 # Usage: get_file_mtime "file.txt"
+# Returns: modification time in seconds since epoch
 get_file_mtime() {
     (( ARGC == 1 )) && [[ -e $1 ]] || return 1
     local -a stats
@@ -133,6 +132,7 @@ get_file_mtime() {
 
 # Get filename from path (basename equivalent)
 # Usage: get_filename "/path/to/file.txt" -> "file.txt"
+# Returns: filename
 get_filename() {
     (( ARGC == 1 )) || return 1
     print -- "${1:t}"
@@ -140,6 +140,7 @@ get_filename() {
 
 # Get directory from path (dirname equivalent)
 # Usage: get_dirname "/path/to/file.txt" -> "/path/to"
+# Returns: directory path
 get_dirname() {
     (( ARGC == 1 )) || return 1
     print -- "${1:h}"
@@ -147,6 +148,7 @@ get_dirname() {
 
 # Get file extension (without dot)
 # Usage: get_extension "image.jpg" -> "jpg"
+# Returns: extension
 get_extension() {
     (( ARGC == 1 )) || return 1
     print -- "${1:e}"
@@ -154,6 +156,7 @@ get_extension() {
 
 # Get filename without extension
 # Usage: get_filename_no_ext "image.jpg" -> "image"
+# Returns: filename without extension
 get_filename_no_ext() {
     (( ARGC == 1 )) || return 1
     print -- "${1:t:r}"
@@ -163,9 +166,9 @@ get_filename_no_ext() {
 
 # Count files in directory (non-recursive)
 # Usage: count_files ["/path/to/dir"] ["pattern"]
-# Defaults to current directory if no path provided.
 # Returns: number of files
 count_files() {
+    # Defaults to current directory if no path provided.
     local dir=${1:-.}
     local pattern=${2:-*}
     
@@ -178,9 +181,9 @@ count_files() {
 
 # Count directories in directory (non-recursive)
 # Usage: count_dirs ["/path/to/dir"] ["pattern"]
-# Defaults to current directory if no path provided.
 # Returns: number of directories
 count_dirs() {
+    # Defaults to current directory if no path provided.
     local dir=${1:-.}
     local pattern=${2:-*}
     
@@ -193,6 +196,7 @@ count_dirs() {
 
 # Create a file and its parent directories if they don't exist
 # Usage: mkfile "path/to/deep/file.txt"
+# Returns: 0 on success, 1 on failure
 mkfile() {
     (( ARGC == 1 )) || return 1
     local dir=${1:h}

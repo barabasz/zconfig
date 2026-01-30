@@ -18,6 +18,8 @@ typeset -gi _cwg_w=0          # Weyl state
 typeset -gi _cwg_inc=-7046029254386353131
 
 # Function to initialize the generator with a custom seed
+# Usage: cwg_seed [seed]
+# If no seed is provided, uses current time for entropy
 cwg_seed() {
     if (( ARGC > 0 )); then
         (( _cwg_x = $1 ))
@@ -29,6 +31,7 @@ cwg_seed() {
 }
 
 # Core function returning a raw random number
+# Usage: cwg_next
 # Optimized for speed: No argument parsing, just math.
 cwg_next() {
     (( _cwg_w += _cwg_inc ))

@@ -43,6 +43,7 @@ get_cpu_model() {
 
 # Get Number of CPU Cores
 # Usage: get_cpu_count
+# Returns: integer (e.g. 8)
 get_cpu_count() {
     if is_macos; then
         sysctl -n hw.ncpu
@@ -133,6 +134,7 @@ get_ram_free() {
 
 # Get Total Disk Size
 # Usage: get_disk_total [/path/to/mount]
+# Returns: integer
 get_disk_total() {
     local target_path="${1:-.}"
 
@@ -149,6 +151,7 @@ get_disk_total() {
 
 # Get Used Disk Space
 # Usage: get_disk_used [/path/to/mount]
+# Returns: integer
 get_disk_used() {
     local target_path="${1:-.}"
 
@@ -165,6 +168,7 @@ get_disk_used() {
 
 # Get Free/Available Disk Space
 # Usage: get_disk_free [/path/to/mount]
+# Returns: integer
 get_disk_free() {
     local target_path="${1:-.}"
 

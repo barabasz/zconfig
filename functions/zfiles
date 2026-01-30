@@ -1,4 +1,6 @@
 # Show loaded shell files in order
+# Usage: zfiles
+
 zfiles() {
   (( ARGC != 0 )) && {
     printe "zfiles: No positional arguments or options expected"

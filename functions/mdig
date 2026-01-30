@@ -1,4 +1,4 @@
-# mdig - Multi-DNS query tool
+# Multi-DNS query tool
 # Query multiple DNS servers and display results in a table
 #
 # Usage: mdig <domain>

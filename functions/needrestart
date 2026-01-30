@@ -1,4 +1,4 @@
-# needrestart - manage needrestart interactive prompts on Ubuntu
+# Manage needrestart interactive prompts on Ubuntu
 # Disables/enables the interactive restart prompt during apt operations
 # -d | --disable : disable prompts (auto-restart services)
 # -e | --enable  : enable prompts (ask before restart)

@@ -125,6 +125,7 @@ random() {
 
 # Check if number is even
 # Usage: is_even 4
+# Returns: 0 (true) if even
 is_even() {
     (( ARGC == 1 )) || return 1
     (( $1 % 2 == 0 ))
@@ -132,6 +133,7 @@ is_even() {
 
 # Check if number is odd
 # Usage: is_odd 3
+# Returns: 0 (true) if odd
 is_odd() {
     (( ARGC == 1 )) || return 1
     (( $1 % 2 != 0 ))
@@ -139,6 +141,7 @@ is_odd() {
 
 # Check if number is positive
 # Usage: is_positive 5
+# Returns: 0 (true) if positive
 is_positive() {
     (( ARGC == 1 )) || return 1
     (( $1 > 0 ))
@@ -146,6 +149,7 @@ is_positive() {
 
 # Check if number is negative
 # Usage: is_negative -5
+# Returns: 0 (true) if negative
 is_negative() {
     (( ARGC == 1 )) || return 1
     (( $1 < 0 ))
@@ -153,6 +157,7 @@ is_negative() {
 
 # Check if number is zero
 # Usage: is_zero 0
+# Returns: 0 (true) if zero
 is_zero() {
     (( ARGC == 1 )) || return 1
     (( $1 == 0 ))
@@ -179,6 +184,7 @@ in_range() {
 
 # Round number to nearest integer
 # Usage: round 3.7 -> 4
+# Returns: integer
 round() {
     (( ARGC == 1 )) || return 1
     print -- $(( int(rint($1)) ))
@@ -186,6 +192,7 @@ round() {
 
 # Round number up (ceiling)
 # Usage: ceil 3.1 -> 4
+# Returns: integer
 ceil() {
     (( ARGC == 1 )) || return 1
     print -- $(( int(ceil($1)) ))
@@ -193,6 +200,7 @@ ceil() {
 
 # Round number down (floor)
 # Usage: floor 3.9 -> 3
+# Returns: integer
 floor() {
     (( ARGC == 1 )) || return 1
     print -- $(( int(floor($1)) ))
@@ -200,6 +208,7 @@ floor() {
 
 # Calculate factorial
 # Usage: factorial 5 -> 120
+# Returns: integer
 factorial() {
     (( ARGC == 1 )) || return 1
     local num=$1
@@ -220,6 +229,7 @@ factorial() {
 
 # Calculate GCD (Greatest Common Divisor)
 # Usage: gcd 48 18 -> 6
+# Returns: integer
 gcd() {
     (( ARGC == 2 )) || return 1
     local a=$1
@@ -235,6 +245,7 @@ gcd() {
 
 # Calculate LCM (Least Common Multiple)
 # Usage: lcm 12 18 -> 36
+# Returns: integer
 lcm() {
     (( ARGC == 2 )) || return 1
     local a=$1
@@ -252,6 +263,7 @@ lcm() {
 
 # Clamp number to range
 # Usage: clamp 15 0 10 -> 10
+# Returns: integer
 clamp() {
     (( ARGC == 3 )) || return 1
     local val=$1
@@ -269,6 +281,7 @@ clamp() {
 
 # Calculate percentage
 # Usage: percent 25 200 -> 12.50
+# Returns: float
 percent() {
     (( ARGC == 2 )) || return 1
     printf "%.2f\n" $(( $1 * 100.0 / $2 ))
@@ -278,6 +291,7 @@ percent() {
 
 # Convert Decimal to Hexadecimal
 # Usage: dec2hex 255 -> 0xFF
+# Returns: string
 dec2hex() {
     (( ARGC == 1 )) || return 1
     print -- $(( [#16] $1 ))
@@ -285,6 +299,7 @@ dec2hex() {
 
 # Convert Hexadecimal to Decimal
 # Usage: hex2dec 0xFF -> 255
+# Returns: integer
 hex2dec() {
     (( ARGC == 1 )) || return 1
     print -- $(( $1 ))
@@ -292,6 +307,7 @@ hex2dec() {
 
 # Convert Decimal to Binary
 # Usage: dec2bin 10 -> 2#1010
+# Returns: string
 dec2bin() {
     (( ARGC == 1 )) || return 1
     print -- $(( [#2] $1 ))
@@ -301,6 +317,7 @@ dec2bin() {
 
 # Convert degrees to radians
 # Usage: deg2rad 180 -> 3.14159...
+# Returns: float
 deg2rad() {
     (( ARGC == 1 )) || return 1
     printf "%.8f\n" $(( $1 * (4 * atan(1.0)) / 180.0 ))
@@ -308,6 +325,7 @@ deg2rad() {
 
 # Convert radians to degrees
 # Usage: rad2deg 3.14159 -> 180.00...
+# Returns: float
 rad2deg() {
     (( ARGC == 1 )) || return 1
     printf "%.8f\n" $(( $1 * 180.0 / (4 * atan(1.0)) ))
@@ -315,6 +333,7 @@ rad2deg() {
 
 # Calculate fibonacci number at position n
 # Usage: fibonacci 10 -> 55
+# Returns: integer
 fibonacci() {
     (( ARGC == 1 )) || return 1
     local n=$1
@@ -340,6 +359,7 @@ fibonacci() {
 
 # Format bytes into human readable size (IEC)
 # Usage: format_bytes 1048576 -> "1.00 MiB"
+# Returns: string
 format_bytes() {
     (( ARGC == 1 )) || return 1
     local -F bytes=$1
@@ -360,6 +380,7 @@ format_bytes() {
 
 # Format number with SI metric prefixes (k, M, G, T) - Base 1000
 # Usage: format_metric 1500 -> "1.50 k"
+# Returns: string
 format_metric() {
     (( ARGC == 1 )) || return 1
     local -F val=$1
