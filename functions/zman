@@ -1,0 +1,237 @@
+# List all user functions from lib/ and functions/ directories
+# Usage: zman [-g|--group] [keyword]
+#
+#   -g, --group:  Group functions by source file/directory
+#   keyword:      Filter results to show only lines containing keyword
+
+local -A opts
+local grouped=0
+local keyword=""
+
+# Parse options
+zparseopts -D -A opts g -group
+
+# Check if -g or --group was provided
+(( ${+opts[-g]} || ${+opts[--group]} )) && grouped=1
+
+# Get the optional keyword argument
+(( ARGC >= 1 )) && keyword="$1"
+
+# Get ZSH config path
+local zsh_dir="${ZDOTDIR:-${XDG_CONFIG_HOME:-$HOME/.config}/zsh}"
+local lib_dir="$zsh_dir/lib"
+local func_dir="$zsh_dir/functions"
+
+# Arrays to store results
+local -a funcs=()      # function names
+local -a sources=()    # source files/dirs
+local -a descs=()      # descriptions
+
+# Parse functions from /functions directory
+local file fname desc
+for file in "$func_dir"/*(.N); do
+    fname="${file:t}"
+    # Skip self and functions starting with _
+    [[ "$fname" == "zman" || "$fname" == _* ]] && continue
+    # Read first line (description comment) - pure zsh
+    IFS= read -r desc < "$file"
+    desc="${desc#\#}"           # Remove leading #
+    desc="${desc## }"           # Remove leading space
+
+    funcs+=("$fname")
+    sources+=("functions")
+    descs+=("$desc")
+done
+
+# Parse functions from /lib directory
+local line
+local -a comment_block=()
+for file in "$lib_dir"/*.zsh(.N); do
+    local src_name="${file:t}"
+    # Skip temp.zsh
+    [[ "$src_name" == "temp.zsh" ]] && continue
+    comment_block=()
+
+    while IFS= read -r line; do
+        # Check if line defines a function: name() { or name () {
+        if [[ "$line" =~ '^([a-zA-Z_][a-zA-Z0-9_]*)\s*\(\)' ]]; then
+            fname="${match[1]}"
+            # Skip functions starting with _
+            [[ "$fname" == _* ]] && continue
+            # Description is the first comment in the block above the function
+            desc=""
+            if (( ${#comment_block} > 0 )); then
+                desc="${comment_block[1]#\#}"
+                desc="${desc## }"
+            fi
+
+            funcs+=("$fname")
+            sources+=("$src_name")
+            descs+=("$desc")
+            comment_block=()
+        elif [[ "$line" == \#* ]]; then
+            # Accumulate comment lines
+            comment_block+=("$line")
+        else
+            # Non-comment, non-function line resets the block
+            comment_block=()
+        fi
+    done < "$file"
+done
+
+# Calculate column widths
+local max_name=0 max_src=0
+local i
+for ((i=1; i<=${#funcs}; i++)); do
+    (( ${#funcs[i]} > max_name )) && max_name=${#funcs[i]}
+    (( ${#sources[i]} > max_src )) && max_src=${#sources[i]}
+done
+
+# Add padding
+(( max_name += 2 ))
+(( max_src += 2 ))
+
+# Lowercase keyword for case-insensitive matching
+local keyword_lower="${(L)keyword}"
+
+# Case-insensitive highlight: preserves original case while highlighting matches
+# Sets REPLY to the highlighted string
+_zman_highlight() {
+    local text="$1" col_hl="$2" col_restore="$3"
+    local lower_text="${(L)text}"
+    local kw_len=${#keyword}
+    local result="" i=0
+
+    while (( i < ${#text} )); do
+        if [[ "${lower_text:$i:$kw_len}" == "$keyword_lower" ]]; then
+            # Match found - highlight original text (preserving case)
+            result+="${col_hl}${text:$i:$kw_len}${col_restore}"
+            (( i += kw_len ))
+        else
+            result+="${text:$i:1}"
+            (( i++ ))
+        fi
+    done
+
+    REPLY="$result"
+}
+
+# Case-insensitive match check
+_zman_matches() {
+    local text="$1"
+    [[ "${(L)text}" == *"$keyword_lower"* ]]
+}
+
+# Function to print a single entry (returns 1 if filtered out)
+_zman_print_entry() {
+    local name="$1" src="$2" desc="$3" indent="${4:-}"
+    local name_col src_col desc_col
+    local name_pad src_pad
+
+    # Apply keyword filter if set (case-insensitive)
+    if [[ -n "$keyword" ]]; then
+        if ! _zman_matches "$name" && ! _zman_matches "$src" && ! _zman_matches "$desc"; then
+            return 1
+        fi
+        # Highlight keyword occurrences (case-insensitive, preserving original case)
+        _zman_highlight "$name" "$y" "$g"; name_col="$REPLY"
+        _zman_highlight "$src" "$y" "$c"; src_col="$REPLY"
+        _zman_highlight "$desc" "$y" "$w"; desc_col="$REPLY"
+    else
+        name_col="$name"
+        src_col="$src"
+        desc_col="$desc"
+    fi
+
+    # Calculate padding based on original text length (without ANSI codes)
+    (( name_pad = max_name - ${#name} ))
+    (( src_pad = max_src - ${#src} ))
+
+    if [[ -n "$src" ]]; then
+        # Normal view with source column
+        print -r -- "${indent}${g}${name_col}${(l:name_pad:: :)}${x}${c}${src_col}${(l:src_pad:: :)}${x}${w}${desc_col}${x}"
+    else
+        # Grouped view without source column
+        print -r -- "${indent}${g}${name_col}${(l:name_pad:: :)}${x}${w}${desc_col}${x}"
+    fi
+    return 0
+}
+
+# Create sorted indices array
+local -a sorted_indices=()
+local -a sortable=()
+for ((i=1; i<=${#funcs}; i++)); do
+    sortable+=("${funcs[i]}:$i")
+done
+sortable=(${(o)sortable})
+
+for entry in "${sortable[@]}"; do
+    sorted_indices+=("${entry##*:}")
+done
+
+# Count functions that will be displayed (for group headers and total)
+_zman_count_group() {
+    local target_src="$1"
+    local count=0
+    for idx in "${sorted_indices[@]}"; do
+        if [[ "${sources[idx]}" == "$target_src" ]]; then
+            if [[ -z "$keyword" ]] || \
+               _zman_matches "${funcs[idx]}" || \
+               _zman_matches "$target_src" || \
+               _zman_matches "${descs[idx]}"; then
+                (( count++ ))
+            fi
+        fi
+    done
+    REPLY=$count
+}
+
+# Total counter
+local total_count=0
+
+# Output based on mode
+if (( grouped )); then
+    # Grouped output - first functions/, then lib files alphabetically
+    local group_count=0
+
+    # Print functions from /functions first
+    _zman_count_group "functions"
+    group_count=$REPLY
+    if (( group_count > 0 )); then
+        print "${c}functions${x} ($group_count)"
+        for idx in "${sorted_indices[@]}"; do
+            if [[ "${sources[idx]}" == "functions" ]]; then
+                _zman_print_entry "${funcs[idx]}" "" "${descs[idx]}" "    " && (( total_count++ ))
+            fi
+        done
+    fi
+
+    # Get unique lib sources sorted alphabetically
+    local -a lib_sources=()
+    for ((i=1; i<=${#sources}; i++)); do
+        [[ "${sources[i]}" != "functions" ]] && lib_sources+=("${sources[i]}")
+    done
+    lib_sources=(${(uo)lib_sources})
+
+    # Print lib functions grouped by file
+    for src in "${lib_sources[@]}"; do
+        _zman_count_group "$src"
+        group_count=$REPLY
+        if (( group_count > 0 )); then
+            print "${c}${src}${x} ($group_count)"
+            for idx in "${sorted_indices[@]}"; do
+                if [[ "${sources[idx]}" == "$src" ]]; then
+                    _zman_print_entry "${funcs[idx]}" "" "${descs[idx]}" "    " && (( total_count++ ))
+                fi
+            done
+        fi
+    done
+else
+    # Default: sorted alphabetically by function name
+    for idx in "${sorted_indices[@]}"; do
+        _zman_print_entry "${funcs[idx]}" "${sources[idx]}" "${descs[idx]}" && (( total_count++ ))
+    done
+fi
+
+# Print total
+print "\nTotal: $total_count functions"
