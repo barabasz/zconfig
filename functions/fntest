@@ -2,29 +2,34 @@
 # Usage: fntest [options] [input] [output]
 
 local -A _fn=(
-    [name]=${0:t}
+    [info]="Test function demonstrating fn.zsh library"
+    [desc]="fntest function. This function is intended to showcase how to use the
+            fn.zsh library for parsing command-line options and arguments in Zsh scripts."
     [version]="0.1.0"
     [author]="Andrzej Barabasz"
-    [desc]="Test function demonstrating fn.zsh library"
 )
 
 local -a _fn_args=(
-    "input|Input file|r|integer"
+    "input|Input file|r"
+    "times|How many times to run|r|integer"
     "output|Output file|o"
 )
 
 local -a _fn_opts=(
-    "help|h|Show this help message"
-    "version|v|Show version"
-    "cycles|c|Number of processing cycles (default: 4)|n|integer"
-    "force|f|Force overwrite existing files"
-    "test||Test option without short name"
+    # -h/--help and -v/--version are auto-added (because _fn[version] is set)
+    "cycles|c|Number of cycles|n|integer[1;10]"     # option with integer in range 1-10
+    "force|f"                                       # option without description
+    "test||Test without short name|txt|string[1;)"  # option with no short name
+    "speed|s|Maximum speed|kmh|float(0;]"           # option with float > 0
     "quiet|q|Suppress output messages"
-    "ip|i|Specify an IP address|ip|ipv4"
+    "ip|i|Specify an IP address|ip|ipv4"             # option with IP address validation
+    "email|e|User email address|email|email"         # option with email validation
+    "url|u|Generic URL|url|url"                      # option with URL validation and forced https schema
+    "website|w|Website URL|www|url[https]"           # option with URL validation and forced https schema
 )
 
 local -a _fn_examples=(
-    "fntest input.txt"
+    "fntest input.txt|Basic usage with input file only"
     "fntest -c 8 input.txt output.txt"
     "fntest --force --quiet data.csv results.csv"
 )
@@ -36,21 +41,32 @@ _fn_init "$@" || return $REPLY
 
 ## Main logic - now it's simple!
 
-printc "Options" $y
-print "Number of possible options: ${#_fn_opts}"
-print "Number of used options: ${#opts}"
-print "The value of 'cycles' option: ${opts[cycles]}"
+printc "Options:" $y
+print "  Number of possible options: $y${#_fn_opts}$x"
+print "  Number of used options: $y${#opts}$x"
 
-print -n "Is '-f/--force' option set?: "
-(( ${+opts[force]} )) && print " Yes" || print " No"
-print -n "Is '--test' option set?: "
-(( ${+opts[test]} )) && print " Yes" || print " No"
+if (( #opts )); then
+    print "  Used options and their values:"
+    for opt in "${(@k)opts}"; do
+        print -n -- "    ${y}•$x $c$opt$x"
+        if [[ -n ${opts[$opt]} ]]; then
+            print " => $y'$x$c${opts[$opt]}$x$y'$x"
+        else
+            print " (flag)$x"
+        fi
+    done
+fi
 
-printc "Arguments" $y
-print "Number of possible arguments: ${#_fn_args}"
-print "Number of used arguments: ${#args}"
-print "Number of required arguments: $(_fn_count_required_args)"
-print "The value of 'input' argument: ${args[input]}"
-print "The value of 'output' argument: ${args[output]}"
+printc "Arguments:" $y
+print "  Number of possible arguments: $y${#_fn_args}$x"
+print "  Number of required arguments: $y$(_fn_count_required_args)$x"
+print "  Number of used arguments: $y${#args}$x"
+
+if (( #args )); then
+    print "  Used arguments and their values:"
+    for arg in "${(@k)args}"; do
+        print "    ${y}•$x $c$arg$x => $y'$x$c${args[$arg]}$x$y'$x"
+    done
+fi
 
 return 0
