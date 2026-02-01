@@ -1,36 +1,77 @@
 # Measure zsh startup performance
-# Usage: zspeed
+# Usage: zspeed [-c|--cycles <n>] [-i|--info] [-h|--help] [-v|--version]
+# Options:
+#   -c, --cycles <n>  Number of measurement cycles (default: 4)
+#   -i, --info        Show extended info (files sourced, total time)
+#   -h, --help        Show this help message
+#   -v, --version     Show version
 # Returns: prints times to stdout
 # Returns error code 2 on invalid usage
+#
+# Performs measurement runs (alternating forward/reverse order) to minimize
+# cache effects, then displays the average time for each mode.
 
-(( ARGC == 0 )) || {
-    printe "${g}zspeed$x takes no arguments."
+local _zspeed_version="0.1.2"
+
+local -a cycles_opt help_opt version_opt info_opt
+zparseopts -D -E -F c:=cycles_opt -cycles:=cycles_opt h=help_opt -help=help_opt \
+    v=version_opt -version=version_opt i=info_opt -info=info_opt 2>/dev/null || {
+    printe "Usage: ${g}zspeed$x [-c|--cycles <n>] [-i|--info] [-h|--help] [-v|--version]"
     return 2
 }
 
-# Ensure zsh/datetime is available for high-precision timing
-zmodload zsh/datetime
+local cycles=4
+local show_info=0
+local usage="Usage: ${g}zspeed$x [-c|--cycles <n>] [-i|--info] [-h|--help] [-v|--version]
 
-# Map modes to their respective startup files
+Measure zsh startup performance across different shell modes.
+
+${y}Options:$x
+  ${c}-c, --cycles <n>$x  Number of measurement cycles (default: 4)
+  ${c}-i, --info$x        Show extended info (files sourced, total time)
+  ${c}-h, --help$x        Show this help message
+  ${c}-v, --version$x     Show version
+
+${y}Modes tested:$x
+  Baseline              zsh -f (no config files)
+  Non-Interactive       .zshenv only
+  Non-Interactive Login .zshenv, .zprofile, .zlogin
+  Interactive Non-Login .zshenv, .zshrc
+  Interactive Login     .zshenv, .zprofile, .zshrc, .zlogin
+
+${y}Examples:$x
+  zspeed          Run with 4 cycles (default)
+  zspeed -c 8     Run with 8 cycles for higher precision
+  zspeed -i       Show extended info with files sourced"
+
+(( ${#help_opt} )) && { print "$usage"; return 0 }
+(( ${#version_opt} )) && { print "zspeed $_zspeed_version"; return 0 }
+(( ${#info_opt} )) && show_info=1
+
+if (( ${#cycles_opt} )); then
+    cycles="${cycles_opt[-1]}"
+    [[ "$cycles" =~ ^[0-9]+$ ]] && (( cycles >= 1 )) || {
+        printe "Invalid cycles value: $cycles (must be a positive integer)"
+        return 2
+    }
+fi
+
+(( ARGC == 0 )) || {
+    printe "Usage: ${g}zspeed$x [-c|--cycles <n>] [-i|--info] [-h|--help] [-v|--version]"
+    return 2
+}
+
+## Configuration
+
 local -A file_map=(
-    "Baseline"                  "none (no-rcs mode)"
-    "Non-Interactive"           ".zshenv"
-    "Non-Interactive Login"     ".zshenv  .zprofile          .zlogin"
-    "Interactive Non-Login"     ".zshenv             .zshrc"
-    "Interactive Login"         ".zshenv  .zprofile  .zshrc  .zlogin"
+    "Baseline"              "none (no-rcs mode)"
+    "Non-Interactive"       ".zshenv"
+    "Non-Interactive Login" ".zshenv  .zprofile          .zlogin"
+    "Interactive Non-Login" ".zshenv             .zshrc"
+    "Interactive Login"     ".zshenv  .zprofile  .zshrc  .zlogin"
 )
 
-# Define flags for each mode
-local -A flag_map=(
-    "Baseline"                  "-f"
-    "Non-Interactive"           ""
-    "Non-Interactive Login"     "-l"
-    "Interactive Non-Login"     "-i"
-    "Interactive Login"         "-i -l"
-)
-
-# Execution order
-local -a order=(
+local -a modes=(
     "Baseline"
     "Non-Interactive"
     "Non-Interactive Login"
@@ -38,26 +79,95 @@ local -a order=(
     "Interactive Login"
 )
 
-# Warm-up: Run a baseline instance to fill disk cache
-command zsh -f -c exit
+## Warm-up and measurement
 
 print "\n${y}Zsh startup performance analysis$x\n"
 
-printf "${g}%-25s  %s      %s$x\n" "mode" "time" "files sourced"
-printl $g "" 72
+local tmpresults="${TMPDIR:-/tmp}/zspeed.$$"
 
-local mode start_time end_time total_ms
-for mode in $order; do
-    # Use 'command zsh' to bypass aliases and ensure direct binary execution
-    start_time=$EPOCHREALTIME
-    command zsh ${=flag_map[$mode]} -c exit
-    end_time=$EPOCHREALTIME
-    
-    total_ms=$(( (end_time - start_time) * 1000 ))
-    
-    # Format: Mode (22 chars), Time (8.3 float), Files in brackets
-    printf "%-22s ${y}%8.3f$x ms   ${c}%s$x\n" "$mode" $total_ms "${file_map[$mode]}"
+execs "Running $cycles measurement cycles..." zsh -c '
+    zmodload zsh/datetime
+    tmpresults="'"$tmpresults"'"
+
+    typeset -A flags=(
+        [Baseline]="-f"
+        [Non-Interactive]=""
+        [Non-Interactive_Login]="-l"
+        [Interactive_Non-Login]="-i"
+        [Interactive_Login]="-i -l"
+    )
+
+    order=(Baseline Non-Interactive Non-Interactive_Login Interactive_Non-Login Interactive_Login)
+
+    # Warm-up
+    command zsh -f -c exit
+
+    cycles='"$cycles"'
+
+    # Alternating forward/reverse cycles
+    for run in {1..$cycles}; do
+        if (( run % 2 == 0 )); then
+            run_order=(${(Oa)order})
+        else
+            run_order=(${order[@]})
+        fi
+        for mode in ${run_order[@]}; do
+            start=$EPOCHREALTIME
+            command zsh ${=flags[$mode]} -c exit
+            end=$EPOCHREALTIME
+            print "$mode:$(( (end - start) * 1000 ))" >> "$tmpresults"
+        done
+    done
+'
+
+## Parse results and calculate statistics
+
+local -A totals counts mins maxs
+local mode_key time_val total_time=0
+
+while IFS=: read -r mode_key time_val; do
+    (( totals[$mode_key] += time_val ))
+    (( counts[$mode_key]++ ))
+    (( total_time += time_val ))
+    # Track min
+    if (( ! ${+mins[$mode_key]} )) || (( time_val < mins[$mode_key] )); then
+        mins[$mode_key]=$time_val
+    fi
+    # Track max
+    if (( ! ${+maxs[$mode_key]} )) || (( time_val > maxs[$mode_key] )); then
+        maxs[$mode_key]=$time_val
+    fi
+done < "$tmpresults"
+
+rm -f "$tmpresults"
+
+## Display results
+
+if (( show_info )); then
+    printf "${g}%-22s  %9s %9s %9s   %s$x\n" "mode" "average" "min" "max" "files sourced"
+    printl $g "" 80
+else
+    printf "${g}%-22s  %9s %9s %9s$x\n" "mode" "average" "min" "max"
+    printl $g "" 52
+fi
+
+local mode avg min max
+for mode in $modes; do
+    mode_key="${mode// /_}"
+    if (( counts[$mode_key] > 0 )); then
+        avg=$(( totals[$mode_key] / counts[$mode_key] ))
+        min=${mins[$mode_key]}
+        max=${maxs[$mode_key]}
+    else
+        avg=0 min=0 max=0
+    fi
+    if (( show_info )); then
+        printf "%-22s ${y}%9.3f %9.3f %9.3f$x   ${c}%s$x\n" "$mode" $avg $min $max "${file_map[$mode]}"
+    else
+        printf "%-22s ${y}%9.3f %9.3f %9.3f$x\n" "$mode" $avg $min $max
+    fi
 done
 
 print
+(( show_info )) && printf "Total time taken (%d cycles): ${y}%.3f$x ms\n\n" $cycles $total_time
 return 0

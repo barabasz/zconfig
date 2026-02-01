@@ -1,0 +1,56 @@
+# Test function for lib/fn.zsh library
+# Usage: fntest [options] [input] [output]
+
+local -A _fn=(
+    [name]=${0:t}
+    [version]="0.1.0"
+    [author]="Andrzej Barabasz"
+    [desc]="Test function demonstrating fn.zsh library"
+)
+
+local -a _fn_args=(
+    "input|Input file|r|integer"
+    "output|Output file|o"
+)
+
+local -a _fn_opts=(
+    "help|h|Show this help message"
+    "version|v|Show version"
+    "cycles|c|Number of processing cycles (default: 4)|n|integer"
+    "force|f|Force overwrite existing files"
+    "test||Test option without short name"
+    "quiet|q|Suppress output messages"
+    "ip|i|Specify an IP address|ip|ipv4"
+)
+
+local -a _fn_examples=(
+    "fntest input.txt"
+    "fntest -c 8 input.txt output.txt"
+    "fntest --force --quiet data.csv results.csv"
+)
+
+## Initialize
+
+local -A opts=() args=()
+_fn_init "$@" || return $REPLY
+
+## Main logic - now it's simple!
+
+printc "Options" $y
+print "Number of possible options: ${#_fn_opts}"
+print "Number of used options: ${#opts}"
+print "The value of 'cycles' option: ${opts[cycles]}"
+
+print -n "Is '-f/--force' option set?: "
+(( ${+opts[force]} )) && print " Yes" || print " No"
+print -n "Is '--test' option set?: "
+(( ${+opts[test]} )) && print " Yes" || print " No"
+
+printc "Arguments" $y
+print "Number of possible arguments: ${#_fn_args}"
+print "Number of used arguments: ${#args}"
+print "Number of required arguments: $(_fn_count_required_args)"
+print "The value of 'input' argument: ${args[input]}"
+print "The value of 'output' argument: ${args[output]}"
+
+return 0
