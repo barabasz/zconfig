@@ -59,6 +59,19 @@ print_info() {
     printf "${c}→${x} %s\n" "$1"
 }
 
+print_banner() {
+    local text="$1"
+    local width=39
+    local padding=$(( (width - ${#text}) / 2 ))
+    local pad_left=$(printf '%*s' $padding '')
+    local pad_right=$(printf '%*s' $((width - ${#text} - padding)) '')
+    printf "\n${g}"
+    printf "  ╔═══════════════════════════════════════╗\n"
+    printf "  ║%s%s%s║\n" "$pad_left" "$text" "$pad_right"
+    printf "  ╚═══════════════════════════════════════╝${x}\n"
+    printf "\n"
+}
+
 # =============================================================================
 # Helper functions
 # =============================================================================
@@ -158,22 +171,61 @@ check_sudo() {
     fi
 }
 
+update_system() {
+    if [[ "$OS_TYPE" != "debian" ]]; then
+        return 0
+    fi
+
+    print_header "Updating system packages"
+    print_info "This may take a moment..."
+
+    # This also forces sudo password prompt early
+    if sudo apt update &>/dev/null && sudo apt upgrade -y &>/dev/null; then
+        print_success "System packages updated"
+    else
+        print_warning "System update failed (non-critical)"
+    fi
+    return 0
+}
+
 check_git() {
     print_header "Checking git availability"
 
     if cmd_exists git; then
         print_success "git is available ($(git --version | cut -d' ' -f3))"
         return 0
-    else
-        print_error "git is not installed"
-        if [[ "$OS_TYPE" == "macos" ]]; then
-            print_info "Install Xcode Command Line Tools with:"
-            printf "    ${c}xcode-select --install${x}\n"
+    fi
+
+    # git not found - install it
+    print_warning "git is not installed"
+
+    if [[ "$OS_TYPE" == "macos" ]]; then
+        # On macOS, install via Homebrew
+        if cmd_exists brew; then
+            print_info "Installing git via Homebrew..."
+            if brew install git &>/dev/null; then
+                print_success "git installed successfully"
+                return 0
+            else
+                print_error "Failed to install git"
+                return 1
+            fi
         else
-            print_info "Install git with:"
-            printf "    ${c}sudo apt install git -y${x}\n"
+            print_error "Homebrew is required to install git on macOS"
+            print_info "Install Xcode Command Line Tools manually with:"
+            printf "    ${c}xcode-select --install${x}\n"
+            return 1
         fi
-        return 1
+    else
+        # On Linux, install via apt
+        print_info "Installing git via apt..."
+        if sudo apt install git -y &>/dev/null; then
+            print_success "git installed successfully"
+            return 0
+        else
+            print_error "Failed to install git"
+            return 1
+        fi
     fi
 }
 
@@ -333,6 +385,16 @@ create_symlink() {
     fi
 }
 
+init_brew_shellenv() {
+    if [[ -f /opt/homebrew/bin/brew ]]; then
+        eval "$(/opt/homebrew/bin/brew shellenv)"
+    elif [[ -f /usr/local/bin/brew ]]; then
+        eval "$(/usr/local/bin/brew shellenv)"
+    elif [[ -f /home/linuxbrew/.linuxbrew/bin/brew ]]; then
+        eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+    fi
+}
+
 install_homebrew() {
     print_header "Checking Homebrew"
 
@@ -347,28 +409,38 @@ install_homebrew() {
     for brew_path in "${brew_paths[@]}"; do
         if [[ -x "$brew_path" ]]; then
             print_success "Homebrew found at $brew_path"
+            init_brew_shellenv
+            brew analytics off &>/dev/null
             return 0
         fi
     done
 
     # Homebrew not found - ask to install
     print_warning "Homebrew is not installed"
-    print_info "Homebrew is recommended for installing additional tools"
+    print_info "Homebrew is recommended for installing tools"
 
     if ! confirm "Install Homebrew now?"; then
         print_info "Skipping Homebrew installation"
         print_info "You can install it later with:"
         printf "    ${c}/bin/bash -c \"\$(curl -fsSL %s)\"${x}\n" "$HOMEBREW_INSTALL"
-        return 0
+        return 1
+    fi
+
+    # Fix for Linux: ensure /home/linuxbrew exists with correct permissions
+    if [[ "$OS_TYPE" == "debian" ]]; then
+        sudo mkdir -p /home/linuxbrew/
+        sudo chmod 755 /home/linuxbrew/
     fi
 
     print_info "Installing Homebrew..."
-    if /bin/bash -c "$(curl -fsSL "$HOMEBREW_INSTALL")"; then
+    if NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL "$HOMEBREW_INSTALL")"; then
         print_success "Homebrew installed successfully"
+        init_brew_shellenv
+        brew analytics off &>/dev/null
         return 0
     else
-        print_warning "Homebrew installation failed (non-critical)"
-        return 0
+        print_error "Homebrew installation failed"
+        return 1
     fi
 }
 
@@ -414,17 +486,15 @@ set_default_shell() {
 # =============================================================================
 
 main() {
-    printf "\n${g}"
-    printf "  ╔═══════════════════════════════════════╗\n"
-    printf "  ║       zconfig installer v1.0.0        ║\n"
-    printf "  ╚═══════════════════════════════════════╝${x}\n"
-    printf "\n"
+    print_banner "zconfig installer v1.0.0"
     print_info "This will install zconfig to $ZCONFIG_DIR"
     printf "\n"
 
     # Requirement checks
     check_os || return 1
     check_sudo || return 1
+    update_system
+    install_homebrew || return 1
     check_git || return 1
     check_zsh || return 1
 
@@ -437,15 +507,10 @@ main() {
     # Main installation
     clone_repository || return 1
     create_symlink || return 1
-    install_homebrew
     set_default_shell
 
     # Success message
-    printf "\n${g}"
-    printf "  ╔═══════════════════════════════════════╗\n"
-    printf "  ║     Installation complete! 🎉         ║\n"
-    printf "  ╚═══════════════════════════════════════╝${x}\n"
-    printf "\n"
+    print_banner "Installation complete! 🎉"
     print_info "zconfig installed to: $ZCONFIG_DIR"
     print_info "Configuration loaded from: $ZSHENV_LINK"
     printf "\n"
