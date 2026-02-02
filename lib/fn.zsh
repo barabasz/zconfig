@@ -266,6 +266,12 @@ _fn_has_opts() {
     (( ${+_fn_opts} && ${#_fn_opts} > 0 ))
 }
 
+# _fn_has_commands - Check if _fn_commands is defined and non-empty
+# Returns: 0 if has commands, 1 otherwise
+_fn_has_commands() {
+    (( ${+_fn_commands} && ${#_fn_commands} > 0 ))
+}
+
 # _fn_is_arg_optional - Check if argument spec is optional
 # Usage: _fn_is_arg_optional "spec"
 # Returns: 0 if optional, 1 if required
@@ -602,6 +608,17 @@ _fn_usage() {
         done
     fi
 
+    # Check command widths
+    if _fn_has_commands; then
+        for _spec in "${_fn_commands[@]}"; do
+            [[ -z "$_spec" ]] && continue
+            _fld=( "${(@s:|:)_spec}" )
+            _label="${_fld[1]}"
+            _len=${#_label}
+            (( _len > _max_width )) && _max_width=$_len
+        done
+    fi
+
     # Check option widths
     if _fn_has_opts; then
         for _spec in "${_fn_opts[@]}"; do
@@ -654,6 +671,20 @@ _fn_usage() {
         done
     fi
 
+    # Commands section
+    if _fn_has_commands; then
+        _fn_section "Commands"
+        local _cmd_spec _cmd_name _cmd_desc
+        local -a _cmd_fld=()
+        for _cmd_spec in "${_fn_commands[@]}"; do
+            [[ -z "$_cmd_spec" ]] && continue
+            _cmd_fld=( "${(@s:|:)_cmd_spec}" )
+            _cmd_name="${_cmd_fld[1]}"
+            _cmd_desc="${_cmd_fld[2]:-}"
+            printf "  ${c}%-${_max_width}s${x}%s\n" "$_cmd_name" "$_cmd_desc"
+        done
+    fi
+
     # Options section
     if _fn_has_opts; then
         _fn_section "Options"
@@ -699,20 +730,47 @@ _fn_usage() {
     # Examples section
     if (( ${+_fn_examples} && ${#_fn_examples} > 0 )); then
         _fn_section "Examples"
-        local _ex_entry _ex_cmd _ex_desc _ex_cmd_colored _ex_rest
+
+        # Build set of valid options from _fn_opts for coloring
+        local -A _ex_valid_opts=()
+        if (( ${+_fn_opts} )); then
+            local _ex_opt_spec _ex_opt_long _ex_opt_short
+            local -a _ex_opt_fld=()
+            for _ex_opt_spec in "${_fn_opts[@]}"; do
+                [[ -z "$_ex_opt_spec" ]] && continue
+                _ex_opt_fld=( "${(@s:|:)_ex_opt_spec}" )
+                _ex_opt_long="${_ex_opt_fld[1]}"
+                _ex_opt_short="${_ex_opt_fld[2]:-}"
+                [[ -n "$_ex_opt_long" ]] && _ex_valid_opts["--${_ex_opt_long}"]=1
+                [[ -n "$_ex_opt_short" ]] && _ex_valid_opts["-${_ex_opt_short}"]=1
+            done
+        fi
+
+        local _ex_entry _ex_cmd _ex_desc _ex_cmd_colored _ex_rest _ex_colored_rest _ex_word
         for _ex_entry in "${_fn_examples[@]}"; do
             _ex_cmd="${_ex_entry%%|*}"
             _ex_desc="${_ex_entry#*|}"
-            # Color function name green, rest cyan
+
+            # Color: function name green, options purple, arguments cyan
             if [[ "$_ex_cmd" == "${name} "* ]]; then
                 _ex_rest="${_ex_cmd#${name} }"
-                _ex_cmd_colored="${g}${name}${x} ${c}${_ex_rest}${x}"
+                # Color each word: options purple, rest cyan
+                _ex_colored_rest=""
+                for _ex_word in ${=_ex_rest}; do
+                    # Purple if: known option OR short option (-x) OR long option (--xxx)
+                    if (( ${+_ex_valid_opts[$_ex_word]} )) || [[ "$_ex_word" == -[^-] ]] || [[ "$_ex_word" == --?* ]]; then
+                        _ex_colored_rest+="${p}${_ex_word}${x} "
+                    else
+                        _ex_colored_rest+="${c}${_ex_word}${x} "
+                    fi
+                done
+                _ex_cmd_colored="${g}${name}${x} ${_ex_colored_rest% }"
             elif [[ "$_ex_cmd" == "${name}" ]]; then
                 _ex_cmd_colored="${g}${name}${x}"
             else
                 _ex_cmd_colored="${c}${_ex_cmd}${x}"
             fi
-            # If no separator found, _ex_desc equals _ex_cmd
+
             if [[ "$_ex_desc" == "$_ex_cmd" ]]; then
                 print "  ${_ex_cmd_colored}"
             else

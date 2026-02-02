@@ -6,7 +6,7 @@ local -A _fn=(
     [desc]="Displays all sourced shell files in load order, showing their status
             (success/failure), load time in milliseconds, and source directory.
             Color-coded by load time: green (<1ms), white (1-5ms), yellow (5-10ms), red (>10ms)."
-    [version]="0.6.5"
+    [version]="0.9.5"
     [created]="2024-06-15"
     [modified]="2026-02-02"
     [license]="MIT"

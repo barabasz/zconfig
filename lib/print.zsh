@@ -266,13 +266,71 @@ printt() {
     local cb="${3:-$x}"
 
     local width=$(( ${#text} + 2 ))
-    
+
     # Use expansion padding for the bar
     local bar="${(l:width::─:):-}"
 
     print -- "${cb}┌${bar}┐${x}"
     print -- "${cb}│${x} ${ct}${text}${x} ${cb}│${x}"
     print -- "${cb}└${bar}┘${x}"
+}
+
+# Execute command with animated spinner
+# Usage: execs "Message text" command [args...]
+# Returns: exit code of the executed command
+# Customizable via: EXECS_SPINNER_FRAMES (array), EXECS_SPINNER_DELAY (float)
+execs() {
+    (( ARGC >= 2 )) || { printe "Usage: execs \"Message\" command [args...]"; return 2 }
+
+    # Suppress job control messages
+    setopt LOCAL_OPTIONS NO_MONITOR NO_NOTIFY
+
+    local -a frames=( "${(@)EXECS_SPINNER_FRAMES:-${(@s: :):-| / - \\}}" )
+    local delay=${EXECS_SPINNER_DELAY:-0.16}
+
+    local message="$1" && shift
+    [[ -z "$message" ]] && message="Processing..."
+
+    # Check if command exists
+    if ! whence "$1" >/dev/null 2>&1; then
+        printe "Command not found: $1"
+        return 127
+    fi
+
+    # Create temporary file for capturing output
+    local tmpfile=${TMPDIR:-/tmp}/execs.$$.$RANDOM
+
+    # Execute command in background
+    "$@" > "$tmpfile" 2>&1 &
+    local pid=$!
+
+    # Hide cursor
+    echotc vi 2>/dev/null
+
+    # Animate spinner while process is running
+    while kill -0 $pid 2>/dev/null; do
+        for frame in "${frames[@]}"; do
+            printf "\r\033[K${by}${frame}${x} ${message}"
+            sleep $delay
+            kill -0 $pid 2>/dev/null || break
+        done
+    done
+
+    # Wait for process and capture exit code
+    wait $pid
+    local exit_code=$?
+
+    # Clear spinner line and restore cursor
+    printf "\r\033[K"
+    echotc ve 2>/dev/null
+
+    # Display captured output
+    [[ -s "$tmpfile" ]] && cat "$tmpfile"
+
+    # Cleanup
+    rm -f "$tmpfile"
+
+    return $exit_code
 }
 
 # shell files tracking - keep at the end

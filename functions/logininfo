@@ -1,5 +1,17 @@
 # Display login information with user, host, IP, TTY and remote connection
-# Usage: logininfo
+# Use 'logininfo --help' for more information.
+
+local -A _fn=(
+    [info]="Display current login session information"
+    [version]="0.5.0"
+    [created]="2024-02-20""
+    [modified]="2026-02-02"
+    [license]="MIT"
+    [author]="Andrzej Barabasz"
+)
+
+local -A opts=() args=()
+_fn_init "$@" || return $REPLY
 
 local user=$USER
 local host=${HOST%%.*}

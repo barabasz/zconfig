@@ -1,0 +1,50 @@
+# Remove a symbolic link only
+# Use 'rmln --help' for more information.
+
+local -A _fn=(
+    [info]="Remove a symbolic link only"
+    [desc]="Removes a file or directory only if it is a symbolic link.
+            Refuses to remove regular files, directories, or other objects."
+    [version]="0.5.0"
+    [created]="2025"
+    [modified]="2026-02-02"
+    [license]="MIT"
+    [author]="Andrzej Barabasz"
+    [notes]="Safety feature: will not remove non-symlink files."
+)
+
+local -a _fn_args=(
+    "path|Symbolic link to remove|r"
+)
+
+local -a _fn_examples=(
+    "rmln ~/.zshrc|Remove symlink ~/.zshrc"
+    "rmln /tmp/mylink|Remove symlink /tmp/mylink"
+)
+
+local -A opts=() args=()
+_fn_init "$@" || return $REPLY
+
+local path="${args[path]}"
+local full_path="${path:a}"
+
+# Check if exists (including broken symlinks)
+if [[ ! -e "$path" && ! -L "$path" ]]; then
+    printe "${c}${full_path}${x} does not exist."
+    return 1
+fi
+
+# Check if it's a symlink
+if [[ ! -L "$path" ]]; then
+    printe "${c}${full_path}${x} is not a symbolic link."
+    return 1
+fi
+
+# Remove the symlink
+if rm -f "$path"; then
+    prints "Symbolic link ${c}${full_path}${x} removed."
+    return 0
+else
+    printe "Failed to remove symbolic link ${c}${full_path}${x}."
+    return 1
+fi

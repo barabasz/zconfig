@@ -1,0 +1,143 @@
+# Minimize login information on Linux systems
+# Use 'mli --help' for more information.
+
+local -A _fn=(
+    [info]="Minimize login information on Linux systems"
+    [desc]="Disables verbose MOTD (Message of the Day) scripts on Ubuntu/Debian
+            and creates ~/.hushlogin to suppress login messages."
+    [version]="0.2.0"
+    [created]="2025"
+    [modified]="2026-02-02"
+    [license]="MIT"
+    [author]="Andrzej Barabasz"
+    [notes]="Requires sudo. Creates ~/.hushlogin on all systems.
+            On Ubuntu: disables 00-header, 10-help-text, 50-motd-news.
+            On Debian: disables 10-uname.
+            Optionally links a custom MOTD header script."
+)
+
+local -a _fn_opts=(
+    "motd|m|Path to custom MOTD script to link as 05-header|path"
+    "dry-run|n|Show what would be done without making changes"
+    "restore|r|Restore original MOTD scripts (re-enable them)"
+)
+
+local -a _fn_examples=(
+    "mli|Minimize login info with defaults"
+    "mli -n|Dry run - show what would be done"
+    "mli -m ~/dotfiles/motd|Use custom MOTD script"
+    "mli -r|Restore original MOTD scripts"
+)
+
+local -A opts=() args=()
+_fn_init "$@" || return $REPLY
+
+local dry_run=$(( ${+opts[dry-run]} ))
+local restore=$(( ${+opts[restore]} ))
+local custom_motd="${opts[motd]:-}"
+
+# Helper for dry-run mode
+_mli_run() {
+    if (( dry_run )); then
+        print "  ${c}[dry-run]${x} $*"
+    else
+        eval "$@"
+    fi
+}
+
+# Detect Linux distribution
+local distro=""
+if [[ $OSTYPE == linux* ]]; then
+    if [[ -f /etc/os-release ]]; then
+        source /etc/os-release
+        distro="${ID:-unknown}"
+    fi
+fi
+
+# Create/remove .hushlogin
+local hushlogin="$HOME/.hushlogin"
+if (( restore )); then
+    if [[ -f "$hushlogin" ]]; then
+        printi "Removing ${c}${hushlogin}${x}..."
+        _mli_run "rm -f '$hushlogin'"
+    fi
+else
+    if [[ ! -f "$hushlogin" ]]; then
+        printi "Creating ${c}${hushlogin}${x}..."
+        _mli_run "touch '$hushlogin'"
+    else
+        (( dry_run )) || prints "${c}.hushlogin${x} already exists."
+    fi
+fi
+
+# Linux-specific MOTD modifications
+if [[ $OSTYPE != linux* ]]; then
+    (( dry_run )) || prints "MOTD modifications skipped (not Linux)."
+    return 0
+fi
+
+local motd_dir="/etc/update-motd.d"
+if [[ ! -d "$motd_dir" ]]; then
+    printw "MOTD directory ${c}${motd_dir}${x} not found."
+    return 0
+fi
+
+# Define scripts to disable based on distro
+local -a scripts_to_disable=()
+case "$distro" in
+    ubuntu)
+        scripts_to_disable=(
+            "00-header"
+            "10-help-text"
+            "50-motd-news"
+        )
+        ;;
+    debian)
+        scripts_to_disable=(
+            "10-uname"
+        )
+        ;;
+    *)
+        printw "Unknown distribution: ${c}${distro:-unknown}${x}. Skipping MOTD changes."
+        return 0
+        ;;
+esac
+
+# Disable or restore MOTD scripts
+local script script_path
+for script in "${scripts_to_disable[@]}"; do
+    script_path="$motd_dir/$script"
+    if [[ -f "$script_path" ]]; then
+        if (( restore )); then
+            printi "Restoring ${c}${script}${x}..."
+            _mli_run "sudo chmod +x '$script_path'"
+        else
+            printi "Disabling ${c}${script}${x}..."
+            _mli_run "sudo chmod -x '$script_path'"
+        fi
+    fi
+done
+
+# Handle custom MOTD script
+local motd_link="$motd_dir/05-header"
+if (( restore )); then
+    if [[ -L "$motd_link" ]]; then
+        printi "Removing custom MOTD link..."
+        _mli_run "sudo rm -f '$motd_link'"
+    fi
+elif [[ -n "$custom_motd" ]]; then
+    if [[ -f "$custom_motd" ]]; then
+        printi "Linking custom MOTD: ${c}${custom_motd}${x}..."
+        _mli_run "sudo ln -sf '${custom_motd:A}' '$motd_link'"
+    else
+        printe "Custom MOTD file not found: ${c}${custom_motd}${x}"
+        return 1
+    fi
+fi
+
+if (( dry_run )); then
+    print
+    prints "Dry run complete. No changes were made."
+else
+    prints "Login information minimized."
+fi

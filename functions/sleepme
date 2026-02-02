@@ -1,10 +1,24 @@
 # Put the computer to sleep
-# Usage: sleepme
+# Use 'sleepme --help' for more information.
+
+local -A _fn=(
+    [info]="Put the computer to sleep"
+    [version]="0.5.0"
+    [created]="2025"
+    [modified]="2026-02-02"
+    [license]="MIT"
+    [author]="Andrzej Barabasz"
+    [notes]="Supports macOS (pmset) and Debian-based systems (systemctl)."
+)
+
+local -A opts=() args=()
+_fn_init "$@" || return $REPLY
 
 if is_macos; then
     pmset sleepnow
 elif is_debian_based; then
     systemctl suspend
 else
-    printi "${g}sleepme$x is only supported on macOS and Debian-based systems."
+    printe "Only supported on macOS and Debian-based systems."
+    return 1
 fi

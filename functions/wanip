@@ -5,8 +5,8 @@ local -A _fn=(
     [info]="Retrieve the public IP address (IPv4 or IPv6)"
     [desc]="Queries multiple services (DNS and HTTP) to retrieve your public IP address.
             Falls back to the next service if one fails."
-    [version]="0.5.0"
-    [created]="2025"
+    [version]="0.6.15"
+    [created]="2024-02-26"
     [modified]="2026-02-02"
     [license]="MIT"
     [author]="Andrzej Barabasz"

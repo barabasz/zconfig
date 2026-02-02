@@ -5,8 +5,8 @@ local -A _fn=(
     [info]="Query URL and display detailed connection, SSL, and timing information"
     [desc]="Fetches a URL and displays comprehensive information including HTTP status,
             IP geolocation, SSL certificate details, response headers, and timing metrics."
-    [version]="1.0.7"
-    [created]="2025"
+    [version]="1.0.8"
+    [created]="2023-07-11"
     [modified]="2026-02-02"
     [license]="MIT"
     [author]="Andrzej Barabasz"

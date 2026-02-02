@@ -1,21 +1,48 @@
 # Measure Time To First Byte (TTFB) for a given URL
-# Usage: ttfb <hostname>
+# Use 'ttfb --help' for more information.
 
-(( ARGC != 1 )) && { printe "Usage: ttfb <hostname>"; return 1 }
+local -A _fn=(
+    [info]="Measure Time To First Byte (TTFB) for a URL"
+    [desc]="Measures how long it takes to receive the first byte from a server.
+            Useful for testing server response time and latency."
+    [version]="0.5.0"
+    [created]="2024-03-10"
+    [modified]="2026-02-02"
+    [license]="MIT"
+    [author]="Andrzej Barabasz"
+    [notes]="Requires curl. Protocol (https://) is added automatically if missing."
+)
 
-local url=$1
+local -a _fn_args=(
+    "url|URL or hostname to measure|r"
+)
 
-# Add protocol if missing (string tests use [[ ]])
+local -a _fn_examples=(
+    "ttfb google.com|Measure TTFB for google.com"
+    "ttfb https://example.com|Measure with explicit protocol"
+)
+
+local -A opts=() args=()
+_fn_init "$@" || return $REPLY
+
+# Dependency check
+(( ${+commands[curl]} )) || { printe "curl is required."; return 1 }
+
+local url="${args[url]}"
+
+# Add protocol if missing
 [[ $url != http* ]] && url="https://$url"
 
 local ttfb_s
 
-# Process substitution (< <) to avoid subshell overhead ($(...))
-# We read directly from curl's output stream
-read -r ttfb_s < <(curl -s -w "%{time_starttransfer}" -o /dev/null "$url")
+# Process substitution to avoid subshell overhead
+read -r ttfb_s < <(curl -s -w "%{time_starttransfer}" -o /dev/null "$url" 2>/dev/null)
 
-# Verify if curl returned a value (e.g. valid domain/connection)
-[[ -z $ttfb_s ]] && { printe "Error: Could not fetch URL"; return 1 }
+# Verify if curl returned a valid value
+if [[ -z "$ttfb_s" || "$ttfb_s" == "0.000000" || "$ttfb_s" == "0,000000" ]]; then
+    printe "Could not connect to: ${args[url]}"
+    return 1
+fi
 
 # Native float math and formatting
 print -f "%.2f ms\n" $(( ttfb_s * 1000 ))

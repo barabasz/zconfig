@@ -1,47 +1,47 @@
 # Calculate Collatz sequences or analyze ranges statistics
-# Usage: collatz <number>
-#        collatz <start> <end>
-#
-#   <number>: Show full trajectory for a single number
-#   <start> <end>: Show statistics table for a range of numbers
+# Use 'collatz --help' for more information.
 
-# Validate argument count
-if (( ARGC < 1 || ARGC > 2 )); then
-    printe "Usage: collatz <number> OR collatz <start> <end>"
-    return 1
-fi
+local -A _fn=(
+    [info]="Calculate Collatz sequences or analyze ranges"
+    [desc]="Computes the Collatz sequence (3n+1 problem) for a single number or
+            analyzes statistics for a range of numbers."
+    [version]="0.5.0"
+    [created]="2025"
+    [modified]="2026-02-02"
+    [license]="MIT"
+    [author]="Andrzej Barabasz"
+    [notes]="The Collatz conjecture states that this sequence always reaches 1.
+            Single mode shows the full trajectory; range mode shows a statistics table."
+)
 
-# Parse and validate first argument
-local arg1="$1"
-if [[ "$arg1" != <-> ]] || (( arg1 < 1 )); then
-    printe "Error: First argument must be a positive integer."
-    return 1
-fi
+local -a _fn_args=(
+    "number|Starting number (or single number)|r|integer(0;]"
+    "end|End of range for statistics|o|integer(0;]"
+)
 
-integer start_num=$arg1
-integer end_num=$start_num # Default to single mode (start == end)
+local -a _fn_examples=(
+    "collatz 27|Show trajectory for 27"
+    "collatz 1 100|Show statistics for range 1-100"
+)
+
+local -A opts=() args=()
+_fn_init "$@" || return $REPLY
+
+integer start_num=${args[number]}
+integer end_num=${args[end]:-$start_num}
 local mode="single"
 
-# Parse and validate second argument (Range Mode)
-if (( ARGC == 2 )); then
-    local arg2="$2"
-    if [[ "$arg2" != <-> ]]; then
-        printe "Error: Second argument must be a positive integer."
-        return 1
-    fi
-    
-    end_num=$arg2
+# Range mode validation
+if [[ -n "${args[end]}" ]]; then
     mode="range"
-    
     if (( start_num >= end_num )); then
-        printe "Error: Range start ($start_num) must be smaller than end ($end_num)."
+        printe "Range start ($start_num) must be smaller than end ($end_num)."
         return 1
     fi
 fi
 
 # Print header for range mode
 if [[ "$mode" == "range" ]]; then
-    # %B starts bold, %b ends bold (Zsh prompt expansion)
     print -P "%BCollatz Range Analysis ($start_num - $end_num)%b"
     printf "%-10s | %-15s | %-10s\n" "Number" "Max Value" "Steps"
     print -- "-------------------------------------------"
@@ -54,7 +54,7 @@ for (( i = start_num; i <= end_num; i++ )); do
     current=$i
     steps=0
     max_val=$current
-    
+
     # Single mode output: start number
     if [[ "$mode" == "single" ]]; then
         print -n -- "$current"
@@ -63,7 +63,7 @@ for (( i = start_num; i <= end_num; i++ )); do
     # Calculate Sequence
     while (( current > 1 )); do
         (( steps++ ))
-        
+
         # If even: divide by 2, If odd: 3n + 1
         if (( current % 2 == 0 )); then
             (( current /= 2 ))

@@ -1,0 +1,165 @@
+# Universal command locator - find where a command is defined
+# Use 'zwhere --help' for more information.
+
+local -A _fn=(
+    [info]="Find where a command (function, binary, alias) is defined"
+    [desc]="Universal command locator. Finds the source file for functions
+            (autoloaded and sourced) or the path to binary executables."
+    [version]="0.5.0"
+    [created]="2025"
+    [modified]="2026-02-02"
+    [license]="MIT"
+    [author]="Andrzej Barabasz"
+    [notes]="Searches fpath for autoloaded functions, lib/ for sourced functions,
+            and PATH for binaries. Use -i for detailed type information."
+)
+
+local -a _fn_args=(
+    "name|Command name to locate|r"
+)
+
+local -a _fn_opts=(
+    "info|i|Show type information along with path"
+    "debug|d|Show debug information (how path was found)"
+)
+
+local -a _fn_examples=(
+    "zwhere brew|Find binary in PATH"
+    "zwhere zmv|Find autoloaded zsh function"
+    "zwhere printe|Find sourced lib function"
+    "zwhere -i brew|Show type info + path"
+    "zwhere -d brew|Show debug info (how it was found)"
+)
+
+local -A opts=() args=()
+_fn_init "$@" || return $REPLY
+
+local name="${args[name]}"
+local show_info=$(( ${+opts[info]} ))
+local debug=$(( ${+opts[debug]} ))
+local found_path="" type_desc="" found_method=""
+
+# Debug helper
+_dbg() { (( debug )) && print -u2 "${y}DEBUG:${x} $*" }
+
+_dbg "Looking for: $name"
+_dbg "PATH: ${PATH:0:50}..."
+
+# Check for binary first (simplest case)
+_dbg "Method 1: Checking for binary (whence -p)"
+local bin_path=$(whence -p -- "$name" 2>/dev/null)
+_dbg "  whence -p result: [$bin_path]"
+if [[ -n "$bin_path" && -x "$bin_path" ]]; then
+    found_path="$bin_path"
+    type_desc="binary file"
+    found_method="whence -p (binary in PATH)"
+    _dbg "  FOUND via whence -p"
+fi
+
+# Check for function
+if [[ -z "$found_path" ]] && (( ${+functions[$name]} )); then
+    _dbg "Method 2: Checking for function (\${+functions[$name]} = 1)"
+
+    # Method 2a: whence -v for direct path (sourced functions)
+    _dbg "  Method 2a: whence -v for sourced functions"
+    local whence_output=$(whence -v -- "$name" 2>/dev/null)
+    _dbg "    whence -v result: [$whence_output]"
+    if [[ "$whence_output" == */* && "$whence_output" != *"autoload"* ]]; then
+        found_path=${whence_output##* }
+        _dbg "    Extracted path: [$found_path]"
+        if [[ -f "$found_path" ]]; then
+            type_desc="sourced function from"
+            found_method="whence -v (sourced function)"
+            _dbg "    FOUND via whence -v"
+        fi
+    fi
+
+    # Method 2b: Search in fpath (autoloaded functions)
+    if [[ -z "$found_path" || ! -f "$found_path" ]]; then
+        _dbg "  Method 2b: Searching in \$fpath (${#fpath} directories)"
+        local dir
+        for dir in $fpath; do
+            if [[ -f "$dir/$name" ]]; then
+                found_path="$dir/$name"
+                type_desc="autoload shell function from"
+                found_method="fpath search ($dir)"
+                _dbg "    FOUND in fpath: $dir"
+                break
+            fi
+        done
+    fi
+
+    # Method 2c: Search in lib directory (sourced helpers)
+    if [[ -z "$found_path" ]]; then
+        local lib_dir="${ZDOTDIR:-$HOME/.config/zsh}/lib"
+        [[ -d "$lib_dir" ]] || lib_dir="$HOME/.zsh/lib"
+        _dbg "  Method 2c: Searching in lib directory: $lib_dir"
+
+        if [[ -d "$lib_dir" ]]; then
+            local lib_file
+            for lib_file in "$lib_dir"/*.zsh(N); do
+                if grep -q "^${name}()\|^function ${name}" "$lib_file" 2>/dev/null; then
+                    found_path="$lib_file"
+                    type_desc="sourced function from"
+                    found_method="grep in lib/ (${lib_file:t})"
+                    _dbg "    FOUND via grep in: ${lib_file:t}"
+                    break
+                fi
+            done
+        fi
+    fi
+
+    [[ -z "$type_desc" ]] && type_desc="function"
+fi
+
+# Check for alias
+if [[ -z "$found_path" ]] && (( ${+aliases[$name]} )); then
+    _dbg "Method 3: Found as alias"
+    local definition="${aliases[$name]}"
+    (( debug )) && print -u2 "${y}DEBUG:${x} Found method: \${+aliases[$name]}"
+    if (( show_info )); then
+        print "${g}${name}${x} is an alias for ${p}${definition}${x}"
+    else
+        print "alias: $definition"
+    fi
+    return 0
+fi
+
+# Check for builtin
+if [[ -z "$found_path" ]] && [[ $(whence -w -- "$name" 2>/dev/null) == *": builtin" ]]; then
+    _dbg "Method 4: Found as builtin (whence -w)"
+    if (( show_info )); then
+        print "${g}${name}${x} is a shell builtin"
+    else
+        print "builtin"
+    fi
+    return 0
+fi
+
+# Check for reserved word
+if [[ -z "$found_path" ]] && [[ $(whence -w -- "$name" 2>/dev/null) == *": reserved" ]]; then
+    _dbg "Method 5: Found as reserved word (whence -w)"
+    if (( show_info )); then
+        print "${g}${name}${x} is a reserved word"
+    else
+        print "reserved"
+    fi
+    return 0
+fi
+
+# Output path if found
+if [[ -n "$found_path" ]]; then
+    (( debug )) && print -u2 "${y}DEBUG:${x} Found method: $found_method"
+    if (( show_info )); then
+        print "${g}${name}${x} is a ${type_desc}:"
+        print "${c}${found_path}${x}"
+    else
+        print "$found_path"
+    fi
+    return 0
+fi
+
+# Not found
+_dbg "Not found by any method"
+printe "${c}${name}${x} not found."
+return 1

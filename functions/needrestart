@@ -1,12 +1,35 @@
 # Manage needrestart interactive prompts on Ubuntu
-# Disables/enables the interactive restart prompt during apt operations
-# -d | --disable : disable prompts (auto-restart services)
-# -e | --enable  : enable prompts (ask before restart)
-# -h | --help    : show help
+# Use 'needrestart --help' for more information.
+
+local -A _fn=(
+    [info]="Manage needrestart interactive prompts on Ubuntu"
+    [desc]="Disables or enables the interactive restart prompt during apt operations.
+            Modifies /etc/needrestart/needrestart.conf to control whether apt asks
+            about restarting services after package updates."
+    [version]="0.5.0"
+    [created]="2025"
+    [modified]="2026-02-02"
+    [license]="MIT"
+    [author]="Andrzej Barabasz"
+    [notes]="Ubuntu only. Requires sudo for modifying the config file."
+)
+
+local -a _fn_opts=(
+    "disable|d|Disable prompts (auto-restart services)"
+    "enable|e|Enable prompts (ask before restart)"
+)
+
+local -a _fn_examples=(
+    "needrestart -d|Disable interactive prompts"
+    "needrestart -e|Enable interactive prompts"
+)
+
+local -A opts=() args=()
+_fn_init "$@" || return $REPLY
 
 # Ubuntu only
 is_ubuntu || {
-    printe "needrestart: this command is only available on Ubuntu"
+    printe "This command is only available on Ubuntu."
     return 1
 }
 
@@ -14,44 +37,23 @@ local conf="/etc/needrestart/needrestart.conf"
 
 # Check if config exists
 [[ -f $conf ]] || {
-    printe "needrestart: config file not found: $conf"
+    printe "Config file not found: $conf"
     return 1
 }
 
-_needrestart_usage() {
-    print "needrestart - manage needrestart interactive prompts"
-    print ""
-    print "Usage: needrestart [OPTION]"
-    print ""
-    print "Options:"
-    print "  -d, --disable    Disable interactive prompts (auto-restart services)"
-    print "  -e, --enable     Enable interactive prompts (ask before restart)"
-    print "  -h, --help       Show this help"
-    print ""
-    print "This modifies $conf to control whether apt asks"
-    print "about restarting services after package updates."
-}
-
-# Parse options
-local -A opts
-zparseopts -D -A opts d -disable e -enable h -help
-
-if (( ${+opts[-h]} + ${+opts[--help]} )); then
-    _needrestart_usage
-    return 0
-fi
-
-if (( ${+opts[-d]} + ${+opts[--disable]} )); then
+if (( ${+opts[disable]} )); then
     sudo sed -i -e "s/#\$nrconf{restart} = 'i';/\$nrconf{restart} = 'a';/g" "$conf"
-    print "needrestart: interactive prompts disabled (auto-restart enabled)"
+    printi "Interactive prompts disabled (auto-restart enabled)."
     return 0
 fi
 
-if (( ${+opts[-e]} + ${+opts[--enable]} )); then
+if (( ${+opts[enable]} )); then
     sudo sed -i -e "s/\$nrconf{restart} = 'a';/#\$nrconf{restart} = 'i';/g" "$conf"
-    print "needrestart: interactive prompts enabled"
+    printi "Interactive prompts enabled."
     return 0
 fi
 
-# No valid option provided
-_needrestart_usage
+# No option provided - show usage
+printe "No action specified. Use --disable or --enable."
+_fn_usage >&2
+return 1

@@ -1,18 +1,25 @@
 # Display CPU hardware information and current load statistics
-# Usage: cpuinfo
+# Use 'cpuinfo --help' for more information.
+
+local -A _fn=(
+    [info]="Display CPU hardware information and load statistics"
+    [version]="0.5.0"
+    [created]="2025"
+    [modified]="2026-02-02"
+    [license]="MIT"
+    [author]="Andrzej Barabasz"
+)
+
+local -A opts=() args=()
+_fn_init "$@" || return $REPLY
 
 # Check dependencies
 (( ${+functions[get_cpu_model]} )) || { printe "Missing get_cpu_model()"; return 1; }
 (( ${+functions[get_load_average]} )) || { printe "Missing get_load_average()"; return 1; }
 
-# Retrieve data
-local model=$(get_cpu_model)
-local arch=$(get_cpu_arch)
-local cores=$(get_cpu_count)
-local load=$(get_load_average)
-
+# Retrieve and display data
 printc "CPU Info" $y
-printkv "Model" "$model"
-printkv "Architecture" "$arch"
-printkv "Cores" "$cores"
-printkv "Load Avg (1m)" "$load" $y
+printkv "Model" "$(get_cpu_model)"
+printkv "Architecture" "$(get_cpu_arch)"
+printkv "Cores" "$(get_cpu_count)"
+printkv "Load Avg (1m)" "$(get_load_average)" $y

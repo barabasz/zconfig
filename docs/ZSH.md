@@ -209,6 +209,34 @@ path+=(/opt/new/bin)
 typeset -U path
 ```
 
+### ⚠️ DANGER: Reserved Variable Names
+
+**Never use these names for local variables** - they are special arrays tied to environment variables:
+
+| Variable | Tied to | Effect if shadowed |
+|----------|---------|-------------------|
+| `path` | `PATH` | Commands not found |
+| `fpath` | `FPATH` | Autoload functions fail |
+| `cdpath` | `CDPATH` | `cd` behavior breaks |
+| `mailpath` | `MAILPATH` | Mail checks fail |
+| `manpath` | `MANPATH` | `man` can't find pages |
+
+```zsh
+# ❌ WRONG - shadows PATH, breaks command lookup!
+my_function() {
+    local path="/some/path"        # PATH is now empty!
+    whence -p brew                 # fails - PATH is gone
+}
+
+# ✅ CORRECT - use different name
+my_function() {
+    local file_path="/some/path"   # safe
+    local found_path=""            # safe
+}
+```
+
+This is a subtle bug that can be hard to diagnose - commands work outside the function but fail inside.
+
 ---
 
 ## Print Command

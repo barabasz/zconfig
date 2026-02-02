@@ -20,6 +20,35 @@ get_version() {
     return 1
 }
 
+# --- Extraction (from strings) ---
+
+# Extract URL from a string
+# Usage: extract_url "Check out https://example.com for more"
+# Returns: https://example.com
+extract_url() {
+    (( ARGC == 1 )) || return 2
+    if [[ $1 =~ '(https?://[^ ]+)' ]]; then
+        print -r -- "$match[1]"
+        return 0
+    fi
+    return 1
+}
+
+# Extract file path from a string
+# Usage: extract_filepath "Error in /usr/local/bin/script.sh at line 5"
+# Returns: /usr/local/bin/script.sh
+extract_filepath() {
+    (( ARGC == 1 )) || return 2
+    if [[ $1 =~ '(/[[:alnum:]/._-]+)' ]]; then
+        print -r -- "$match[1]"
+        return 0
+    fi
+    return 1
+}
+
+# Extract version - alias for get_version (consistency with extract_* group)
+functions[extract_version]=$functions[get_version]
+
 # Trim whitespace from both ends of string
 # Usage: trim "   hello world  "
 # Returns: "hello world"
@@ -45,6 +74,23 @@ rtrim() {
     (( ARGC == 1 )) || return 1
     setopt local_options extended_glob
     print -- "${1%%[[:space:]]#}"
+}
+
+# Normalize whitespace (collapse multiple spaces/tabs/newlines into single space)
+# Usage: clean_string "  hello    world  "
+# Returns: "hello world"
+clean_string() {
+    (( ARGC == 1 )) || return 2
+    print -r -- "${(j: :)${=1}}"
+}
+
+# Remove ANSI escape codes from string
+# Usage: clean_ansi "$colored_text"
+# Returns: plain text without color codes
+clean_ansi() {
+    (( ARGC == 1 )) || return 2
+    # Use sed to remove ANSI escape sequences (more reliable)
+    print -r -- "$1" | sed $'s/\x1b\\[[0-9;]*m//g'
 }
 
 # Convert string to lowercase

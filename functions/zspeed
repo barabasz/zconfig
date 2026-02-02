@@ -5,7 +5,7 @@ local -A _fn=(
     [info]="Measure zsh startup performance across different shell modes"
     [desc]="Performs measurement runs (alternating forward/reverse order) to minimize
             cache effects, then displays the average, min, and max time for each mode."
-    [version]="0.5.0"
+    [version]="0.7.5"
     [created]="2025"
     [modified]="2026-02-02"
     [license]="MIT"

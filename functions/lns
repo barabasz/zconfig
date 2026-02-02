@@ -1,0 +1,76 @@
+# Create symbolic link safely
+# Use 'lns --help' for more information.
+
+local -A _fn=(
+    [info]="Create symbolic link safely"
+    [desc]="Creates a symbolic link with safety checks. Validates that source exists,
+            creates parent directories if needed, handles existing targets gracefully."
+    [version]="0.5.0"
+    [created]="2025"
+    [modified]="2026-02-02"
+    [license]="MIT"
+    [author]="Andrzej Barabasz"
+    [notes]="If target exists as a symlink pointing elsewhere, it is replaced.
+            If target exists as a regular file/dir, it is backed up with .bak suffix.
+            If target already points to source, nothing is done."
+)
+
+local -a _fn_args=(
+    "source|Source file or directory|r"
+    "target|Target symlink path|r"
+)
+
+local -a _fn_examples=(
+    "lns ~/.dotfiles/zshrc ~/.zshrc|Link zshrc from dotfiles"
+    "lns /opt/app/bin/app /usr/local/bin/app|Link app to PATH"
+)
+
+local -A opts=() args=()
+_fn_init "$@" || return $REPLY
+
+local source="${args[source]:a}"
+local target="${args[target]:a}"
+local target_dir="${target:h}"
+
+# Validate: source must exist
+if [[ ! -e "$source" ]]; then
+    printe "Source does not exist: ${c}${source}${x}"
+    return 1
+fi
+
+# Validate: source and target must be different
+if [[ "$source" == "$target" ]]; then
+    printe "Source and target are the same: ${c}${source}${x}"
+    return 1
+fi
+
+# Create target's parent directory if needed
+if [[ ! -d "$target_dir" ]]; then
+    mkdir -p "$target_dir" || {
+        printe "Cannot create directory: ${c}${target_dir}${x}"
+        return 1
+    }
+fi
+
+# Validate: target's parent directory must be writable
+if [[ ! -w "$target_dir" ]]; then
+    printe "Cannot write to directory: ${c}${target_dir}${x}"
+    return 1
+fi
+
+# Handle existing target
+if [[ -L "$target" ]]; then
+    # Target is a symlink - check if it already points to source
+    local current="${target:A}"
+    if [[ "$current" == "$source" ]]; then
+        return 0  # Already correct, nothing to do
+    else
+        rm "$target"  # Points elsewhere, remove and recreate
+    fi
+elif [[ -e "$target" ]]; then
+    # Target is a real file/directory - backup before replacing
+    mv "$target" "${target}.bak"
+    printi "Existing ${c}${target}${x} backed up to ${c}${target}.bak${x}"
+fi
+
+ln -s "$source" "$target"

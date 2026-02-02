@@ -1,0 +1,263 @@
+# Install application via brew or apt with auto-discovery
+# Use 'appinstall --help' for more information.
+
+local -A _fn=(
+    [info]="Install application via brew or apt with auto-discovery"
+    [desc]="Installs packages using the best available package manager.
+            Auto-discovers: prefers brew if available, falls back to apt on Linux.
+            Displays full application name and version during installation."
+    [version]="1.0.0"
+    [created]="2025"
+    [modified]="2026-02-02"
+    [license]="MIT"
+    [author]="Andrzej Barabasz"
+    [notes]="Package names may differ between brew and apt (e.g., fd vs fd-find).
+            Use --brew-name or --apt-name to specify alternate names."
+)
+
+local -a _fn_args=(
+    "package|Package name to install|r"
+)
+
+local -a _fn_opts=(
+    "brew|b|Force installation via Homebrew"
+    "apt|a|Force installation via apt (ignored on macOS)"
+    "cask|c|Install as brew cask (macOS GUI applications)"
+    "brew-name|B|Alternate package name for brew|name"
+    "apt-name|A|Alternate package name for apt|name"
+    "quiet|q|Quieter output"
+    "dry-run|n|Show what would be done without installing"
+    "force|f|Install even if already present"
+)
+
+local -a _fn_examples=(
+    "appinstall mc|Install Midnight Commander (auto-detect)"
+    "appinstall fd -A fd-find|Install fd with different apt name"
+    "appinstall -b node|Force brew installation"
+    "appinstall -c visual-studio-code|Install VS Code as cask"
+    "appinstall -n mc|Dry run - show what would happen"
+)
+
+local -A opts=() args=()
+_fn_init "$@" || return $REPLY
+
+local package="${args[package]}"
+local brew_pkg="${opts[brew-name]:-$package}"
+local apt_pkg="${opts[apt-name]:-$package}"
+local quiet=$(( ${+opts[quiet]} ))
+local dry_run=$(( ${+opts[dry-run]} ))
+local force=$(( ${+opts[force]} ))
+local use_cask=$(( ${+opts[cask]} ))
+
+local force_brew=$(( ${+opts[brew]} ))
+local force_apt=$(( ${+opts[apt]} ))
+
+local has_brew=$(( ${+commands[brew]} ))
+local has_apt=$(( ${+commands[apt-get]} ))
+local is_macos=0 is_linux=0
+[[ $OSTYPE == darwin* ]] && is_macos=1
+[[ $OSTYPE == linux* ]] && is_linux=1
+
+## Helper: Get package info from brew
+_appinstall_brew_info() {
+    local pkg=$1 cask=$2
+    local info_cmd="brew info"
+    (( cask )) && info_cmd="brew info --cask"
+
+    local output
+    output=$($=info_cmd "$pkg" 2>/dev/null) || return 1
+
+    # Parse: first line is "name: version"
+    local first_line="${${(f)output}[1]}"
+    local name="${first_line%%:*}"
+    local rest="${first_line#*: }"
+    local version="${rest%% *}"
+
+    # Get description (usually line starting with description or after empty line)
+    local desc=""
+    local line in_desc=0
+    for line in "${(@f)output}"; do
+        if [[ "$line" == "" ]] && (( ! in_desc )); then
+            in_desc=1
+            continue
+        fi
+        if (( in_desc )) && [[ -n "$line" && "$line" != "http"* && "$line" != "=>"* ]]; then
+            desc="$line"
+            break
+        fi
+    done
+
+    REPLY="$name|$version|$desc"
+}
+
+## Helper: Get package info from apt
+_appinstall_apt_info() {
+    local pkg=$1
+    local output
+    output=$(apt-cache show "$pkg" 2>/dev/null | head -20) || return 1
+
+    local name="" version="" desc=""
+    local line
+    for line in "${(@f)output}"; do
+        case "$line" in
+            Package:*) name="${line#Package: }" ;;
+            Version:*) version="${line#Version: }"; version="${version%%-*}" ;;
+            Description:*|Description-en:*) desc="${line#*: }" ;;
+        esac
+    done
+
+    REPLY="$name|$version|$desc"
+}
+
+## Helper: Check if command exists
+_appinstall_is_installed() {
+    local cmd=$1
+    (( ${+commands[$cmd]} ))
+}
+
+## Helper: Execute or dry-run
+_appinstall_run() {
+    if (( dry_run )); then
+        print "  ${c}[dry-run]${x} $*"
+        return 0
+    else
+        eval "$@"
+    fi
+}
+
+## Determine package manager to use
+local use_manager=""
+
+if (( force_brew && force_apt )); then
+    printe "Cannot use both --brew and --apt at the same time."
+    return 2
+fi
+
+if (( force_brew )); then
+    if (( ! has_brew )); then
+        printe "Homebrew is not installed."
+        return 1
+    fi
+    use_manager="brew"
+elif (( force_apt )); then
+    if (( is_macos )); then
+        printw "apt is not available on macOS. Skipping."
+        return 0
+    fi
+    if (( ! has_apt )); then
+        printe "apt-get is not available."
+        return 1
+    fi
+    use_manager="apt"
+else
+    # Auto-discovery: prefer brew, fallback to apt on Linux
+    if (( has_brew )); then
+        use_manager="brew"
+    elif (( is_linux && has_apt )); then
+        use_manager="apt"
+    else
+        printe "No package manager available (need brew or apt)."
+        return 1
+    fi
+fi
+
+## Check if already installed (by command name)
+if (( ! force )) && _appinstall_is_installed "$package"; then
+    local existing_version=""
+    if (( has_brew )) && brew list "$brew_pkg" &>/dev/null; then
+        existing_version=$(brew list --versions "$brew_pkg" 2>/dev/null | awk '{print $2}')
+    elif (( has_apt )); then
+        existing_version=$(dpkg -s "$apt_pkg" 2>/dev/null | grep '^Version:' | cut -d' ' -f2)
+    fi
+
+    if [[ -n "$existing_version" ]]; then
+        prints "${g}${package}${x} is already installed (version ${y}${existing_version}${x})."
+    else
+        prints "${g}${package}${x} is already installed."
+    fi
+    return 0
+fi
+
+## Get package information
+local pkg_name="" pkg_version="" pkg_desc=""
+local info_result=0
+
+case "$use_manager" in
+    brew)
+        local actual_pkg="$brew_pkg"
+        if _appinstall_brew_info "$brew_pkg" "$use_cask"; then
+            pkg_name="${REPLY%%|*}"
+            local rest="${REPLY#*|}"
+            pkg_version="${rest%%|*}"
+            pkg_desc="${rest#*|}"
+        else
+            # Package not found in brew, try apt if available and not forced
+            if (( ! force_brew && is_linux && has_apt )); then
+                (( quiet )) || printw "Package ${c}${brew_pkg}${x} not found in brew, trying apt..."
+                use_manager="apt"
+                if _appinstall_apt_info "$apt_pkg"; then
+                    pkg_name="${REPLY%%|*}"
+                    local rest="${REPLY#*|}"
+                    pkg_version="${rest%%|*}"
+                    pkg_desc="${rest#*|}"
+                fi
+            else
+                printw "Package ${c}${brew_pkg}${x} not found in brew."
+                info_result=1
+            fi
+        fi
+        ;;
+    apt)
+        if _appinstall_apt_info "$apt_pkg"; then
+            pkg_name="${REPLY%%|*}"
+            local rest="${REPLY#*|}"
+            pkg_version="${rest%%|*}"
+            pkg_desc="${rest#*|}"
+        else
+            printw "Package ${c}${apt_pkg}${x} not found in apt."
+            info_result=1
+        fi
+        ;;
+esac
+
+## Display installation info
+local display_name="${pkg_name:-$package}"
+local display_version=""
+[[ -n "$pkg_version" ]] && display_version=" ${y}${pkg_version}${x}"
+
+print
+printi "Installing ${g}${display_name}${x}${display_version}..."
+[[ -n "$pkg_desc" ]] && (( ! quiet )) && print "  ${c}${pkg_desc}${x}"
+print
+
+## Install
+local install_status=0
+
+case "$use_manager" in
+    brew)
+        if (( use_cask )); then
+            (( quiet )) || printi "Using: brew install --cask ${brew_pkg}"
+            _appinstall_run "brew install --cask -q '$brew_pkg'"
+        else
+            (( quiet )) || printi "Using: brew install ${brew_pkg}"
+            _appinstall_run "brew install -q '$brew_pkg'"
+        fi
+        install_status=$?
+        ;;
+    apt)
+        (( quiet )) || printi "Using: apt-get install ${apt_pkg}"
+        _appinstall_run "sudo apt-get install -y -qq '$apt_pkg'"
+        install_status=$?
+        ;;
+esac
+
+## Result
+print
+if (( dry_run )); then
+    prints "Dry run complete. No changes were made."
+elif (( install_status == 0 )); then
+    prints "${g}${display_name}${x} installed successfully."
+else
+    printe "Failed to install ${r}${display_name}${x}."
+    return 1
+fi

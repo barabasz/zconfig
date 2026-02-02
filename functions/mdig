@@ -1,18 +1,38 @@
-# Multi-DNS query tool
-# Query multiple DNS servers and display results in a table
-#
-# Usage: mdig <domain>
-#
-# Example:
-#   mdig example.com
-#   mdig google.com
-#
-# Environment:
-#   MDIG_SERVERS - associative array to override default DNS servers
-#
-# Return codes:
-#   0 - success
-#   1 - invalid arguments or dig not found
+# Multi-DNS query tool - query multiple DNS servers and display results
+# Use 'mdig --help' for more information.
+
+local -A _fn=(
+    [info]="Query multiple DNS servers and display results in a table"
+    [desc]="Queries a domain against multiple DNS servers simultaneously and displays
+            results sorted by response time with color-coded timing."
+    [version]="0.5.0"
+    [created]="2025"
+    [modified]="2026-02-02"
+    [license]="MIT"
+    [author]="Andrzej Barabasz"
+    [notes]="Requires dig command. Override default servers by setting MDIG_SERVERS
+            associative array (e.g., MDIG_SERVERS=(Google 8.8.8.8 CloudFlare 1.1.1.1))."
+)
+
+local -a _fn_args=(
+    "domain|Domain name to query|r|domain"
+)
+
+local -a _fn_examples=(
+    "mdig example.com|Query example.com on all DNS servers"
+    "mdig google.com|Query google.com on all DNS servers"
+)
+
+local -A opts=() args=()
+_fn_init "$@" || return $REPLY
+
+local domain=${args[domain]}
+
+# Check if dig is available
+if ! whence dig >/dev/null 2>&1; then
+    printe "dig not found in PATH"
+    return 1
+fi
 
 # DNS servers configuration (name=ip)
 local -A dns_servers
@@ -22,7 +42,6 @@ else
     dns_servers=(
         CloudFlare  1.1.1.1
         Comodo      8.26.56.26
-        # DNS0EU      193.110.81.0
         DNS4EU      86.54.11.100
         Google      8.8.8.8
         NextDNS     45.90.28.141
@@ -38,20 +57,6 @@ fi
 # Time thresholds for color coding (ms)
 local -ri time_green=30
 local -ri time_yellow=60
-
-# Validate arguments
-if (( ARGC != 1 )); then
-    print -u2 "Usage: mdig <domain>"
-    return 1
-fi
-
-local domain=$1
-
-# Check if dig is available
-if ! whence dig >/dev/null 2>&1; then
-    printe "dig not found in PATH"
-    return 1
-fi
 
 # Hide cursor for cleaner output
 echotc vi 2>/dev/null
@@ -91,6 +96,7 @@ echotc ve 2>/dev/null
 
 # Header
 printf "${b}%-28s %-14s %s${x}\n" "DNS" "Time (ms)" "Answer"
+
 # Sort numerically by time and print
 local line tc sort_time
 for line in ${(n)results}; do

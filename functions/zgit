@@ -1,23 +1,49 @@
 # Git wrapper for bulk operations on repositories defined in $GHDIR
-# Usage: zgit <command>
-# Commands: pull, push, push-force, list, reset, status, help
+# Use 'zgit --help' for more information.
+
+local -A _fn=(
+    [info]="Git wrapper for bulk operations on repositories"
+    [desc]="Performs git operations (pull, push, status, reset) on all repositories
+            located in the ${c}\$GHDIR${x} directory."
+    [version]="0.5.0"
+    [created]="2025"
+    [modified]="2026-02-02"
+    [license]="MIT"
+    [author]="Andrzej Barabasz"
+    [notes]="Requires ${c}\$GHDIR${x} to be set to the parent directory containing your git repositories."
+)
+
+local -a _fn_args=(
+    "command|Command to execute|o"
+)
+
+local -a _fn_commands=(
+    "pull|Pull --rebase all repos"
+    "push|Commit and push all repos"
+    "push-force|Force push current directory to origin/main"
+    "list|List all repositories"
+    "reset|Hard reset all repos to origin/main"
+    "status|Show status for all repos"
+)
+
+local -a _fn_examples=(
+    "zgit pull|Pull all repos"
+    "zgit push|Commit and push all repos"
+    "zgit status|Show status for all repos"
+)
+
+local -A opts=() args=()
+_fn_init "$@" || return $REPLY
 
 # Ensure configuration is present
 if [[ -z "$GHDIR" ]]; then
-    printe "Error: \$GHDIR is not set."
+    printe "\$GHDIR is not set."
     return 1
 fi
 
-local cmd="help"
+local cmd="${args[command]:-help}"
 
-# Safe argument parsing to avoid shift error if no args provided
-if (( ARGC > 0 )); then
-    cmd="$1"
-    shift # Remove command from arguments to pass remaining args if needed
-fi
-
-# Define repository list glob pattern (cached literal, evaluated only when needed)
-# (/) qualifier selects only directories
+# Define repository list glob pattern
 local repo_glob="$GHDIR/*(/)"
 
 case "$cmd" in
@@ -27,14 +53,13 @@ case "$cmd" in
         (( count == 0 )) && { printe "No repositories found in $GHDIR."; return 1; }
 
         printc "Pulling $count repositories from the remote." $y
-        ptint "Working directory: $c$GHDIR$c"
+        print "Working directory: $c$GHDIR$x"
 
         local i=1 repo
         for repo in $repos; do
             printc "\n$i/$count ${repo:t}" $g
             printc "$(git -C "$repo" remote get-url origin)" $c
 
-            # Capture stderr to filter known benign errors
             git -C "$repo" pull --rebase 2>&1 | while read line; do
                 if [[ "$line" == *"error:"* ]]; then
                     print -- "$r$line$x"
@@ -52,15 +77,14 @@ case "$cmd" in
         (( count == 0 )) && { printe "No repositories found in $GHDIR."; return 1; }
 
         printc "Pushing $count repositories to the remote." $y
-        ptint "Working directory: $c$GHDIR$c"
+        print "Working directory: $c$GHDIR$x"
 
         local i=1 repo
         for repo in $repos; do
             printc "\n$i/$count ${repo:t}" $g
             printc "$(git -C "$repo" remote get-url origin)" $c
-            
+
             git -C "$repo" add --all
-            # Suppress message if nothing to commit, allowing loop to continue
             git -C "$repo" commit -m "update" >/dev/null 2>&1
             git -C "$repo" push
             ((i++))
@@ -68,12 +92,10 @@ case "$cmd" in
         ;;
 
     push-force)
-        # Operates on CURRENT DIRECTORY (exception to bulk logic)
         printc "Running force push sequence on CURRENT directory..." $y
-        
+
         git add --all
         git commit -m "update"
-        # Try continuing rebase if active, ignore error if not
         git rebase --continue 2>/dev/null
         git push origin HEAD:main --force
         ;;
@@ -88,19 +110,18 @@ case "$cmd" in
         (( count == 0 )) && { printe "No repositories found in $GHDIR."; return 1; }
 
         printe "WARNING: This will reset ALL $count repositories to the latest commit on the main branch."
-        
-        # Native Zsh confirmation (read single char -q)
+
         if ! read -q "?${y}Are you sure you want to continue? [y/N] ${x}"; then
-            print "" # Newline
+            print ""
             return 1
         fi
-        print "" # Newline after confirmation
+        print ""
 
         local i=1 repo
         for repo in $repos; do
             printc "$i/$count ${repo:t}" $g
             printc "$(git -C "$repo" remote get-url origin)" $c
-            
+
             git -C "$repo" fetch origin
             git -C "$repo" checkout main
             git -C "$repo" reset --hard origin/main
@@ -119,28 +140,18 @@ case "$cmd" in
         local i=1 repo
         for repo in $repos; do
             printc "$i/$count ${repo:t}" $g
-            git -C "$repo" status -s # -s for short format is usually better for bulk
+            git -C "$repo" status -s
             ((i++))
         done
         ;;
 
-    help|-h|--help)
-        printc "zgit - Git Bulk Operations" $y
-        print "Usage: zgit <command>"
-        print ""
-        printul "${g}pull$x        : Pull --rebase all repos in \$GHDIR" \
-                "${g}push$x        : Commit 'update' and push all repos in \$GHDIR" \
-                "${g}push-force$x  : Force push CURRENT directory (rebase workflow)" \
-                "${g}list$x        : List all repositories in \$GHDIR" \
-                "${g}reset$x       : Hard reset all repos in \$GHDIR to origin/main" \
-                "${g}status$x      : Show git status for all repos in \$GHDIR" \
-                "${g}help$x        : Show this message"
-        print "\nEnsure $y\$GHDIR$x is set to the parent directory containing your git repositories."
-        print "Currently, $y\$GHDIR$x is set to: $c$GHDIR$c"
+    help)
+        _fn_usage >&2
         ;;
+
     *)
-        printe "zgit: Unknown command: $cmd"
-        printi "Use 'zgit help' to see available commands."
+        printe "Unknown command: $cmd"
+        printi "Use 'zgit --help' to see available commands."
         return 1
         ;;
 esac

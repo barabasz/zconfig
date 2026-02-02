@@ -1,0 +1,146 @@
+# Detect the type of a filesystem object
+# Use 'ftype --help' for more information.
+
+local -A _fn=(
+    [info]="Detect the type of a filesystem object"
+    [desc]="Determines the exact type of a file, directory, symlink, or special file.
+            Can distinguish between regular files, directories, symlinks (and their targets),
+            block/character devices, pipes, and sockets."
+    [version]="0.5.0"
+    [created]="2025"
+    [modified]="2026-02-02"
+    [license]="MIT"
+    [author]="Andrzej Barabasz"
+)
+
+local -a _fn_args=(
+    "path|Path to inspect|o"
+)
+
+local -a _fn_opts=(
+    "long|l|Show detailed description instead of type name"
+    "list|L|List all recognized file types"
+)
+
+local -a _fn_examples=(
+    "ftype /etc/passwd|Show type (file)"
+    "ftype -l /usr/bin|Show detailed description"
+    "ftype /dev/null|Show type (char)"
+    "ftype -L|List all recognized types"
+)
+
+local -A opts=() args=()
+_fn_init "$@" || return $REPLY
+
+# Type descriptions
+local -A type_desc=(
+    [not_found]="does not exist"
+    [link_broken]="broken symbolic link"
+    [link_dir]="symbolic link to a directory"
+    [link_file]="symbolic link to a regular file"
+    [link_block]="symbolic link to a block special file"
+    [link_char]="symbolic link to a character special file"
+    [link_pipe]="symbolic link to a named pipe (FIFO)"
+    [link_socket]="symbolic link to a socket"
+    [link_other]="symbolic link to another kind of file"
+    [dir]="directory"
+    [file]="regular file"
+    [block]="block special file (device)"
+    [char]="character special file (device)"
+    [pipe]="named pipe (FIFO)"
+    [socket]="socket"
+    [other]="other type of file"
+)
+
+# List all types
+if (( ${+opts[list]} )); then
+    local key
+    for key in ${(ok)type_desc}; do
+        printf "${c}%-12s${x} ${y}→${x} %s\n" "$key" "${type_desc[$key]}"
+    done
+    return 0
+fi
+
+# Require path if not listing
+if [[ -z "${args[path]}" ]]; then
+    printe "Missing argument: <path>"
+    _fn_usage_short >&2
+    return 2
+fi
+
+local path_org="${args[path]}"
+local path_abs="${path_org:a}"
+local ftype="" is_link=0 link_target=""
+
+# Check existence (including broken symlinks)
+if [[ ! -e "$path_org" && ! -L "$path_org" ]]; then
+    ftype="not_found"
+fi
+
+# Symlink handling
+if [[ -z "$ftype" && -L "$path_org" ]]; then
+    is_link=1
+    link_target=$(readlink "$path_org")
+
+    if [[ ! -e "$path_org" ]]; then
+        ftype="link_broken"
+    elif [[ -d "$path_org" ]]; then
+        ftype="link_dir"
+    elif [[ -f "$path_org" ]]; then
+        ftype="link_file"
+    elif [[ -b "$path_org" ]]; then
+        ftype="link_block"
+    elif [[ -c "$path_org" ]]; then
+        ftype="link_char"
+    elif [[ -p "$path_org" ]]; then
+        ftype="link_pipe"
+    elif [[ -S "$path_org" ]]; then
+        ftype="link_socket"
+    else
+        ftype="link_other"
+    fi
+fi
+
+# Regular file handling
+if [[ -z "$ftype" ]]; then
+    if [[ -d "$path_abs" ]]; then
+        ftype="dir"
+    elif [[ -f "$path_abs" ]]; then
+        ftype="file"
+    elif [[ -b "$path_abs" ]]; then
+        ftype="block"
+    elif [[ -c "$path_abs" ]]; then
+        ftype="char"
+    elif [[ -p "$path_abs" ]]; then
+        ftype="pipe"
+    elif [[ -S "$path_abs" ]]; then
+        ftype="socket"
+    else
+        ftype="other"
+    fi
+fi
+
+# Output
+if (( ${+opts[long]} )); then
+    local desc="${type_desc[$ftype]}"
+    local article="a"
+    [[ "$ftype" == "other" ]] && article="an"
+
+    if [[ "$ftype" == "not_found" ]]; then
+        print "${c}${path_abs}${x} ${desc}"
+    else
+        print -n "${c}${path_abs}${x} is ${article} ${g}${desc}${x}"
+        if (( is_link )); then
+            [[ "$ftype" == "link_broken" ]] && print -n " to"
+            print " ${c}${link_target}${x}"
+        else
+            print
+        fi
+    fi
+else
+    print "$ftype"
+fi
+
+# Return 1 for not_found
+[[ "$ftype" == "not_found" ]] && return 1
+return 0

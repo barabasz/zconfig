@@ -3,7 +3,7 @@
 
 local -A _fn=(
     [info]="Edit zsh-config file using the default editor"
-    [version]="0.5.2"
+    [version]="0.7.5"
     [created]="2025"
     [modified]="2026-02-02"
     [license]="MIT"

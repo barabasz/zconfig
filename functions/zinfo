@@ -5,7 +5,7 @@ local -A _fn=(
     [info]="Display help information for a zsh-config function"
     [desc]="Searches for a function in the functions/ directory or lib/*.zsh files
             and displays its documentation comments."
-    [version]="0.5.0"
+    [version]="0.3.5"
     [created]="2025"
     [modified]="2026-02-02"
     [license]="MIT"

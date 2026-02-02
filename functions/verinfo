@@ -1,0 +1,85 @@
+# Show version and location info for a command
+# Use 'verinfo --help' for more information.
+
+local -A _fn=(
+    [info]="Show version and location info for a command"
+    [desc]="Displays version number and location for executables, or type information
+            for aliases, functions, builtins, and keywords. For zsh functions using
+            fn.zsh, it also extracts and displays their version."
+    [version]="0.5.0"
+    [created]="2024"
+    [modified]="2026-02-02"
+    [license]="MIT"
+    [author]="Andrzej Barabasz"
+    [notes]="Uses get_version() from strings.zsh to extract version numbers.
+            Detects fn.zsh-based function versions via -v flag."
+)
+
+local -a _fn_args=(
+    "command|Command name to inspect|r"
+    "appname|Display name (defaults to command)|o"
+    "vercmd|Version command (defaults to --version)|o"
+)
+
+local -a _fn_examples=(
+    "verinfo gzip|Show gzip version and path"
+    "verinfo gzip 'GNU Zip'|Show with custom display name"
+    "verinfo python3 Python -V|Show with custom version flag"
+)
+
+local -A opts=() args=()
+_fn_init "$@" || return $REPLY
+
+local cmd="${args[command]}"
+local appname="${args[appname]:-$cmd}"
+local vercmd="${args[vercmd]:---version}"
+
+# Get command type
+local cmd_type=$(whence -w "$cmd" 2>/dev/null | cut -d: -f2 | tr -d ' ')
+
+if [[ -z "$cmd_type" || "$cmd_type" == "none" ]]; then
+    print "${y}${cmd}${x} not found"
+    return 1
+fi
+
+case "$cmd_type" in
+    command)
+        local cmd_path=$(whence -p "$cmd")
+        local ver_output=$("$cmd_path" "$vercmd" 2>&1)
+        local ver=$(get_version "$ver_output")
+        print "${g}${appname}${x} ${y}${ver:-unknown}${x} is installed in ${c}${cmd_path}${x}"
+        ;;
+    alias)
+        local definition=$(alias "$cmd" | sed 's/[^=]*=//')
+        print "${g}${cmd}${x} is an alias for ${p}${definition}${x}"
+        ;;
+    function)
+        # Try to get version from fn.zsh-based functions
+        local func_ver="" func_path=""
+        local ver_output=$("$cmd" -v 2>&1)
+        if [[ $? -eq 0 && "$ver_output" == *[0-9].[0-9]* ]]; then
+            func_ver=$(get_version "$ver_output")
+        fi
+        # Try to get function source path
+        func_path=$(whence -v "$cmd" 2>/dev/null | grep -o '/.*')
+
+        if [[ -n "$func_ver" && -n "$func_path" ]]; then
+            print "${g}${appname}${x} ${y}${func_ver}${x} is a function in ${c}${func_path}${x}"
+        elif [[ -n "$func_ver" ]]; then
+            print "${g}${appname}${x} ${y}${func_ver}${x} is a ${p}function${x}"
+        elif [[ -n "$func_path" ]]; then
+            print "${g}${cmd}${x} is a function in ${c}${func_path}${x}"
+        else
+            print "${g}${cmd}${x} is a ${p}function${x}"
+        fi
+        ;;
+    builtin)
+        print "${g}${cmd}${x} is a ${p}builtin${x}"
+        ;;
+    reserved)
+        print "${g}${cmd}${x} is a ${p}reserved word${x}"
+        ;;
+    *)
+        print "${g}${cmd}${x} is a ${p}${cmd_type}${x}"
+        ;;
+esac

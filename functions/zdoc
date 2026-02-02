@@ -5,7 +5,7 @@ local -A _fn=(
     [info]="Display zsh-config documentation"
     [desc]="View markdown documentation files from the zsh-config repository.
             Supports interactive file selection or direct access by name/number."
-    [version]="0.4.0"
+    [version]="0.4.3"
     [created]="2025"
     [modified]="2026-02-02"
     [license]="MIT"

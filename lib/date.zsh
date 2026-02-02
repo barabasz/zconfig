@@ -115,6 +115,27 @@ date_to_timestamp() {
     strftime -r "%Y-%m-%d" "$1"
 }
 
+# Convert unix timestamp to ISO 8601 date (UTC)
+# Usage: utime2iso 1704556800
+# Returns: 2024-01-06T16:00:00Z
+utime2iso() {
+    (( ARGC == 1 )) || { print -u2 "utime2iso: requires exactly one argument"; return 2 }
+    [[ $1 =~ ^[0-9]+$ ]] || { print -u2 "utime2iso: argument must be a positive integer"; return 1 }
+    TZ=UTC strftime "%Y-%m-%dT%H:%M:%SZ" "$1"
+}
+
+# Convert ISO 8601 date (UTC) to unix timestamp
+# Usage: iso2utime "2024-01-06T16:00:00Z"
+# Returns: 1704556800
+iso2utime() {
+    (( ARGC == 1 )) || { print -u2 "iso2utime: requires exactly one argument"; return 2 }
+    [[ $1 =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] || {
+        print -u2 "iso2utime: argument must be ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ)"
+        return 1
+    }
+    TZ=UTC strftime -r "%Y-%m-%dT%H:%M:%SZ" "$1"
+}
+
 # Add days to current date
 # Usage: add_days 7
 # Returns: timestamp for 7 days from now

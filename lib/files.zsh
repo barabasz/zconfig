@@ -84,6 +84,17 @@ is_empty_dir() {
     (( ${#files} == 0 ))
 }
 
+# Check if directory has at least one non-hidden file
+# Usage: has_visible_files "/path/to/dir"
+# Returns: 0 (true), 1 (false), 2 (invalid usage)
+has_visible_files() {
+    (( ARGC == 1 )) || return 2
+    [[ -d $1 ]] || return 1
+    # Uses N (nullglob), [1] (stop after 1 match) - no D flag = excludes dotfiles
+    local -a files=("$1"/*(N[1]))
+    (( ${#files} > 0 ))
+}
+
 # --- Statistics & Info (No Subshells) ---
 
 # Get file size in bytes

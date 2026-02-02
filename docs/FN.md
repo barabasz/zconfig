@@ -162,6 +162,54 @@ local -a _fn_examples=(
 
 Format: `command|description` (description is optional)
 
+## Commands (_fn_commands)
+
+For functions that have subcommands (like `git pull`, `git push`), use `_fn_commands`:
+
+```zsh
+local -a _fn_commands=(
+    "pull|Pull --rebase all repos"
+    "push|Commit and push all repos"
+    "status|Show status for all repos"
+    "list|List all repositories"
+    "reset|Hard reset all repos to origin/main"
+)
+```
+
+Format: `command_name|description`
+
+Commands are displayed in help between the Arguments and Options sections. Useful when your function accepts a command/action as its first argument.
+
+### Example: Function with Subcommands
+
+```zsh
+local -A _fn=(
+    [info]="Git wrapper for bulk operations"
+    [version]="1.0.0"
+)
+
+local -a _fn_args=(
+    "command|Command to execute|o"
+)
+
+local -a _fn_commands=(
+    "pull|Pull all repositories"
+    "push|Push all repositories"
+    "status|Show status"
+)
+
+local -A opts=() args=()
+_fn_init "$@" || return $REPLY
+
+case "${args[command]:-help}" in
+    pull)   # handle pull ;;
+    push)   # handle push ;;
+    status) # handle status ;;
+    help)   _fn_usage >&2 ;;
+    *)      printe "Unknown command: ${args[command]}" ;;
+esac
+```
+
 ## Supported Types
 
 ### Basic Types
@@ -330,6 +378,11 @@ Arguments
   <source>       Source file to backup  [required, string]
   [destination]  Destination directory  [string]
 
+Commands                                 # Only shown if _fn_commands defined
+  pull           Pull all repositories
+  push           Push all repositories
+  status         Show status
+
 Options
   -h, --help     Show this help message
   -v, --version  Show version
@@ -344,7 +397,7 @@ Examples
 Notes
   Timestamps use ISO 8601 format...
 
-function_name ver. 1.0.0 by Your Name
+function_name ver. 1.0.0 (2026-02-02) © 2025-2026 Your Name (license: MIT)
 This function is defined in /path/to/function
 ```
 

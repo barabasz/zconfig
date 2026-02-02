@@ -1,9 +1,29 @@
 # Display disk usage statistics for a specific directory or mount point
-# Usage: diskinfo [path]
-#
-#   [path]: The directory to analyze (defaults to current directory '.')
+# Use 'diskinfo --help' for more information.
 
-local target="${1:-.}"
+local -A _fn=(
+    [info]="Display disk usage statistics"
+    [version]="0.5.0"
+    [created]="2025"
+    [modified]="2026-02-02"
+    [license]="MIT"
+    [author]="Andrzej Barabasz"
+)
+
+local -a _fn_args=(
+    "path|Directory or mount point to analyze|o"
+)
+
+local -a _fn_examples=(
+    "diskinfo|Show stats for current directory"
+    "diskinfo /|Show stats for root filesystem"
+    "diskinfo ~/Documents|Show stats for Documents"
+)
+
+local -A opts=() args=()
+_fn_init "$@" || return $REPLY
+
+local target="${args[path]:-.}"
 
 # Check dependencies
 (( ${+functions[get_disk_total]} )) || { printe "Missing get_disk_total()"; return 1; }
@@ -25,11 +45,10 @@ local free=$(get_disk_free "$target")
 local used_pct=$(( (used * 100) / total ))
 local free_pct=$(( (free * 100) / total ))
 
-# Get filesystem/device name (e.g., /dev/disk1s1 or overlay)
-# We run df again locally just to grab the first column of the output
+# Get filesystem/device name
 local df_output=$(command df -P "$target" 2>/dev/null)
-local last_line="${${(@f)df_output}[-1]}" # Get the last line
-local device_name="${last_line%% *}"      # Get the first word (Filesystem column)
+local last_line="${${(@f)df_output}[-1]}"
+local device_name="${last_line%% *}"
 
 printc "Disk Info: $device_name" $y
 printkv "Total" "$(format_bytes $total)"

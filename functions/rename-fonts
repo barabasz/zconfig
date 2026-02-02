@@ -1,28 +1,59 @@
-# Rename font files in the current directory based on their internal font names.
-# Requires exiftool to be installed.
+# Rename font files based on their internal font names
+# Use 'rename-fonts --help' for more information.
 
-setopt nullglob
+local -A _fn=(
+    [info]="Rename font files based on their internal font names"
+    [desc]="Scans the current directory for .otf and .ttf font files and renames
+            them using the font name stored in the file metadata."
+    [version]="0.5.0"
+    [created]="2025"
+    [modified]="2026-02-02"
+    [license]="MIT"
+    [author]="Andrzej Barabasz"
+    [notes]="Requires exiftool to be installed. Operates on the current directory only."
+)
 
-local i=0
-local fonts=(*.otf *.ttf .*.otf .*.ttf)
+local -A opts=() args=()
+_fn_init "$@" || return $REPLY
+
+# Check dependency
+(( ${+commands[exiftool]} )) || {
+    printe "exiftool not found in PATH"
+    return 1
+}
+
+setopt localoptions nullglob
+
+local -a fonts=(*.otf *.ttf .*.otf .*.ttf)
+
+if (( ${#fonts} == 0 )); then
+    printi "No font files found in the current directory."
+    return 0
+fi
+
+local -i count=0
+local file name filename extension
+
 for file in $fonts; do
-    if [[ -f "$file" ]]; then
-        local name=$(exiftool -fontname -S $file | sed 's/^[^:]*: //')
-        if [[ $name = "" ]]; then
-            name=$(exiftool $file | grep "Font Name" | head -1 | sed 's/^[^:]*: //')
-        fi
-        [[ $name = "" ]] && echo "No font name found for $file." && continue
-        local filename="${file:t:r}"
-        local extension="${file##*.}"
-        echo "$b$file$r ${y}→$r $g$name.$extension"$r
-        mv $file $name.$extension
-        ((i++))
-    else
-        print "No font files found in the current directory."
-        break
+    [[ -f "$file" ]] || continue
+
+    # Try fontname first, then Font Name
+    name=$(exiftool -fontname -S "$file" | sed 's/^[^:]*: //')
+    if [[ -z "$name" ]]; then
+        name=$(exiftool "$file" | grep "Font Name" | head -1 | sed 's/^[^:]*: //')
     fi
+
+    if [[ -z "$name" ]]; then
+        printw "No font name found for $file"
+        continue
+    fi
+
+    filename="${file:t:r}"
+    extension="${file##*.}"
+
+    print "${b}${file}${x} ${y}→${x} ${g}${name}.${extension}${x}"
+    mv "$file" "${name}.${extension}"
+    (( count++ ))
 done
 
-print "\n$i files renamed."
-
-unsetopt nullglob
+print "\n${count} file(s) renamed."

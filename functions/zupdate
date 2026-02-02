@@ -1,33 +1,189 @@
-# Update zsh-config and all plugins
+# Update zsh-config, plugins, and system packages
 # Use 'zupdate --help' for more information.
 
 local -A _fn=(
-    [info]="Update zsh-config and all plugins"
-    [desc]="Pulls the latest changes from the zsh-config repository and updates
-            all installed plugins using git pull --rebase."
+    [info]="Update zsh-config, plugins, and system packages"
+    [desc]="Updates zsh-config repository, installed plugins, and system packages.
+            By default updates everything. Use options to update specific components."
     [version]="0.5.0"
     [created]="2025"
     [modified]="2026-02-02"
     [license]="MIT"
     [author]="Andrzej Barabasz"
+    [notes]="System packages: brew on macOS, apt on Linux.
+            Without options, updates everything available on the current system."
+)
+
+local -a _fn_opts=(
+    "config|c|Update only zsh-config repository"
+    "plugins|p|Update only zsh plugins"
+    "brew|b|Update only Homebrew packages (macOS)"
+    "apt|a|Update only apt packages (Linux)"
+    "system|s|Update only system packages (brew or apt)"
+    "quiet|q|Quieter output (suppress verbose messages)"
+)
+
+local -a _fn_examples=(
+    "zupdate|Update everything"
+    "zupdate -c|Update only zsh-config"
+    "zupdate -p|Update only plugins"
+    "zupdate -s|Update system packages (brew/apt)"
+    "zupdate -c -p|Update zsh-config and plugins"
 )
 
 local -A opts=() args=()
 _fn_init "$@" || return $REPLY
 
-printi "Updating zsh-config..."
-local zdir=${ZDOTDIR:A}
-git -C $zdir pull --rebase 2>&1
-if (( $status != 0 )); then
-    printe "Git pull failed for zsh-config."
-else
-    prints "zsh-config updated successfully."
+local quiet=$(( ${+opts[quiet]} ))
+local -i errors=0
+
+# Determine what to update
+local update_all=0
+local update_config=$(( ${+opts[config]} ))
+local update_plugins=$(( ${+opts[plugins]} ))
+local update_brew=$(( ${+opts[brew]} ))
+local update_apt=$(( ${+opts[apt]} ))
+
+# -s/--system expands to brew (macOS) or apt (Linux)
+if (( ${+opts[system]} )); then
+    [[ $OSTYPE == darwin* ]] && update_brew=1
+    [[ $OSTYPE == linux* ]] && update_apt=1
 fi
 
-printi "Updating zsh plugins..."
-update_plugins
-if (( $status != 0 )); then
-    printe "One or more plugins failed to update."
+# No specific options = update all
+if (( ! update_config && ! update_plugins && ! update_brew && ! update_apt )); then
+    update_all=1
+fi
+
+## Update zsh-config
+_zupdate_config() {
+    printi "Updating zsh-config..."
+    local zdir=${ZDOTDIR:A}
+    local output
+    output=$(git -C "$zdir" pull --rebase 2>&1)
+    if (( status != 0 )); then
+        printe "Git pull failed for zsh-config."
+        (( quiet )) || print "$output"
+        return 1
+    else
+        if [[ "$output" == *"Already up to date"* ]]; then
+            (( quiet )) || prints "zsh-config is already up to date."
+        else
+            prints "zsh-config updated successfully."
+            (( quiet )) || print "$output"
+        fi
+    fi
+}
+
+## Update plugins
+_zupdate_plugins() {
+    printi "Updating zsh plugins..."
+    if (( ${+functions[update_plugins]} )); then
+        update_plugins
+        if (( status != 0 )); then
+            printe "One or more plugins failed to update."
+            return 1
+        else
+            prints "All plugins updated successfully."
+        fi
+    else
+        printw "update_plugins function not available."
+        return 1
+    fi
+}
+
+## Update Homebrew
+_zupdate_brew() {
+    if (( ! ${+commands[brew]} )); then
+        (( update_all )) || printw "Homebrew is not installed."
+        return 1
+    fi
+
+    printi "Updating Homebrew..."
+
+    (( quiet )) || printi "Running brew update..."
+    brew update --auto-update
+    if (( status != 0 )); then
+        printe "brew update failed."
+        return 1
+    fi
+
+    (( quiet )) || printi "Running brew upgrade..."
+    brew upgrade
+    if (( status != 0 )); then
+        printe "brew upgrade failed."
+        return 1
+    fi
+
+    (( quiet )) || printi "Running brew cleanup..."
+    brew cleanup
+
+    prints "Homebrew updated successfully."
+}
+
+## Update apt
+_zupdate_apt() {
+    if (( ! ${+commands[apt-get]} )); then
+        (( update_all )) || printw "apt-get is not available."
+        return 1
+    fi
+
+    printi "Updating apt packages..."
+
+    local envopt="NEEDRESTART_MODE=a DEBIAN_FRONTEND=noninteractive"
+    local aptopt="-qq"
+    local filter_hit='^Hit|^Get'
+    local filter_noise='^NEEDRESTART|^update|Reading'
+
+    (( quiet )) || printi "Running apt-get update..."
+    sudo apt-get update | grep -Ev "$filter_hit"
+    if (( pipestatus[1] != 0 )); then
+        printe "apt-get update failed."
+        return 1
+    fi
+
+    (( quiet )) || printi "Running apt-get upgrade..."
+    sudo $=envopt apt-get $=aptopt upgrade | grep -Ev "$filter_noise"
+
+    (( quiet )) || printi "Running apt-get dist-upgrade..."
+    sudo $=envopt apt-get $=aptopt dist-upgrade
+
+    (( quiet )) || printi "Cleaning up..."
+    sudo apt-get $=aptopt clean
+    sudo apt-get $=aptopt autoclean
+    sudo apt-get $=aptopt autoremove
+    sudo sync
+
+    prints "apt packages updated successfully."
+}
+
+## Execute updates
+
+if (( update_all || update_config )); then
+    _zupdate_config || (( errors++ ))
+fi
+
+if (( update_all || update_plugins )); then
+    _zupdate_plugins || (( errors++ ))
+fi
+
+if (( update_all || update_brew )); then
+    if [[ $OSTYPE == darwin* ]] || (( update_brew )); then
+        _zupdate_brew || (( errors++ ))
+    fi
+fi
+
+if (( update_all || update_apt )); then
+    if [[ $OSTYPE == linux* ]] || (( update_apt )); then
+        _zupdate_apt || (( errors++ ))
+    fi
+fi
+
+## Summary
+print
+if (( errors > 0 )); then
+    printw "Update completed with ${r}${errors}${x} error(s)."
+    return 1
 else
-    prints "All plugins updated successfully."
+    prints "All updates completed successfully."
 fi

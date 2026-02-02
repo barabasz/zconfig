@@ -26,7 +26,7 @@ local -a _fn_opts=(
 local -a _fn_examples=(
     "zman|List all functions"
     "zman array|Filter functions containing 'array'"
-    "zman -g|Group by source file"
+    "zman -g -group --group group file--group.txt|Group by source file"
     "zman -m > funcs.md|Export to markdown"
 )
 
