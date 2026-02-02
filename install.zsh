@@ -17,6 +17,8 @@
 # Configuration
 # =============================================================================
 
+SCRIPT_VERSION="0.0.2"
+SCRIPT_DATE="2026-02-03"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
 ZSHENV_LINK="$HOME/.zshenv"
@@ -121,6 +123,42 @@ confirm_no() {
     printf "${y}?${x} %s [y/N] " "$prompt"
     read -r response
     [[ "$response" =~ ^[Yy]$ ]]
+}
+
+# Abort installation due to missing dependency
+abort_missing() {
+    local dep="$1"
+    print_info "$dep is required to install zconfig."
+    print_error "Cannot continue. Exiting."
+    return 1
+}
+
+# Print installation header
+install_header() {
+    print_banner "zconfig installer v$SCRIPT_VERSION ($SCRIPT_DATE)"
+    print_info "This will install ${g}zconfig${x} to ${c}$ZCONFIG_DIR${x}"
+}
+
+# Print installation successful message
+installation_successful() {
+    print_banner "Installation complete! 🎉"
+    print_info "zconfig installed to: $ZCONFIG_DIR"
+    print_info "Configuration loaded from: $ZSHENV_LINK"
+    printf "\n"
+    print_info "On first run, zconfig will automatically:"
+    print_info "  - Download and install required plugins"
+    print_info "  - Compile zsh files for faster loading"
+    printf "\n"
+}
+
+# Prompt to start zsh
+prompt_start_zsh() {
+    if confirm "Start zsh now?"; then
+        print_info "Starting zsh..."
+        exec zsh
+    else
+        print_info "Run 'exec zsh' or open a new terminal to start using zconfig"
+    fi
 }
 
 # =============================================================================
@@ -239,25 +277,21 @@ check_zsh() {
         return 0
     fi
 
-    # zsh not found - install on Debian-based systems
+    # zsh not found - install it
+    print_warning "zsh is not installed"
+
     if [[ "$OS_TYPE" == "debian" ]]; then
-        print_warning "zsh is not installed"
-        if confirm "Install zsh now?"; then
-            print_info "Installing zsh..."
-            if sudo apt install zsh -y &>/dev/null; then
-                print_success "zsh installed successfully"
-                return 0
-            else
-                print_error "Failed to install zsh"
-                return 1
-            fi
+        print_info "Installing zsh via apt..."
+        if sudo apt install zsh -y &>/dev/null; then
+            print_success "zsh installed successfully"
+            return 0
         else
-            print_error "zsh is required for zconfig"
+            print_error "Failed to install zsh"
             return 1
         fi
     else
         # macOS should always have zsh
-        print_error "zsh is not available"
+        print_error "zsh is not available on this system"
         return 1
     fi
 }
@@ -417,12 +451,9 @@ install_homebrew() {
 
     # Homebrew not found - ask to install
     print_warning "Homebrew is not installed"
-    print_info "Homebrew is recommended for installing tools"
 
     if ! confirm "Install Homebrew now?"; then
-        print_info "Skipping Homebrew installation"
-        print_info "You can install it later with:"
-        printf "    ${c}/bin/bash -c \"\$(curl -fsSL %s)\"${x}\n" "$HOMEBREW_INSTALL"
+        abort_missing "Homebrew"
         return 1
     fi
 
@@ -486,9 +517,8 @@ set_default_shell() {
 # =============================================================================
 
 main() {
-    print_banner "zconfig installer v1.0.0"
-    print_info "This will install zconfig to $ZCONFIG_DIR"
-    printf "\n"
+    # Print header
+    install_header
 
     # Requirement checks
     check_os || return 1
@@ -510,21 +540,10 @@ main() {
     set_default_shell
 
     # Success message
-    print_banner "Installation complete! 🎉"
-    print_info "zconfig installed to: $ZCONFIG_DIR"
-    print_info "Configuration loaded from: $ZSHENV_LINK"
-    printf "\n"
-    print_info "On first run, zconfig will automatically:"
-    print_info "  - Download and install required plugins"
-    print_info "  - Compile zsh files for faster loading"
-    printf "\n"
+    installation_successful
 
-    if confirm "Start zsh now?"; then
-        print_info "Starting zsh..."
-        exec zsh
-    else
-        print_info "Run 'exec zsh' or open a new terminal to start using zconfig"
-    fi
+    # Prompt to start zsh
+    prompt_start_zsh
 }
 
 # Run main function
