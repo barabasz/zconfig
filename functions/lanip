@@ -1,3 +1,5 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # Retrieve the local IP address
 # Use 'lanip --help' for more information.
 

@@ -1,3 +1,5 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # Multi-DNS query tool - query multiple DNS servers and display results
 # Use 'mdig --help' for more information.
 

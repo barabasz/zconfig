@@ -1,9 +1,12 @@
 #!/bin/zsh
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # Shell files tracking - keep at the top
 zfile_track_start ${0:A}
 
-# $ZDOTDIR/inc/path.zsh
-# PATH configuration - platform-aware
+##
+# Path configuration
+##
 
 # Initialize path components array
 local -a path_components

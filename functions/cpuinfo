@@ -1,3 +1,5 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # Display CPU hardware information and current load statistics
 # Use 'cpuinfo --help' for more information.
 

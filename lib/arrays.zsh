@@ -1,8 +1,12 @@
 #!/bin/zsh
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # Shell files tracking - keep at the top
 zfile_track_start ${0:A}
 
+##
 # Array manipulation utilities
+##
 
 # Check if array contains element (exact match)
 # Usage: array_contains arr_name "element"

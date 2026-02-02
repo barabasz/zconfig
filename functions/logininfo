@@ -1,3 +1,5 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # Display login information with user, host, IP, TTY and remote connection
 # Use 'logininfo --help' for more information.
 

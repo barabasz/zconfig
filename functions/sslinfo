@@ -1,3 +1,5 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # Inspect SSL/TLS certificates using openssl
 # Use 'sslinfo --help' for more information.
 

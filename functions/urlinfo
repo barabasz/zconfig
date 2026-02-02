@@ -1,3 +1,5 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # Query URL and display detailed connection, SSL, and timing information
 # Use 'urlinfo --help' for more information.
 

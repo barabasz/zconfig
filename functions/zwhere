@@ -1,3 +1,5 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # Universal command locator - find where a command is defined
 # Use 'zwhere --help' for more information.
 

@@ -1,3 +1,5 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # Display disk usage statistics for a specific directory or mount point
 # Use 'diskinfo --help' for more information.
 

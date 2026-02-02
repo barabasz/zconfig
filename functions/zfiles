@@ -1,3 +1,5 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # Show loaded shell files in order with status and load time
 # Use 'zfiles --help' for more information.
 

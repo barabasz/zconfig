@@ -1,3 +1,5 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # Display system memory (RAM) usage statistics
 # Use 'meminfo --help' for more information.
 

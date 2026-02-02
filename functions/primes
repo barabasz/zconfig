@@ -1,3 +1,5 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # Prime number generator and tester
 
 primesfile="$GHDIR/scripts/python/primes/primes-cli.py"

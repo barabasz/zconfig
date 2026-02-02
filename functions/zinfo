@@ -1,3 +1,5 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # Display help information for a function from lib/ or functions/
 # Use 'zinfo --help' for more information.
 

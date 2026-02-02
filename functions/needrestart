@@ -1,3 +1,5 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # Manage needrestart interactive prompts on Ubuntu
 # Use 'needrestart --help' for more information.
 

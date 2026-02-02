@@ -4,6 +4,7 @@
 # cache contents (keep folder structure)
 cache/*
 !cache/.gitkeep
+.zcompdump
 
 # history file
 .zsh_history

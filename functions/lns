@@ -1,3 +1,5 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # Create symbolic link safely
 # Use 'lns --help' for more information.
 

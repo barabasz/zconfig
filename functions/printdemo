@@ -1,3 +1,5 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # Print available print functions (for demo purposes)
 # Usage: printdemo
 # Returns: 0 on success, 2 on invalid usage

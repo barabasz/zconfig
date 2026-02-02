@@ -1,3 +1,5 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # Git wrapper for bulk operations on repositories defined in $GHDIR
 # Use 'zgit --help' for more information.
 

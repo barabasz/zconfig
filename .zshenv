@@ -1,5 +1,6 @@
 #!/bin/zsh
-
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # Shell files tracking initialization - keep at the top
 source "$HOME/.config/zsh/inc/zfiles.zsh"
 zfile_track_start ${0:A}

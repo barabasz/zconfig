@@ -1,8 +1,12 @@
 #!/bin/zsh
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # Shell files tracking - keep at the top
 zfile_track_start ${0:A}
 
+##
 # Archive and Compression helper functions
+##
 
 # Extract any archive format based on extension
 # Usage: extract archive.tar.gz

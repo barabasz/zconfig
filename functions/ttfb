@@ -1,3 +1,5 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # Measure Time To First Byte (TTFB) for a given URL
 # Use 'ttfb --help' for more information.
 

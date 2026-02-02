@@ -1,5 +1,6 @@
 #!/bin/zsh
-
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # sudo-esc: adds 'sudo' before the last command after pressing 'Esc Esc' in Zsh
 # https://github.com/barabasz/zconfig/blob/main/plugins/sudo-esc.zsh
 

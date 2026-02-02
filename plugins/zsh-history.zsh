@@ -1,5 +1,6 @@
 #!/bin/zsh
-
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # zsh-history-substring-search
 # https://github.com/zsh-users/zsh-history-substring-search
 

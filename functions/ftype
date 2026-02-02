@@ -1,3 +1,5 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # Detect the type of a filesystem object
 # Use 'ftype --help' for more information.
 

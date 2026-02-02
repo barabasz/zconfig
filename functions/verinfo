@@ -1,3 +1,5 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # Show version and location info for a command
 # Use 'verinfo --help' for more information.
 

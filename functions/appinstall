@@ -1,3 +1,5 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # Install application via brew or apt with auto-discovery
 # Use 'appinstall --help' for more information.
 
@@ -6,7 +8,7 @@ local -A _fn=(
     [desc]="Installs packages using the best available package manager.
             Auto-discovers: prefers brew if available, falls back to apt on Linux.
             Displays full application name and version during installation."
-    [version]="1.0.0"
+    [version]="0.8.5"
     [created]="2025"
     [modified]="2026-02-02"
     [license]="MIT"

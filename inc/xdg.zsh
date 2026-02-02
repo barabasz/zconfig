@@ -1,9 +1,13 @@
 #!/bin/zsh
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # Shell files tracking - keep at the top
 zfile_track_start ${0:A}
 
+##
 # XDG Base Directory Specification
 # https://specifications.freedesktop.org/basedir/latest/
+##
 
 # Base directories
 export XDG_CONFIG_HOME=${XDG_CONFIG_HOME:-$CONFDIR}

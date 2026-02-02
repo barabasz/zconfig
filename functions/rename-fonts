@@ -1,3 +1,5 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # Rename font files based on their internal font names
 # Use 'rename-fonts --help' for more information.
 

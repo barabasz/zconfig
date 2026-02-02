@@ -1,5 +1,6 @@
 #!/bin/zsh
-
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # zsh-autosuggestions - Fish-like fast/unobtrusive autosuggestions for Zsh
 # https://github.com/zsh-users/zsh-autosuggestions
 

@@ -1,6 +1,10 @@
 #!/bin/zsh
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 
+##
 # Shell files tracking infrastructure
+##
 
 zmodload zsh/datetime
 typeset -A ZFILES
@@ -16,6 +20,9 @@ zfile_track_start() {
     ZFILES_ORDER+=($filepath)
     ZFILES_START[$filepath]=$EPOCHREALTIME
 }
+
+# Track this file
+zfile_track_start ${0:A}
 
 # End tracking a sourced file
 zfile_track_end() {
@@ -41,3 +48,6 @@ source_zsh_dir() {
         source "$f"
     done
 }
+
+# shell files tracking - keep at the end
+zfile_track_end ${0:A}

@@ -1,3 +1,5 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # Retrieve the public IP address (IPv4 or IPv6)
 # Use 'wanip --help' for more information.
 
