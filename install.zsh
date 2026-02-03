@@ -370,20 +370,17 @@ check_omp() {
     print_header "Checking oh-my-posh"
 
     # Check common locations
-    if cmd_exists oh-my-posh || [[ -x "$HOME/bin/oh-my-posh" ]]; then
+    if cmd_exists oh-my-posh || [[ -x "$XDG_BIN_HOME/oh-my-posh" ]]; then
         print_success "oh-my-posh is available"
         return 0
     fi
 
     # Not found - install it
     print_warning "oh-my-posh is not installed"
-    print_info "Installing oh-my-posh to ~/bin..."
-
-    # Ensure ~/bin exists
-    mkdir -p "$HOME/bin"
+    print_info "Installing oh-my-posh to $XDG_BIN_HOME..."
 
     # Install silently
-    if curl -fsSL "$URL_OHMYPOSH" | bash -s -- -d "$HOME/bin" &>/dev/null; then
+    if curl -fsSL "$URL_OHMYPOSH" | bash -s -- -d "$XDG_BIN_HOME" &>/dev/null; then
         print_success "oh-my-posh installed successfully"
         return 0
     else
