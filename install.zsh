@@ -36,6 +36,9 @@ mkdir -p $XDG_CONFIG_HOME $XDG_CACHE_HOME $XDG_BIN_HOME $XDG_DATA_HOME $XDG_STAT
 URL_HOMEBREW="https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh"
 URL_OHMYPOSH="https://ohmyposh.dev/install.sh"
 
+# Interactive mode (0 = automatic, 1 = ask questions)
+INTERACTIVE=${INTERACTIVE:-0}
+
 # =============================================================================
 # Colors and output functions (bash/zsh compatible)
 # Same color scheme as inc/colors.zsh
@@ -130,7 +133,9 @@ is_debian() {
 }
 
 # Ask yes/no question (default: yes)
+# In non-interactive mode, returns yes (0)
 confirm() {
+    [[ $INTERACTIVE -eq 0 ]] && return 0
     local prompt="$1"
     local response
     printf "${y}?${x} %s [Y/n] " "$prompt"
@@ -139,7 +144,9 @@ confirm() {
 }
 
 # Ask yes/no question (default: no)
+# In non-interactive mode, returns no (1)
 confirm_no() {
+    [[ $INTERACTIVE -eq 0 ]] && return 1
     local prompt="$1"
     local response
     printf "${y}?${x} %s [y/N] " "$prompt"
@@ -159,6 +166,30 @@ abort_missing() {
 apt_install() {
     sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a \
         apt-get install -y -qq "$@" &>/dev/null
+}
+
+# Run command with spinner
+# Usage: spin "message" command [args...]
+spin() {
+    local msg="$1"
+    shift
+    local spinchars='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+    local i=0
+
+    # Run command in background
+    "$@" &>/dev/null &
+    local pid=$!
+
+    # Show spinner while command runs
+    printf "${c}→${x} %s " "$msg"
+    while kill -0 $pid 2>/dev/null; do
+        printf "\b${c}%s${x}" "${spinchars:i++%${#spinchars}:1}"
+        sleep 0.1
+    done
+    printf "\b \b\n"
+
+    # Return command's exit code
+    wait $pid
 }
 
 
@@ -256,17 +287,14 @@ update_system() {
     is_debian || return 0
 
     print_header "Updating system packages"
-    print_info "This may take a moment..."
 
-    # This also forces sudo password prompt early
-    if sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a \
-        apt-get update -qq &>/dev/null && \
-       sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a \
-        apt-get upgrade -y -qq &>/dev/null; then
-        print_success "System packages updated"
-    else
-        print_warning "System update failed (non-critical)"
-    fi
+    # Cache sudo credentials (will prompt for password if needed)
+    sudo -v || return 1
+
+    spin "Updating package lists..." sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get update -qq
+    spin "Upgrading packages..." sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get upgrade -y -qq
+
+    print_success "System packages updated"
     return 0
 }
 
@@ -284,9 +312,8 @@ check_git() {
     if [[ "$OS_TYPE" == "macos" ]]; then
         # On macOS, install via Homebrew
         if cmd_exists brew; then
-            print_info "Installing git via Homebrew..."
-            if brew install git &>/dev/null; then
-                print_success "git installed successfully"
+            if spin "Installing git via Homebrew..." brew install git; then
+                print_success "${g}git${x} installed successfully"
                 return 0
             else
                 print_error "Failed to install git"
@@ -300,8 +327,7 @@ check_git() {
         fi
     else
         # On Linux, install via apt
-        print_info "Installing git via apt..."
-        if apt_install git; then
+        if spin "Installing git via apt..." apt_install git; then
             print_success "${g}git${x} installed successfully"
             return 0
         else
@@ -325,8 +351,7 @@ check_zsh() {
     print_warning "zsh is not installed"
 
     if is_debian; then
-        print_info "Installing zsh via apt..."
-        if apt_install zsh; then
+        if spin "Installing zsh via apt..." apt_install zsh; then
             print_success "${g}zsh${x} installed successfully"
             return 0
         else
@@ -371,8 +396,7 @@ install_core_utils() {
         return 0
     fi
 
-    print_info "Installing: ${missing[*]}..."
-    if apt_install "${missing[@]}"; then
+    if spin "Installing ${missing[*]}..." apt_install "${missing[@]}"; then
         print_success "Core utilities installed"
     else
         print_error "Failed to install core utilities"
@@ -391,10 +415,15 @@ check_omp() {
 
     # Not found - install it
     print_warning "oh-my-posh is not installed"
-    print_info "Installing oh-my-posh to $XDG_BIN_HOME..."
 
-    # Install silently
-    if curl -fsSL "$URL_OHMYPOSH" | bash -s -- -d "$XDG_BIN_HOME" &>/dev/null; then
+    # Download and run installer with spinner
+    local omp_script
+    omp_script=$(curl -fsSL "$URL_OHMYPOSH") || {
+        print_warning "Failed to download oh-my-posh installer (non-critical)"
+        return 0
+    }
+
+    if spin "Installing oh-my-posh..." bash -c "$omp_script" -- -d "$XDG_BIN_HOME"; then
         print_success "${g}oh-my-posh${x} installed successfully"
         return 0
     else
@@ -414,8 +443,7 @@ install_kitty_terminfo() {
         return 0
     fi
 
-    print_info "Installing kitty-terminfo..."
-    if apt_install kitty-terminfo; then
+    if spin "Installing kitty-terminfo..." apt_install kitty-terminfo; then
         print_success "kitty-terminfo installed"
     else
         print_warning "Could not install kitty-terminfo (non-critical)"
@@ -511,8 +539,7 @@ clone_repository() {
     mkdir -p "$(dirname "$ZCONFIG_DIR")"
 
     # Clone repository
-    print_info "Cloning from $c$ZCONFIG_REPO$x"
-    if git clone --quiet --depth 1 "$ZCONFIG_REPO" "$ZCONFIG_DIR" 2>/dev/null; then
+    if spin "Cloning from $c$ZCONFIG_REPO$x..." git clone --quiet --depth 1 "$ZCONFIG_REPO" "$ZCONFIG_DIR"; then
         print_success "Repository cloned to $c$ZCONFIG_DIR$x"
         return 0
     else
@@ -586,8 +613,14 @@ install_homebrew() {
         sudo chmod 755 /home/linuxbrew/
     fi
 
-    print_info "Installing Homebrew (this may take a while)..."
-    if NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL "$URL_HOMEBREW")" &>/dev/null; then
+    # Download and run Homebrew installer with spinner
+    local brew_script
+    brew_script=$(curl -fsSL "$URL_HOMEBREW") || {
+        print_error "Failed to download Homebrew installer"
+        return 1
+    }
+
+    if spin "Installing Homebrew..." env NONINTERACTIVE=1 bash -c "$brew_script"; then
         print_success "Homebrew installed successfully"
         init_brew_shellenv
         brew analytics off &>/dev/null
