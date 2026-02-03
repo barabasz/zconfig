@@ -6,6 +6,7 @@
   "shell_integration": true,
   "palette": {
     "black": "#000000",
+    "darkblue": "#3b4261",
     "red": "#c53b53",
     "white": "#ffffff"
   },
@@ -15,7 +16,7 @@
   },
   "transient_prompt": {
     "background": "transparent",
-    "foreground": "#3B4261",
+    "foreground": "p:darkblue",
     "template": "{{ .Shell }}> "
   },
   "blocks": [
@@ -26,7 +27,7 @@
       "segments": [
         {
           "type": "os",
-          "background": "#3B4261",
+          "background": "p:darkblue",
           "foreground": "#C0CAF5",
           "leading_diamond": "╭─",
           "style": "diamond",
@@ -195,7 +196,7 @@
         {
           "type": "time",
           "style": "diamond",
-          "background": "#292E42",
+          "background": "p:darkblue",
           "foreground": "#7AA2F7",
           "invert_powerline": true,
           "template": " {{ .CurrentDate | date .Format }} {{ .Var.clock }} ",
@@ -210,7 +211,7 @@
       "newline": true,
       "segments": [
         {
-          "foreground": "#3B4261",
+          "foreground": "p:darkblue",
           "style": "plain",
           "template": "╰─",
           "type": "text"
@@ -223,7 +224,7 @@
       "force": true,
       "segments": [
         {
-          "foreground": "#3B4261",
+          "foreground": "p:darkblue",
           "style": "plain",
           "template": "─╯",
           "type": "text"

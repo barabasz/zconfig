@@ -23,6 +23,16 @@ ZCONFIG="${g}zconfig${x}"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
 ZSHENV_LINK="$HOME/.zshenv"
+
+XDG_CONFIG_HOME=${XDG_CONFIG_HOME:-$HOME/.config}
+XDG_CACHE_HOME=${XDG_CACHE_HOME:-$HOME/.local/cache}
+XDG_BIN_HOME=${XDG_BIN_HOME:-$HOME/.local/bin}
+XDG_DATA_HOME=${XDG_DATA_HOME:-$HOME/.local/share}
+XDG_STATE_HOME=${XDG_STATE_HOME:-$HOME/.local/state}
+
+# Ensure directories exist                                                                                                                                                     
+mkdir -p $XDG_CONFIG_HOME $XDG_CACHE_HOME $XDG_BIN_HOME $XDG_DATA_HOME $XDG_STATE_HOME
+
 URL_HOMEBREW="https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh"
 URL_OHMYPOSH="https://ohmyposh.dev/install.sh"
 
@@ -151,10 +161,6 @@ apt_install() {
         apt-get install -y -qq "$@" &>/dev/null
 }
 
-# Run zconfig function (after clone & symlink, uses interactive zsh)
-run_zconfig() {
-    zsh -i -c "$*" 2>/dev/null
-}
 
 # Print installation header
 install_header() {
@@ -406,65 +412,82 @@ install_kitty_terminfo() {
     return 0
 }
 
+minimize_login_info() {
+    is_debian || return 0
+
+    print_header "Minimizing login information"
+
+    # Create .hushlogin
+    local hushlogin="$HOME/.hushlogin"
+    if [[ ! -f "$hushlogin" ]]; then
+        touch "$hushlogin"
+        print_info "Created $hushlogin"
+    fi
+
+    # Check MOTD directory
+    local motd_dir="/etc/update-motd.d"
+    [[ -d "$motd_dir" ]] || return 0
+
+    # Detect distro and define scripts to disable
+    local distro=""
+    [[ -f /etc/os-release ]] && . /etc/os-release && distro="$ID"
+
+    local scripts=()
+    case "$distro" in
+        ubuntu) scripts=("00-header" "10-help-text" "50-motd-news") ;;
+        debian) scripts=("10-uname") ;;
+        *) return 0 ;;
+    esac
+
+    # Disable MOTD scripts
+    local script
+    for script in "${scripts[@]}"; do
+        if [[ -f "$motd_dir/$script" ]]; then
+            sudo chmod -x "$motd_dir/$script" &>/dev/null
+            print_info "Disabled MOTD script: $script"
+        fi
+    done
+
+    print_success "Login information minimized"
+}
+
 # =============================================================================
 # Installation steps
 # =============================================================================
 
-backup_existing() {
+handle_existing() {
     print_header "Checking for existing installation"
 
-    local needs_backup=0
-    local backup_timestamp
-    backup_timestamp=$(date +%Y%m%d_%H%M%S)
+    local has_existing=0
 
-    # Check ~/.config/zsh
-    if [[ -e "$ZCONFIG_DIR" ]]; then
-        print_warning "Directory exists: $ZCONFIG_DIR"
-        needs_backup=1
-    fi
+    # Check what exists
+    [[ -e "$ZCONFIG_DIR" ]] && has_existing=1 && print_warning "Directory exists: $ZCONFIG_DIR"
+    [[ -e "$ZSHENV_LINK" || -L "$ZSHENV_LINK" ]] && has_existing=1 && print_warning "File exists: $ZSHENV_LINK"
 
-    # Check ~/.zshenv
-    if [[ -e "$ZSHENV_LINK" || -L "$ZSHENV_LINK" ]]; then
-        print_warning "File exists: $ZSHENV_LINK"
-        needs_backup=1
-    fi
-
-    if [[ $needs_backup -eq 0 ]]; then
+    if [[ $has_existing -eq 0 ]]; then
         print_success "No existing installation found"
         return 0
     fi
 
-    # Ask user
+    # Ask if user wants backup (default: no)
     printf "\n"
-    print_info "Existing files will be backed up with .bak.$backup_timestamp suffix"
-    if ! confirm "Create backups and continue?"; then
-        print_error "Installation cancelled by user"
-        echo ""
-        return 1
-    fi
+    if confirm_no "Do you want to create backups?"; then
+        # Create backups
+        local backup_timestamp
+        backup_timestamp=$(date +%Y%m%d_%H%M%S)
 
-    # Backup ~/.config/zsh
-    if [[ -e "$ZCONFIG_DIR" ]]; then
-        local zconfig_backup="${ZCONFIG_DIR}.bak.${backup_timestamp}"
-        print_info "Moving $ZCONFIG_DIR to $zconfig_backup"
-        if mv "$ZCONFIG_DIR" "$zconfig_backup"; then
-            print_success "Backup created: $zconfig_backup"
-        else
-            print_error "Failed to backup $ZCONFIG_DIR"
-            return 1
+        if [[ -e "$ZCONFIG_DIR" ]]; then
+            mv "$ZCONFIG_DIR" "${ZCONFIG_DIR}.bak.${backup_timestamp}"
         fi
-    fi
-
-    # Backup ~/.zshenv
-    if [[ -e "$ZSHENV_LINK" || -L "$ZSHENV_LINK" ]]; then
-        local zshenv_backup="${ZSHENV_LINK}.bak.${backup_timestamp}"
-        print_info "Moving $ZSHENV_LINK to $zshenv_backup"
-        if mv "$ZSHENV_LINK" "$zshenv_backup"; then
-            print_success "Backup created: $zshenv_backup"
-        else
-            print_error "Failed to backup $ZSHENV_LINK"
-            return 1
+        if [[ -e "$ZSHENV_LINK" || -L "$ZSHENV_LINK" ]]; then
+            mv "$ZSHENV_LINK" "${ZSHENV_LINK}.bak.${backup_timestamp}"
         fi
+        print_info "Existing files backed up with .bak.${backup_timestamp} suffix"
+    else
+        # Just remove existing files
+        [[ -e "$ZCONFIG_DIR" ]] && rm -rf "$ZCONFIG_DIR"
+        [[ -e "$ZSHENV_LINK" || -L "$ZSHENV_LINK" ]] && rm -f "$ZSHENV_LINK"
+        print_info "Existing files removed"
     fi
 
     return 0
@@ -623,7 +646,7 @@ main() {
     install_kitty_terminfo
 
     # Handle existing installation
-    backup_existing || return 1
+    handle_existing || return 1
 
     # Cloning zconfig repository
     clone_repository || return 1
@@ -632,7 +655,7 @@ main() {
     create_symlink || return 1
 
     # Minimize login info on Linux
-    is_debian && run_zconfig "mli"
+    minimize_login_info
 
     set_default_shell
 
