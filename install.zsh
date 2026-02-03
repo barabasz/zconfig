@@ -17,7 +17,7 @@
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.0.3"
+SCRIPT_VERSION="0.1.1"
 SCRIPT_DATE="2026-02-03"
 ZCONFIG="${g}zconfig${x}"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
@@ -145,12 +145,10 @@ abort_missing() {
     return 1
 }
 
-# Disable needrestart prompts (before zconfig is available)
-disable_needrestart() {
-    is_debian || return 0
-    local conf="/etc/needrestart/needrestart.conf"
-    [[ -f "$conf" ]] || return 0
-    sudo sed -i "s/#\\\$nrconf{restart} = 'i';/\\\$nrconf{restart} = 'a';/g" "$conf" &>/dev/null
+# Silent apt-get install (no warnings, no needrestart prompts)
+apt_install() {
+    sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a \
+        apt-get install -y -qq "$@" &>/dev/null
 }
 
 # Run zconfig function (after clone & symlink, uses interactive zsh)
@@ -241,7 +239,10 @@ update_system() {
     print_info "This may take a moment..."
 
     # This also forces sudo password prompt early
-    if sudo apt update &>/dev/null && sudo apt upgrade -y &>/dev/null; then
+    if sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a \
+        apt-get update -qq &>/dev/null && \
+       sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a \
+        apt-get upgrade -y -qq &>/dev/null; then
         print_success "System packages updated"
     else
         print_warning "System update failed (non-critical)"
@@ -280,7 +281,7 @@ check_git() {
     else
         # On Linux, install via apt
         print_info "Installing git via apt..."
-        if sudo apt install git -y &>/dev/null; then
+        if apt_install git; then
             print_success "git installed successfully"
             return 0
         else
@@ -305,7 +306,7 @@ check_zsh() {
 
     if is_debian; then
         print_info "Installing zsh via apt..."
-        if sudo apt install zsh -y &>/dev/null; then
+        if apt_install zsh; then
             print_success "zsh installed successfully"
             return 0
         else
@@ -351,7 +352,7 @@ install_core_utils() {
     fi
 
     print_info "Installing: ${missing[*]}..."
-    if sudo apt install -y "${missing[@]}" >/dev/null; then
+    if apt_install "${missing[@]}"; then
         print_success "Core utilities installed"
     else
         print_error "Failed to install core utilities"
@@ -397,7 +398,7 @@ install_kitty_terminfo() {
     fi
 
     print_info "Installing kitty-terminfo..."
-    if sudo apt install -y kitty-terminfo &>/dev/null; then
+    if apt_install kitty-terminfo; then
         print_success "kitty-terminfo installed"
     else
         print_warning "Could not install kitty-terminfo (non-critical)"
@@ -611,7 +612,6 @@ main() {
     # Requirement checks
     check_os || return 1
     check_sudo || return 1
-    disable_needrestart
     update_system
     install_core_utils || return 1
     install_homebrew || return 1
