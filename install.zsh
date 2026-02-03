@@ -17,7 +17,7 @@
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.1.4"
+SCRIPT_VERSION="0.1.5"
 SCRIPT_DATE="2026-02-04"
 ZCONFIG="${g}zconfig${x}"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
@@ -173,23 +173,46 @@ apt_install() {
 spin() {
     local msg="$1"
     shift
-    local spinchars='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+    local frames='|/-\'
+    local delay=0.15
     local i=0
 
-    # Run command in background
+    # Disable job control messages (shell-agnostic)
+    if [[ -n "$ZSH_VERSION" ]]; then
+        setopt LOCAL_OPTIONS NO_MONITOR NO_NOTIFY
+    else
+        set +m
+    fi
+
+    # Run command in background, suppress all output
     "$@" &>/dev/null &
     local pid=$!
 
-    # Show spinner while command runs
-    printf "${c}→${x} %s " "$msg"
-    while kill -0 $pid 2>/dev/null; do
-        printf "\b${c}%s${x}" "${spinchars:i++%${#spinchars}:1}"
-        sleep 0.1
-    done
-    printf "\b \b\n"
+    # Hide cursor
+    printf '\033[?25l'
 
-    # Return command's exit code
-    wait $pid
+    # Animate spinner while process is running
+    while kill -0 $pid 2>/dev/null; do
+        # Use string slicing instead of array (works in both bash and zsh)
+        local idx=$((i % 4))
+        local frame="${frames:$idx:1}"
+        printf "\r\033[K${c}%s${x} %s" "$frame" "$msg"
+        ((i++))
+        sleep $delay
+    done
+
+    # Wait for process and capture exit code
+    wait $pid 2>/dev/null
+    local exit_code=$?
+
+    # Clear line and show cursor
+    printf "\r\033[K"
+    printf '\033[?25h'
+
+    # Re-enable job control (only needed for bash, zsh uses LOCAL_OPTIONS)
+    [[ -z "$ZSH_VERSION" ]] && set -m
+
+    return $exit_code
 }
 
 
