@@ -17,7 +17,7 @@
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.1.5"
+SCRIPT_VERSION="0.1.6"
 SCRIPT_DATE="2026-02-04"
 ZCONFIG="${g}zconfig${x}"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
@@ -57,8 +57,25 @@ else
     r='' g='' y='' b='' c='' w='' x=''
 fi
 
+# Step counter and timing
+STEP_NUM=0
+START_TIME=${EPOCHREALTIME:-$SECONDS}
+
 print_header() {
-    printf "\n${y}▸ %s${x}\n" "$1"
+    ((STEP_NUM++))
+
+    # Calculate elapsed time
+    local now=${EPOCHREALTIME:-$SECONDS}
+    local elapsed
+    if [[ -n "$EPOCHREALTIME" ]]; then
+        # Floating point with awk (works everywhere)
+        elapsed=$(awk "BEGIN {printf \"%.2f\", $now - $START_TIME}")
+    else
+        # Integer seconds fallback
+        elapsed=$((now - START_TIME))
+    fi
+
+    printf "\n${y}▸${x} [%d] ${y}%s${x} ${d}[%ss]${x}\n" "$STEP_NUM" "$1" "$elapsed"
 }
 
 print_success() {
@@ -166,6 +183,11 @@ abort_missing() {
 apt_install() {
     sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a \
         apt-get install -y -qq "$@" &>/dev/null
+}
+
+# Refresh sudo credentials (call before spin with sudo commands)
+sudo_refresh() {
+    sudo -v 2>/dev/null || sudo -v
 }
 
 # Run command with spinner
@@ -330,7 +352,7 @@ check_git() {
     fi
 
     # git not found - install it
-    print_warning "git is not installed"
+    print_warning "${g}git${x} is not installed"
 
     if [[ "$OS_TYPE" == "macos" ]]; then
         # On macOS, install via Homebrew
@@ -350,6 +372,7 @@ check_git() {
         fi
     else
         # On Linux, install via apt
+        sudo_refresh
         if spin "Installing git via apt..." apt_install git; then
             print_success "${g}git${x} installed successfully"
             return 0
@@ -371,14 +394,15 @@ check_zsh() {
     fi
 
     # zsh not found - install it
-    print_warning "zsh is not installed"
+    print_warning "${g}zsh${x} is not installed"
 
     if is_debian; then
+        sudo_refresh
         if spin "Installing zsh via apt..." apt_install zsh; then
             print_success "${g}zsh${x} installed successfully"
             return 0
         else
-            print_error "Failed to install zsh"
+            print_error "Failed to install ${g}zsh${x}"
             return 1
         fi
     else
@@ -419,6 +443,7 @@ install_core_utils() {
         return 0
     fi
 
+    sudo_refresh
     if spin "Installing ${missing[*]}..." apt_install "${missing[@]}"; then
         print_success "Core utilities installed"
     else
@@ -437,7 +462,7 @@ check_omp() {
     fi
 
     # Not found - install it
-    print_warning "oh-my-posh is not installed"
+    print_warning "${g}oh-my-posh${x} is not installed"
 
     # Download and run installer with spinner
     local omp_script
@@ -466,6 +491,7 @@ install_kitty_terminfo() {
         return 0
     fi
 
+    sudo_refresh
     if spin "Installing kitty-terminfo..." apt_install kitty-terminfo; then
         print_success "kitty-terminfo installed"
     else
@@ -623,7 +649,7 @@ install_homebrew() {
     done
 
     # Homebrew not found - ask to install
-    print_warning "Homebrew is not installed"
+    print_warning "${g}Homebrew${x} is not installed"
 
     if ! confirm "Install Homebrew now?"; then
         abort_missing "Homebrew"
@@ -643,13 +669,13 @@ install_homebrew() {
         return 1
     }
 
-    if spin "Installing Homebrew..." env NONINTERACTIVE=1 bash -c "$brew_script"; then
-        print_success "Homebrew installed successfully"
+    if spin "Installing ${g}Homebrew${x}..." env NONINTERACTIVE=1 bash -c "$brew_script"; then
+        print_success "${g}Homebrew${x} installed successfully"
         init_brew_shellenv
         brew analytics off &>/dev/null
         return 0
     else
-        print_error "Homebrew installation failed"
+        print_error "${g}Homebrew${x} installation failed"
         return 1
     fi
 }
@@ -662,13 +688,13 @@ set_default_shell() {
     local current_shell="${SHELL##*/}"
 
     if [[ "$current_shell" == "zsh" ]]; then
-        print_success "zsh is already the default shell"
+        print_success "${g}zsh${x} is already the default shell"
         return 0
     fi
 
-    print_info "Current default shell: $current_shell"
+    print_info "Current default shell: ${g}$current_shell${x}"
 
-    if ! confirm "Change default shell to zsh?"; then
+    if ! confirm "Change default shell to ${g}zsh${x}?"; then
         print_info "Skipping default shell change"
         print_info "You can change it later with: chsh -s $zsh_path"
         return 0
@@ -676,13 +702,13 @@ set_default_shell() {
 
     # Ensure zsh is in /etc/shells
     if ! grep -q "^${zsh_path}$" /etc/shells 2>/dev/null; then
-        print_info "Adding $zsh_path to /etc/shells"
+        print_info "Adding ${c}$zsh_path${x} to ${c}/etc/shells${x}"
         echo "$zsh_path" | sudo tee -a /etc/shells >/dev/null
     fi
 
     # Change default shell
     if chsh -s "$zsh_path"; then
-        print_success "Default shell changed to zsh"
+        print_success "Default shell changed to ${g}zsh${x}"
         return 0
     else
         print_warning "Failed to change default shell"
