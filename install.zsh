@@ -17,7 +17,7 @@
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.1.2"
+SCRIPT_VERSION="0.1.3"
 SCRIPT_DATE="2026-02-03"
 ZCONFIG="${g}zconfig${x}"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
@@ -55,7 +55,7 @@ else
 fi
 
 print_header() {
-    printf "\n${b}▸ %s${x}\n" "$1"
+    printf "\n${y}▸ %s${x}\n" "$1"
 }
 
 print_success() {
@@ -184,11 +184,10 @@ installation_successful() {
 # Prompt to start zsh
 prompt_start_zsh() {
     if confirm "Start zsh now?"; then
-        print_info "Starting zsh..."
+        print_info "Starting zsh...\n\n"
         exec zsh
     else
-        print_info "Run 'exec zsh' or open a new terminal to start using $ZCONFIG"
-        echo ""
+        print_info "Run '${g}exec${c} zsh${x}' or open a new terminal to start using $ZCONFIG"
     fi
 }
 
@@ -228,12 +227,27 @@ check_sudo() {
     print_header "Checking sudo availability"
 
     if cmd_exists sudo; then
-        print_success "sudo is available"
+        print_success "${g}sudo${x} is available"
+        return 0
+    fi
+
+    # sudo not found - install it via su
+    print_warning "${g}sudo${x} is not installed"
+    print_info "Installing sudo (root password required)..."
+
+    # Install sudo using su
+    if ! su -c "apt-get update -qq && apt-get install -y -qq sudo" 2>/dev/null; then
+        print_error "Failed to install sudo"
+        return 1
+    fi
+
+    # Add current user to sudoers
+    local sudoers_line="$(whoami) ALL=(ALL:ALL) ALL"
+    if su -c "echo '$sudoers_line' | EDITOR='tee -a' visudo" 2>/dev/null; then
+        print_success "${g}sudo${x} installed and configured"
         return 0
     else
-        print_error "sudo is not installed"
-        print_info "Install sudo with: apt install sudo (as root)"
-        print_info "Then add your user to sudo group: usermod -aG sudo \$USER"
+        print_error "Failed to configure sudoers"
         return 1
     fi
 }
@@ -260,7 +274,7 @@ check_git() {
     print_header "Checking git availability"
 
     if cmd_exists git; then
-        print_success "git is available ($(git --version | cut -d' ' -f3))"
+        print_success "${g}git${x} is available ($(git --version | cut -d' ' -f3))"
         return 0
     fi
 
@@ -288,7 +302,7 @@ check_git() {
         # On Linux, install via apt
         print_info "Installing git via apt..."
         if apt_install git; then
-            print_success "git installed successfully"
+            print_success "${g}git${x} installed successfully"
             return 0
         else
             print_error "Failed to install git"
@@ -303,7 +317,7 @@ check_zsh() {
     if cmd_exists zsh; then
         local zsh_version
         zsh_version=$(zsh --version | cut -d' ' -f2)
-        print_success "zsh is available ($zsh_version)"
+        print_success "${g}zsh${x} is available ($zsh_version)"
         return 0
     fi
 
@@ -313,7 +327,7 @@ check_zsh() {
     if is_debian; then
         print_info "Installing zsh via apt..."
         if apt_install zsh; then
-            print_success "zsh installed successfully"
+            print_success "${g}zsh${x} installed successfully"
             return 0
         else
             print_error "Failed to install zsh"
@@ -371,7 +385,7 @@ check_omp() {
 
     # Check common locations
     if cmd_exists oh-my-posh || [[ -x "$XDG_BIN_HOME/oh-my-posh" ]]; then
-        print_success "oh-my-posh is available"
+        print_success "${g}oh-my-posh${x} is available"
         return 0
     fi
 
@@ -381,7 +395,7 @@ check_omp() {
 
     # Install silently
     if curl -fsSL "$URL_OHMYPOSH" | bash -s -- -d "$XDG_BIN_HOME" &>/dev/null; then
-        print_success "oh-my-posh installed successfully"
+        print_success "${g}oh-my-posh${x} installed successfully"
         return 0
     else
         print_warning "Failed to install oh-my-posh (non-critical)"
@@ -458,8 +472,8 @@ handle_existing() {
     local has_existing=0
 
     # Check what exists
-    [[ -e "$ZCONFIG_DIR" ]] && has_existing=1 && print_warning "Directory exists: $ZCONFIG_DIR"
-    [[ -e "$ZSHENV_LINK" || -L "$ZSHENV_LINK" ]] && has_existing=1 && print_warning "File exists: $ZSHENV_LINK"
+    [[ -e "$ZCONFIG_DIR" ]] && has_existing=1 && print_warning "Directory exists: $c$ZCONFIG_DIR$x"
+    [[ -e "$ZSHENV_LINK" || -L "$ZSHENV_LINK" ]] && has_existing=1 && print_warning "File exists: $c$ZSHENV_LINK$x"
 
     if [[ $has_existing -eq 0 ]]; then
         print_success "No existing installation found"
@@ -497,9 +511,9 @@ clone_repository() {
     mkdir -p "$(dirname "$ZCONFIG_DIR")"
 
     # Clone repository
-    print_info "Cloning from $ZCONFIG_REPO"
+    print_info "Cloning from $c$ZCONFIG_REPO$x"
     if git clone --quiet --depth 1 "$ZCONFIG_REPO" "$ZCONFIG_DIR" 2>/dev/null; then
-        print_success "Repository cloned to $ZCONFIG_DIR"
+        print_success "Repository cloned to $c$ZCONFIG_DIR$x"
         return 0
     else
         print_error "Failed to clone repository"
@@ -551,7 +565,7 @@ install_homebrew() {
 
     for brew_path in "${brew_paths[@]}"; do
         if [[ -x "$brew_path" ]]; then
-            print_success "Homebrew found at $brew_path"
+            print_success "Homebrew found at $c$brew_path$x"
             init_brew_shellenv
             brew analytics off &>/dev/null
             return 0
