@@ -17,7 +17,7 @@
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.2.0"
+SCRIPT_VERSION="0.2.1"
 SCRIPT_DATE="2026-02-04"
 ZCONFIG="${g}zconfig${x}"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
