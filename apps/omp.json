@@ -6,7 +6,11 @@
   "shell_integration": true,
   "palette": {
     "black": "#000000",
+    "blue": "#7aa2f7",
     "darkblue": "#3b4261",
+    "green": "#9ece6a",
+    "lightblue": "#c0caf5",
+    "orange": "#faba4a",
     "red": "#c53b53",
     "white": "#ffffff"
   },
@@ -28,7 +32,7 @@
         {
           "type": "os",
           "background": "p:darkblue",
-          "foreground": "#C0CAF5",
+          "foreground": "p:lightblue",
           "leading_diamond": "╭─",
           "style": "diamond",
           "template": " {{ if .WSL }}WSL at {{ end }}{{.Icon}} ",
@@ -37,9 +41,17 @@
           }
         },
         {
+          "type": "session",
+          "style": "powerline",
+          "foreground": "#ffffff",
+          "background": "#c386f1",
+          "powerline_symbol": "",
+          "template": " {{ if .SSHSession }} {{ end }}{{ .UserName }} "
+        },
+        {
           "type": "path",
           "style": "powerline",
-          "background": "#7AA2F7",
+          "background": "p:blue",
           "background_templates": [
             "{{ if not .Writable }}p:red{{ end }}"
           ],
@@ -169,7 +181,7 @@
         {
           "type": "executiontime",
           "style": "powerline",
-          "background": "#FABA4A",
+          "background": "p:orange",
           "foreground": "p:black",
           "invert_powerline": true,
           "powerline_symbol": "",
@@ -178,7 +190,7 @@
         {
           "type": "status",
           "style": "powerline",
-          "background": "#9ECE6A",
+          "background": "p:green",
           "background_templates": [
             "{{ if gt .Code 0 }}p:red{{ end }}"
           ],
@@ -197,7 +209,7 @@
           "type": "time",
           "style": "diamond",
           "background": "p:darkblue",
-          "foreground": "#7AA2F7",
+          "foreground": "p:blue",
           "invert_powerline": true,
           "template": " {{ .CurrentDate | date .Format }} {{ .Var.clock }} ",
           "trailing_diamond": "─╮"

@@ -6,28 +6,28 @@
 local -A _fn=(
     [info]="Update zconfig, plugins, and system packages"
     [desc]="Updates zconfig repository, installed plugins, and system packages.
-            By default updates everything. Use options to update specific components."
-    [version]="0.5.0"
+            By default updates only zconfig. Use -a/--all to update everything."
+    [version]="0.6.0"
     [created]="2025"
-    [modified]="2026-02-02"
+    [modified]="2026-02-04"
     [license]="MIT"
     [author]="Andrzej Barabasz"
-    [notes]="System packages: brew on macOS, apt on Linux.
-            Without options, updates everything available on the current system."
+    [notes]="System packages: brew on macOS, apt on Linux."
 )
 
 local -a _fn_opts=(
+    "all|a|Update everything (zconfig, plugins, system packages)"
     "config|c|Update only zconfig repository"
     "plugins|p|Update only zsh plugins"
     "brew|b|Update only Homebrew packages (macOS)"
-    "apt|a|Update only apt packages (Linux)"
+    "apt|A|Update only apt packages (Linux)"
     "system|s|Update only system packages (brew or apt)"
     "quiet|q|Quieter output (suppress verbose messages)"
 )
 
 local -a _fn_examples=(
-    "zupdate|Update everything"
-    "zupdate -c|Update only zconfig"
+    "zupdate|Update zconfig only (default)"
+    "zupdate -a|Update everything"
     "zupdate -p|Update only plugins"
     "zupdate -s|Update system packages (brew/apt)"
     "zupdate -c -p|Update zconfig and plugins"
@@ -40,7 +40,7 @@ local quiet=$(( ${+opts[quiet]} ))
 local -i errors=0
 
 # Determine what to update
-local update_all=0
+local update_all=$(( ${+opts[all]} ))
 local update_config=$(( ${+opts[config]} ))
 local update_plugins=$(( ${+opts[plugins]} ))
 local update_brew=$(( ${+opts[brew]} ))
@@ -52,9 +52,9 @@ if (( ${+opts[system]} )); then
     [[ $OSTYPE == linux* ]] && update_apt=1
 fi
 
-# No specific options = update all
-if (( ! update_config && ! update_plugins && ! update_brew && ! update_apt )); then
-    update_all=1
+# No specific options = update only zconfig
+if (( ! update_all && ! update_config && ! update_plugins && ! update_brew && ! update_apt )); then
+    update_config=1
 fi
 
 ## Update zconfig
