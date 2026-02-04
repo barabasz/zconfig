@@ -6,7 +6,7 @@
 local -A _fn=(
     [info]="Update zconfig, plugins, and system packages"
     [desc]="Updates zconfig repository, installed plugins, and system packages.
-            By default updates only zconfig. Use -a/--all to update everything."
+            By default updates only zconfig. Use ${p}-a${x}/${p}--all${x} to update everything."
     [version]="0.6.0"
     [created]="2025"
     [modified]="2026-02-04"

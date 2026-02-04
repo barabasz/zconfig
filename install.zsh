@@ -17,9 +17,8 @@
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.2.1"
+SCRIPT_VERSION="0.3.0"
 SCRIPT_DATE="2026-02-04"
-ZCONFIG="${g}zconfig${x}"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
 ZSHENV_LINK="$HOME/.zshenv"
@@ -54,8 +53,15 @@ if [[ -t 1 ]]; then
     d=$'\033[0;90m'     # dimmed (bright black) - for comments
     x=$'\033[0m'        # reset
 else
-    r='' g='' y='' b='' c='' w='' x=''
+    r='' g='' y='' b='' c='' w='' d='' x=''
 fi
+
+# Styled name (must be after colors)
+ZCONFIG="${g}zconfig${x}"
+
+# Installation tracking
+INSTALLED=()
+SKIPPED=()
 
 # Step counter and timing
 STEP_NUM=0
@@ -185,10 +191,16 @@ abort_missing() {
     return 1
 }
 
-# Silent apt-get install (no warnings, no needrestart prompts)
-apt_install() {
+# Silent apt-get wrapper (no warnings, no needrestart prompts)
+# Usage: apt_run update | upgrade -y | install -y <pkg>
+apt_run() {
     sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a \
-        apt-get install -y -qq "$@" &>/dev/null
+        apt-get -qq "$@" &>/dev/null
+}
+
+# Convenience wrapper for apt install
+apt_install() {
+    apt_run install -y "$@"
 }
 
 # Refresh sudo credentials (call before spin with sudo commands)
@@ -243,6 +255,64 @@ spin() {
     return $exit_code
 }
 
+# Track installed/skipped packages
+track_install() { INSTALLED+=("$1"); }
+track_skip()    { SKIPPED+=("$1"); }
+
+# Generic package installer
+# Usage: install_pkg <cmd> <name> <brew_pkg> <apt_pkg> [critical=1]
+# - cmd: command to check if already installed
+# - name: display name
+# - brew_pkg: Homebrew package name (empty = not available via brew)
+# - apt_pkg: apt package name (empty = not available via apt)
+# - critical: 1 = fail on error (default), 0 = warn and continue
+install_pkg() {
+    local cmd="$1" name="$2" brew_pkg="$3" apt_pkg="$4" critical="${5:-1}"
+
+    print_header "Installing $name"
+
+    # Check if already installed
+    if cmd_exists "$cmd"; then
+        local version
+        version=$("$cmd" --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
+        print_success "${g}$name${x} is available${version:+ ($version)}"
+        track_skip "$name"
+        return 0
+    fi
+
+    print_warning "${g}$name${x} is not installed"
+
+    local success=0
+
+    if [[ "$OS_TYPE" == "macos" ]]; then
+        # macOS: use brew
+        if [[ -n "$brew_pkg" ]] && cmd_exists brew; then
+            spin "Installing $name via Homebrew..." brew install "$brew_pkg" && success=1
+        fi
+    else
+        # Linux: prefer apt, fallback to brew
+        if [[ -n "$apt_pkg" ]]; then
+            sudo_refresh
+            spin "Installing $name via apt..." apt_install "$apt_pkg" && success=1
+        elif [[ -n "$brew_pkg" ]] && cmd_exists brew; then
+            spin "Installing $name via Homebrew..." brew install "$brew_pkg" && success=1
+        fi
+    fi
+
+    if (( success )); then
+        print_success "${g}$name${x} installed successfully"
+        track_install "$name"
+        return 0
+    fi
+
+    if (( critical )); then
+        print_error "Failed to install ${g}$name${x}"
+        return 1
+    else
+        print_warning "Failed to install ${g}$name${x} (non-critical)"
+        return 0
+    fi
+}
 
 # Print installation header
 install_header() {
@@ -253,9 +323,21 @@ install_header() {
     [[ "$(uname -s)" == "Linux" ]] && print_comment "Note: sudo password may be requested several times"
 }
 
+# Print installation summary
+print_summary() {
+    if [[ ${#INSTALLED[@]} -gt 0 ]]; then
+        print_info "Installed: ${g}${INSTALLED[*]}${x}"
+    fi
+    if [[ ${#SKIPPED[@]} -gt 0 ]]; then
+        print_info "Already present: ${d}${SKIPPED[*]}${x}"
+    fi
+}
+
 # Print installation successful message
 installation_successful() {
     print_banner "Installation complete!"
+    print_summary
+    printf "\n"
     print_info "$ZCONFIG installed to: ${c}$ZCONFIG_DIR${x}"
     print_info "Entry point for zsh:  ${c}$ZSHENV_LINK${x}"
     printf "\n"
@@ -313,6 +395,7 @@ install_sudo() {
 
     if cmd_exists sudo; then
         print_success "${g}sudo${x} is available"
+        track_skip "sudo"
         return 0
     fi
 
@@ -330,6 +413,7 @@ install_sudo() {
     local sudoers_line="$(whoami) ALL=(ALL:ALL) ALL"
     if su -c "echo '$sudoers_line' | EDITOR='tee -a' visudo" 2>/dev/null; then
         print_success "${g}sudo${x} installed and configured"
+        track_install "sudo"
         return 0
     else
         print_error "Failed to configure sudoers"
@@ -345,80 +429,19 @@ update_system() {
     # Cache sudo credentials (will prompt for password if needed)
     sudo -v || return 1
 
-    spin "Updating package lists..." sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get update -qq
-    spin "Upgrading packages..." sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get upgrade -y -qq
+    spin "Updating package lists..." apt_run update
+    spin "Upgrading packages..." apt_run upgrade -y
 
     print_success "System packages updated"
     return 0
 }
 
 install_git() {
-    print_header "Installing git"
-
-    if cmd_exists git; then
-        print_success "${g}git${x} is available ($(git --version | cut -d' ' -f3))"
-        return 0
-    fi
-
-    # git not found - install it
-    print_warning "${g}git${x} is not installed"
-
-    if [[ "$OS_TYPE" == "macos" ]]; then
-        # On macOS, install via Homebrew
-        if cmd_exists brew; then
-            if spin "Installing git via Homebrew..." brew install git; then
-                print_success "${g}git${x} installed successfully"
-                return 0
-            else
-                print_error "Failed to install ${g}git${x}"
-                return 1
-            fi
-        else
-            print_error "${g}Homebrew${x} is required to install ${g}git${x} on macOS"
-            print_info "Install Xcode Command Line Tools manually with:"
-            printf "    ${g}xcode-select --install${x}\n"
-            return 1
-        fi
-    else
-        # On Linux, install via apt
-        sudo_refresh
-        if spin "Installing git via apt..." apt_install git; then
-            print_success "${g}git${x} installed successfully"
-            return 0
-        else
-            print_error "Failed to install ${g}git${x}"
-            return 1
-        fi
-    fi
+    install_pkg git git git git 1
 }
 
 install_zsh() {
-    print_header "Installing zsh"
-
-    if cmd_exists zsh; then
-        local zsh_version
-        zsh_version=$(zsh --version | cut -d' ' -f2)
-        print_success "${g}zsh${x} is available ($zsh_version)"
-        return 0
-    fi
-
-    # zsh not found - install it
-    print_warning "${g}zsh${x} is not installed"
-
-    if is_debian; then
-        sudo_refresh
-        if spin "Installing zsh via apt..." apt_install zsh; then
-            print_success "${g}zsh${x} installed successfully"
-            return 0
-        else
-            print_error "Failed to install ${g}zsh${x}"
-            return 1
-        fi
-    else
-        # macOS should always have zsh
-        print_error "${g}zsh${x} is not available on this system"
-        return 1
-    fi
+    install_pkg zsh zsh zsh zsh 1
 }
 
 install_core_utils() {
@@ -440,7 +463,9 @@ install_core_utils() {
     for tool in "${tools[@]}"; do
         cmd="${tool%%:*}"
         pkg="${tool##*:}"
-        if ! cmd_exists "$cmd"; then
+        if cmd_exists "$cmd"; then
+            track_skip "$cmd"
+        else
             print_warning "${g}$cmd${x} is not available"
             # Add package if not already in list
             [[ ! " ${missing[*]} " =~ " ${pkg} " ]] && missing+=("$pkg")
@@ -455,6 +480,9 @@ install_core_utils() {
     sudo_refresh
     if spin "Installing ${missing[*]}..." apt_install "${missing[@]}"; then
         print_success "Core utilities installed"
+        for pkg in "${missing[@]}"; do
+            track_install "$pkg"
+        done
     else
         print_error "Failed to install core utilities"
         return 1
@@ -468,7 +496,6 @@ install_extra_utils() {
     # Tool definitions - easy to extend
     # Format: "command:brew_package:apt_package"
     # - If apt_package is empty, tool is brew-only
-    # - If apt_package is same as brew_package, use short form "command:package"
     # -------------------------------------------------------------------------
 
     local tools=(
@@ -497,7 +524,10 @@ install_extra_utils() {
         apt_pkg="${rest#*:}"
 
         # Skip if already installed
-        cmd_exists "$cmd" && continue
+        if cmd_exists "$cmd"; then
+            track_skip "$cmd"
+            continue
+        fi
 
         # Determine installation method
         if [[ "$OS_TYPE" == "macos" ]]; then
@@ -524,6 +554,7 @@ install_extra_utils() {
         sudo_refresh
         if spin "Installing via apt: ${missing_apt[*]}..." apt_install "${missing_apt[@]}"; then
             print_success "Installed via ${g}apt${x}: ${missing_apt[*]}"
+            for pkg in "${missing_apt[@]}"; do track_install "$pkg"; done
         else
             print_warning "Some apt packages failed to install (non-critical)"
         fi
@@ -533,6 +564,7 @@ install_extra_utils() {
     if [[ ${#missing_brew[@]} -gt 0 ]]; then
         if spin "Installing via brew: ${missing_brew[*]}..." brew install "${missing_brew[@]}"; then
             print_success "Installed via ${g}brew${x}: ${missing_brew[*]}"
+            for pkg in "${missing_brew[@]}"; do track_install "$pkg"; done
         else
             print_warning "Some brew packages failed to install (non-critical)"
         fi
@@ -547,6 +579,7 @@ install_omp() {
     # Check common locations
     if cmd_exists oh-my-posh || [[ -x "$XDG_BIN_HOME/oh-my-posh" ]]; then
         print_success "${g}oh-my-posh${x} is available"
+        track_skip "oh-my-posh"
         return 0
     fi
 
@@ -562,6 +595,7 @@ install_omp() {
 
     if spin "Installing oh-my-posh..." bash -c "$omp_script" -- -d "$XDG_BIN_HOME"; then
         print_success "${g}oh-my-posh${x} installed successfully"
+        track_install "oh-my-posh"
         return 0
     else
         print_warning "Failed to install ${g}oh-my-posh${x} (non-critical)"
@@ -577,12 +611,14 @@ install_kitty_terminfo() {
     # Check if already installed
     if dpkg -l kitty-terminfo &>/dev/null 2>&1; then
         print_success "${g}kitty-terminfo${x} already installed"
+        track_skip "kitty-terminfo"
         return 0
     fi
 
     sudo_refresh
     if spin "Installing kitty-terminfo..." apt_install kitty-terminfo; then
         print_success "${g}kitty-terminfo${x} installed"
+        track_install "kitty-terminfo"
     else
         print_warning "Could not install ${g}kitty-terminfo${x} (non-critical)"
     fi
@@ -731,6 +767,7 @@ install_homebrew() {
     for brew_path in "${brew_paths[@]}"; do
         if [[ -x "$brew_path" ]]; then
             print_success "Homebrew found at $c$brew_path$x"
+            track_skip "Homebrew"
             init_brew_shellenv
             brew analytics off &>/dev/null
             return 0
@@ -760,6 +797,7 @@ install_homebrew() {
 
     if spin "Installing ${g}Homebrew${x}..." env NONINTERACTIVE=1 bash -c "$brew_script"; then
         print_success "${g}Homebrew${x} installed successfully"
+        track_install "Homebrew"
         init_brew_shellenv
         brew analytics off &>/dev/null
         return 0
