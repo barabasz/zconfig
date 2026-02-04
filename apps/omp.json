@@ -209,15 +209,6 @@
           "type": "azfunc"
         },
         {
-          "type": "root",
-          "style": "powerline",
-          "background": "#ffff66",
-          "foreground": "#111111",
-          "invert_powerline": true,
-          "powerline_symbol": "",
-          "template": "   "
-        },
-        {
           "type": "executiontime",
           "style": "powerline",
           "background": "p:orange",
@@ -273,7 +264,7 @@
           "template": "╰─",
           "type": "text",
           "foreground_templates": [
-            "{{ if .Root }}p:white{{ end }}"
+            "{{ if .Root }}p:red{{ end }}"
           ]
         }
       ]
@@ -289,7 +280,7 @@
           "template": "─╯",
           "type": "text",
           "foreground_templates": [
-            "{{ if .Root }}p:white{{ end }}"
+            "{{ if .Root }}p:red{{ end }}"
           ]
         }
       ]
