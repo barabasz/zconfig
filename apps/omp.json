@@ -46,7 +46,7 @@
           "foreground": "#ffffff",
           "background": "#c386f1",
           "powerline_symbol": "",
-          "template": " {{ if .SSHSession }} {{ end }}{{ .UserName }} "
+          "template": " {{ if .SSHSession }}{{ .HostName }}   {{ end }}{{ .UserName }} "
         },
         {
           "type": "path",
