@@ -17,7 +17,7 @@
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.1.7"
+SCRIPT_VERSION="0.2.0"
 SCRIPT_DATE="2026-02-04"
 ZCONFIG="${g}zconfig${x}"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
@@ -59,20 +59,26 @@ fi
 
 # Step counter and timing
 STEP_NUM=0
-START_TIME=${EPOCHREALTIME:-$SECONDS}
+# Check if EPOCHREALTIME is available (zsh or bash 5+)
+if [[ -n "$ZSH_VERSION" ]] || [[ "${BASH_VERSINFO[0]:-0}" -ge 5 ]]; then
+    USE_EPOCH=1
+    START_TIME=$EPOCHREALTIME
+else
+    USE_EPOCH=0
+    START_TIME=$SECONDS
+fi
 
 print_header() {
     ((STEP_NUM++))
 
     # Calculate elapsed time
-    local now=${EPOCHREALTIME:-$SECONDS}
     local elapsed
-    if [[ -n "$EPOCHREALTIME" ]]; then
-        # Floating point with awk (works everywhere)
-        elapsed=$(awk "BEGIN {printf \"%.2f\", $now - $START_TIME}")
+    if [[ $USE_EPOCH -eq 1 ]]; then
+        # Floating point with EPOCHREALTIME (zsh or bash 5+)
+        elapsed=$(awk "BEGIN {printf \"%.2f\", $EPOCHREALTIME - $START_TIME}")
     else
-        # Integer seconds fallback
-        elapsed=$((now - START_TIME))
+        # Integer seconds fallback (older bash)
+        elapsed=$((SECONDS - START_TIME))
     fi
 
     printf "\n${y}▸${x} [%d] ${y}%s${x} ${d}[%ss]${x}\n" "$STEP_NUM" "$1" "$elapsed"
@@ -174,7 +180,7 @@ confirm_no() {
 # Abort installation due to missing dependency
 abort_missing() {
     local dep="$1"
-    print_info "$dep is required to install $ZCONFIG."
+    print_info "${g}$dep${x} is required to install $ZCONFIG."
     print_error "Cannot continue. Exiting."
     return 1
 }
@@ -266,7 +272,7 @@ prompt_start_zsh() {
         printf "\n"
         exec zsh
     else
-        print_info "Run '${g}exec${c} zsh${x}' or open a new terminal to start using $ZCONFIG"
+        print_info "Run '${g}exec zsh${x}' or open a new terminal to start using $ZCONFIG"
     fi
 }
 
@@ -300,10 +306,10 @@ check_os() {
     esac
 }
 
-check_sudo() {
+install_sudo() {
     is_debian || return 0
 
-    print_header "Checking sudo availability"
+    print_header "Installing sudo"
 
     if cmd_exists sudo; then
         print_success "${g}sudo${x} is available"
@@ -312,11 +318,11 @@ check_sudo() {
 
     # sudo not found - install it via su
     print_warning "${g}sudo${x} is not installed"
-    print_info "Installing sudo (root password required)..."
+    print_info "Installing ${g}sudo${x} (root password required)..."
 
     # Install sudo using su
     if ! su -c "apt-get update -qq && apt-get install -y -qq sudo" 2>/dev/null; then
-        print_error "Failed to install sudo"
+        print_error "Failed to install ${g}sudo${x}"
         return 1
     fi
 
@@ -346,8 +352,8 @@ update_system() {
     return 0
 }
 
-check_git() {
-    print_header "Checking git availability"
+install_git() {
+    print_header "Installing git"
 
     if cmd_exists git; then
         print_success "${g}git${x} is available ($(git --version | cut -d' ' -f3))"
@@ -364,13 +370,13 @@ check_git() {
                 print_success "${g}git${x} installed successfully"
                 return 0
             else
-                print_error "Failed to install git"
+                print_error "Failed to install ${g}git${x}"
                 return 1
             fi
         else
-            print_error "Homebrew is required to install git on macOS"
+            print_error "${g}Homebrew${x} is required to install ${g}git${x} on macOS"
             print_info "Install Xcode Command Line Tools manually with:"
-            printf "    ${c}xcode-select --install${x}\n"
+            printf "    ${g}xcode-select --install${x}\n"
             return 1
         fi
     else
@@ -380,14 +386,14 @@ check_git() {
             print_success "${g}git${x} installed successfully"
             return 0
         else
-            print_error "Failed to install git"
+            print_error "Failed to install ${g}git${x}"
             return 1
         fi
     fi
 }
 
-check_zsh() {
-    print_header "Checking zsh availability"
+install_zsh() {
+    print_header "Installing zsh"
 
     if cmd_exists zsh; then
         local zsh_version
@@ -410,7 +416,7 @@ check_zsh() {
         fi
     else
         # macOS should always have zsh
-        print_error "zsh is not available on this system"
+        print_error "${g}zsh${x} is not available on this system"
         return 1
     fi
 }
@@ -418,7 +424,7 @@ check_zsh() {
 install_core_utils() {
     is_debian || return 0
 
-    print_header "Checking core utilities"
+    print_header "Installing core utilities"
 
     # Tools and their packages (command:package)
     local tools=(
@@ -435,7 +441,7 @@ install_core_utils() {
         cmd="${tool%%:*}"
         pkg="${tool##*:}"
         if ! cmd_exists "$cmd"; then
-            print_warning "$cmd is not available"
+            print_warning "${g}$cmd${x} is not available"
             # Add package if not already in list
             [[ ! " ${missing[*]} " =~ " ${pkg} " ]] && missing+=("$pkg")
         fi
@@ -455,8 +461,88 @@ install_core_utils() {
     fi
 }
 
-check_omp() {
-    print_header "Checking oh-my-posh"
+install_extra_utils() {
+    print_header "Installing extra utilities"
+
+    # -------------------------------------------------------------------------
+    # Tool definitions - easy to extend
+    # Format: "command:brew_package:apt_package"
+    # - If apt_package is empty, tool is brew-only
+    # - If apt_package is same as brew_package, use short form "command:package"
+    # -------------------------------------------------------------------------
+
+    local tools=(
+        # Platform-specific (brew on macOS, apt on Linux)
+        "bat:bat:bat"
+        "bc:bc:bc"
+        "htop:htop:htop"
+        # Brew-only (both systems)
+        "gh:gh:"
+        "fzf:fzf:"
+        "zoxide:zoxide:"
+        "thefuck:thefuck:"
+        "yazi:yazi:"
+    )
+
+    # -------------------------------------------------------------------------
+
+    local missing_brew=()
+    local missing_apt=()
+    local cmd brew_pkg apt_pkg
+
+    for tool in "${tools[@]}"; do
+        cmd="${tool%%:*}"
+        local rest="${tool#*:}"
+        brew_pkg="${rest%%:*}"
+        apt_pkg="${rest#*:}"
+
+        # Skip if already installed
+        cmd_exists "$cmd" && continue
+
+        # Determine installation method
+        if [[ "$OS_TYPE" == "macos" ]]; then
+            # macOS: always use brew
+            [[ ! " ${missing_brew[*]} " =~ " ${brew_pkg} " ]] && missing_brew+=("$brew_pkg")
+        else
+            # Linux: prefer apt if available, otherwise brew
+            if [[ -n "$apt_pkg" ]]; then
+                [[ ! " ${missing_apt[*]} " =~ " ${apt_pkg} " ]] && missing_apt+=("$apt_pkg")
+            else
+                [[ ! " ${missing_brew[*]} " =~ " ${brew_pkg} " ]] && missing_brew+=("$brew_pkg")
+            fi
+        fi
+    done
+
+    # Nothing to install
+    if [[ ${#missing_brew[@]} -eq 0 && ${#missing_apt[@]} -eq 0 ]]; then
+        print_success "All extra utilities available"
+        return 0
+    fi
+
+    # Install via apt (Linux only)
+    if [[ ${#missing_apt[@]} -gt 0 ]]; then
+        sudo_refresh
+        if spin "Installing via apt: ${missing_apt[*]}..." apt_install "${missing_apt[@]}"; then
+            print_success "Installed via ${g}apt${x}: ${missing_apt[*]}"
+        else
+            print_warning "Some apt packages failed to install (non-critical)"
+        fi
+    fi
+
+    # Install via brew
+    if [[ ${#missing_brew[@]} -gt 0 ]]; then
+        if spin "Installing via brew: ${missing_brew[*]}..." brew install "${missing_brew[@]}"; then
+            print_success "Installed via ${g}brew${x}: ${missing_brew[*]}"
+        else
+            print_warning "Some brew packages failed to install (non-critical)"
+        fi
+    fi
+
+    return 0
+}
+
+install_omp() {
+    print_header "Installing oh-my-posh"
 
     # Check common locations
     if cmd_exists oh-my-posh || [[ -x "$XDG_BIN_HOME/oh-my-posh" ]]; then
@@ -470,7 +556,7 @@ check_omp() {
     # Download and run installer with spinner
     local omp_script
     omp_script=$(curl -fsSL "$URL_OHMYPOSH") || {
-        print_warning "Failed to download oh-my-posh installer (non-critical)"
+        print_warning "Failed to download ${g}oh-my-posh${x} installer (non-critical)"
         return 0
     }
 
@@ -478,7 +564,7 @@ check_omp() {
         print_success "${g}oh-my-posh${x} installed successfully"
         return 0
     else
-        print_warning "Failed to install oh-my-posh (non-critical)"
+        print_warning "Failed to install ${g}oh-my-posh${x} (non-critical)"
         return 0
     fi
 }
@@ -490,15 +576,15 @@ install_kitty_terminfo() {
 
     # Check if already installed
     if dpkg -l kitty-terminfo &>/dev/null 2>&1; then
-        print_success "kitty-terminfo already installed"
+        print_success "${g}kitty-terminfo${x} already installed"
         return 0
     fi
 
     sudo_refresh
     if spin "Installing kitty-terminfo..." apt_install kitty-terminfo; then
-        print_success "kitty-terminfo installed"
+        print_success "${g}kitty-terminfo${x} installed"
     else
-        print_warning "Could not install kitty-terminfo (non-critical)"
+        print_warning "Could not install ${g}kitty-terminfo${x} (non-critical)"
     fi
     return 0
 }
@@ -512,7 +598,7 @@ minimize_login_info() {
     local hushlogin="$HOME/.hushlogin"
     if [[ ! -f "$hushlogin" ]]; then
         touch "$hushlogin"
-        print_info "Created $hushlogin"
+        print_info "Created ${c}$hushlogin${x}"
     fi
 
     # Check MOTD directory
@@ -535,7 +621,7 @@ minimize_login_info() {
     for script in "${scripts[@]}"; do
         if [[ -f "$motd_dir/$script" ]]; then
             sudo chmod -x "$motd_dir/$script" &>/dev/null
-            print_info "Disabled MOTD script: $script"
+            print_info "Disabled MOTD script: ${c}$script${x}"
         fi
     done
 
@@ -632,7 +718,7 @@ init_brew_shellenv() {
 }
 
 install_homebrew() {
-    print_header "Checking Homebrew"
+    print_header "Installing Homebrew"
 
     # Check if Homebrew is already installed
     local brew_paths=(
@@ -668,7 +754,7 @@ install_homebrew() {
     # Download and run Homebrew installer with spinner
     local brew_script
     brew_script=$(curl -fsSL "$URL_HOMEBREW") || {
-        print_error "Failed to download Homebrew installer"
+        print_error "Failed to download ${g}Homebrew${x} installer"
         return 1
     }
 
@@ -699,7 +785,7 @@ set_default_shell() {
 
     if ! confirm "Change default shell to ${g}zsh${x}?"; then
         print_info "Skipping default shell change"
-        print_info "You can change it later with: chsh -s $zsh_path"
+        print_info "You can change it later with: ${g}chsh -s ${c}$zsh_path${x}"
         return 0
     fi
 
@@ -715,7 +801,7 @@ set_default_shell() {
         return 0
     else
         print_warning "Failed to change default shell"
-        print_info "You can change it manually with: chsh -s $zsh_path"
+        print_info "You can change it manually with: ${g}chsh -s ${c}$zsh_path${x}"
         return 0
     fi
 }
@@ -730,13 +816,14 @@ main() {
 
     # Requirement checks
     check_os || return 1
-    check_sudo || return 1
+    install_sudo || return 1
     update_system
     install_core_utils || return 1
     install_homebrew || return 1
-    check_git || return 1
-    check_zsh || return 1
-    check_omp
+    install_extra_utils
+    install_git || return 1
+    install_zsh || return 1
+    install_omp
 
     # Optional installs for Linux
     install_kitty_terminfo
