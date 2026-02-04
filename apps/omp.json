@@ -31,14 +31,19 @@
       "segments": [
         {
           "type": "os",
-          "background": "p:darkblue",
           "foreground": "p:lightblue",
+          "background": "p:darkblue",
           "leading_diamond": "╭─",
           "style": "diamond",
-          "template": " {{ if .WSL }}WSL at {{ end }}{{.Icon}} ",
-          "properties": {
-            "macos": " "
-          }
+          "template": " {{ if .WSL }}WSL at {{ end }}{{.Icon}} "
+        },
+        {
+          "type": "session",
+          "style": "powerline",
+          "foreground": "p:lightblue",
+          "background": "p:darkblue",
+          "powerline_symbol": "",
+          "template": "{{ first (splitList \".\" .HostName) }} "
         },
         {
           "type": "session",
