@@ -17,7 +17,7 @@
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.1.6"
+SCRIPT_VERSION="0.1.7"
 SCRIPT_DATE="2026-02-04"
 ZCONFIG="${g}zconfig${x}"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
@@ -105,9 +105,9 @@ print_banner() {
     local pad_left=$(printf '%*s' $padding '')
     local pad_right=$(printf '%*s' $((width - ${#text} - padding)) '')
     printf "\n${y}"
-    printf "  ╔═══════════════════════════════════════╗\n"
-    printf "  ║%s%s%s║\n" "$pad_left" "$text" "$pad_right"
-    printf "  ╚═══════════════════════════════════════╝${x}\n"
+    printf "  ┌───────────────────────────────────────┐\n"
+    printf "  │%s%s%s│\n" "$pad_left" "$text" "$pad_right"
+    printf "  └───────────────────────────────────────┘${x}\n"
     printf "\n"
 }
 
@@ -243,6 +243,8 @@ install_header() {
     print_banner "zconfig installer"
     print_comment "Script version: $SCRIPT_VERSION ($SCRIPT_DATE)"
     print_info "This will install $ZCONFIG to ${c}$ZCONFIG_DIR${x}"
+    # Note for Linux users (OS_TYPE not set yet, so check directly)
+    [[ "$(uname -s)" == "Linux" ]] && print_comment "Note: sudo password may be requested several times"
 }
 
 # Print installation successful message
@@ -260,7 +262,8 @@ installation_successful() {
 # Prompt to start zsh
 prompt_start_zsh() {
     if confirm "Start zsh now?"; then
-        print_info "Starting zsh...\n\n"
+        print_info "Starting zsh..."
+        printf "\n"
         exec zsh
     else
         print_info "Run '${g}exec${c} zsh${x}' or open a new terminal to start using $ZCONFIG"
@@ -604,13 +607,13 @@ create_symlink() {
 
     # Check if source exists
     if [[ ! -f "$source_file" ]]; then
-        print_error "Source file not found: $source_file"
+        print_error "Source file not found: $c$source_file$x"
         return 1
     fi
 
     # Create symlink
     if ln -s "$source_file" "$ZSHENV_LINK"; then
-        print_success "Created symlink: $ZSHENV_LINK -> $source_file"
+        print_success "Created symlink: $c$ZSHENV_LINK$x -> $c$source_file$x"
         return 0
     else
         print_error "Failed to create symlink"
