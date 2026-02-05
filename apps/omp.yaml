@@ -147,6 +147,10 @@ blocks:
         template: " {{ if .Writable }}{{ .Var.folder }}{{ else }}{{ .Var.lock }}{{ end }} {{ .Path }} "
 
       # Git status
+      # - green: clean
+      # - orange: modified
+      # - red: diverged
+      # - pink: ahead/behind
       - type: git
         background: p:green
         background_templates:
