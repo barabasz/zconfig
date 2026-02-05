@@ -1,0 +1,231 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
+# Oh My Posh prompt configuration
+# Documentation: https://ohmyposh.dev/docs/
+
+# ------------------------------------------------------------------------------
+# General settings
+# ------------------------------------------------------------------------------
+version: 3
+console_title_template: "{{ .Folder }}"
+enable_cursor_positioning: true
+final_space: true
+shell_integration: true
+
+# ------------------------------------------------------------------------------
+# Color palette (Tokyo Night inspired)
+# ------------------------------------------------------------------------------
+palette:
+  black: '#000000'
+  blue: '#7aa2f7'
+  darkblue: '#3b4261'
+  green: '#9ece6a'
+  lightblue: '#c0caf5'
+  orange: '#faba4a'
+  red: '#c53b53'
+  white: '#ffffff'
+
+# ------------------------------------------------------------------------------
+# Icons (Nerd Font required)
+# ------------------------------------------------------------------------------
+icons:
+  icon_check: &icon_check "\uf00c"                     # ☑︎
+  icon_clock: &icon_clock "\uf017"                     # ⏲
+  icon_corner_bl: &icon_corner_bl "\u2570\u2500"       # └─
+  icon_corner_br: &icon_corner_br "\u2500\u256F"       # ─┘
+  icon_corner_tl: &icon_corner_tl "\u256D\u2500\ue0b2" # ┌◀
+  icon_corner_tr: &icon_corner_tr "\ue0b0\u2500\u256E" # ▶┐
+  icon_divider_left: &icon_divider_left "\ue0b3"       # <
+  icon_divider_right: &icon_divider_right "\ue0b1"     # >
+  icon_edit: &icon_edit "\uf044"                       # 📝
+  icon_floppy: &icon_floppy "\ueb4b"                   # 💾
+  icon_folder: &icon_folder "\uf07c"                   # 📁 
+  icon_git: &icon_git "\uf126 "                        # git
+  icon_hourglass: &icon_hourglass "\uf252"             # ⌛
+  icon_lock: &icon_lock "\uf023"                       # 🔒
+  icon_ok: &icon_ok "\uf00c"                           # ✔
+  icon_triangle_left: &icon_triangle_left "\ue0b2"     # ◀
+  icon_triangle_right: &icon_triangle_right "\ue0b0"   # ▶
+
+# ------------------------------------------------------------------------------
+# Template variables
+# ------------------------------------------------------------------------------
+var:
+  check: *icon_check
+  clock: *icon_clock
+  edit: *icon_edit
+  floppy: *icon_floppy
+  folder: *icon_folder
+  git: *icon_git
+  hourglass: *icon_hourglass
+  lock: *icon_lock
+  ok: *icon_ok
+
+# Transient prompt (shown after command execution)
+# ------------------------------------------------------------------------------
+transient_prompt:
+  background: transparent
+  foreground: p:darkblue
+  template: "{{ .Shell }}> "
+
+# ------------------------------------------------------------------------------
+# Prompt blocks
+# ------------------------------------------------------------------------------
+blocks:
+  
+  ## Top left part of the prompt
+  - type: prompt
+    alignment: left
+    force: true
+    segments:
+
+      # OS icon
+      - type: os
+        foreground: p:blue
+        background: p:darkblue
+        leading_diamond: *icon_corner_tl
+        style: diamond
+        template: " {{ if .WSL }}WSL at {{ end }}{{.Icon}} "
+        foreground_templates:
+          - "{{ if or .Env.SSH_CONNECTION .Env.SSH_CLIENT .Env.SSH_TTY }}p:orange{{ end }}"
+          - "{{ if .Root }}p:white{{ end }}"
+        background_templates:
+          - "{{ if .Root }}p:red{{ end }}"
+
+      # Hostname
+      - type: session
+        style: powerline
+        foreground: p:blue
+        background: p:darkblue
+        powerline_symbol: *icon_triangle_right
+        template: "{{ first (splitList \".\" .HostName) }} "
+        foreground_templates:
+          - "{{ if or .Env.SSH_CONNECTION .Env.SSH_CLIENT .Env.SSH_TTY }}p:orange{{ end }}"
+          - "{{ if .Root }}p:white{{ end }}"
+        background_templates:
+          - "{{ if .Root }}p:red{{ end }}"
+
+      # Separator >
+      - type: text
+        style: powerline
+        foreground: p:blue
+        background: p:darkblue
+        template: *icon_divider_right
+        foreground_templates:
+          - "{{ if .Root }}p:white{{ end }}"
+        background_templates:
+          - "{{ if .Root }}p:red{{ end }}"
+
+      # Username
+      - type: session
+        style: powerline
+        foreground: p:blue
+        background: p:darkblue
+        powerline_symbol: *icon_triangle_right
+        template: "{{ .UserName }} "
+        foreground_templates:
+          - "{{ if .SSHSession }}p:orange{{ end }}"
+          - "{{ if .Root }}p:white{{ end }}"
+        background_templates:
+          - "{{ if .Root }}p:red{{ end }}"
+
+      # Current path
+      - type: path
+        style: powerline
+        background: p:blue
+        background_templates:
+          - "{{ if not .Writable }}p:red{{ end }}"
+        foreground: p:black
+        foreground_templates:
+          - "{{ if not .Writable }}p:white{{ end }}"
+        powerline_symbol: *icon_triangle_right
+        properties:
+          home_icon: "~"
+          style: full
+        template: " {{ if .Writable }}{{ .Var.folder }}{{ else }}{{ .Var.lock }}{{ end }} {{ .Path }} "
+
+      # Git status
+      - type: git
+        background: '#4e9a06'
+        background_templates:
+          - "{{ if or (.Working.Changed) (.Staging.Changed) }}#c4a000{{ end }}"
+          - "{{ if and (gt .Ahead 0) (gt .Behind 0) }}#f26d50{{ end }}"
+          - "{{ if gt .Ahead 0 }}#89d1dc{{ end }}"
+          - "{{ if gt .Behind 0 }}#4e9a06{{ end }}"
+        foreground: p:black
+        powerline_symbol: *icon_triangle_right
+        properties:
+          branch_icon: *icon_git
+          fetch_stash_count: true
+          fetch_status: true
+          fetch_upstream_icon: true
+        style: powerline
+        template: " {{ .HEAD }}{{if .BranchStatus }} {{ .BranchStatus }}{{ end }}{{ if .Working.Changed }} {{ .Var.edit }} {{ .Working.String }}{{ end }}{{ if and (.Working.Changed) (.Staging.Changed) }} |{{ end }}{{ if .Staging.Changed }} {{ .Var.check }} {{ .Staging.String }}{{ end }}{{ if gt .StashCount 0 }} {{ .Var.floppy }} {{ .StashCount }}{{ end }} "
+  
+  ## Top right part of the prompt
+  - type: prompt
+    alignment: right
+    force: true
+    segments:
+
+      # Exit status
+      - type: status
+        style: powerline
+        background: p:green
+        background_templates:
+          - "{{ if gt .Code 0 }}p:red{{ end }}"
+        foreground: p:black
+        foreground_templates:
+          - "{{ if gt .Code 0 }}p:white{{ end }}"
+        invert_powerline: true
+        powerline_symbol: *icon_triangle_left
+        properties:
+          always_enabled: true
+        template: ' {{ if gt .Code 0 }}{{ reason .Code }}{{ else }}{{ .Var.ok }}{{ end }} '
+
+      # Execution time
+      - type: executiontime
+        style: powerline
+        background: p:orange
+        foreground: p:black
+        invert_powerline: true
+        powerline_symbol: *icon_triangle_left
+        template: " {{ .FormattedMs }} {{ .Var.hourglass }} "
+
+      # Current time
+      - type: time
+        style: diamond
+        background: p:darkblue
+        foreground: p:blue
+        invert_powerline: true
+        template: ' {{ .CurrentDate | date .Format }} {{ .Var.clock }} '
+        trailing_diamond: *icon_corner_tr
+        foreground_templates:
+          - "{{ if .Root }}p:white{{ end }}"
+        background_templates:
+          - "{{ if .Root }}p:red{{ end }}"
+  
+  ## Bottom left part of the prompt
+  - type: prompt
+    alignment: left
+    force: true
+    newline: true
+    segments:
+      - foreground: p:darkblue
+        style: plain
+        template: *icon_corner_bl
+        type: text
+        foreground_templates:
+          - "{{ if .Root }}p:red{{ end }}"
+  
+  ## Bottom right part of the prompt
+  - type: rprompt
+    alignment: right
+    force: true
+    segments:
+      - foreground: p:darkblue
+        style: plain
+        template: *icon_corner_br
+        type: text
+        foreground_templates:
+          - "{{ if .Root }}p:red{{ end }}"
