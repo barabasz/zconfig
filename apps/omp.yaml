@@ -63,6 +63,16 @@ var:
   lock: *icon_lock
   ok: *icon_ok
 
+# ------------------------------------------------------------------------------
+# Template strings
+# ------------------------------------------------------------------------------
+template_strings:
+  background_root: &background_root "{{ if .Root }}p:red{{ end }}"
+  foreground_root: &foreground_root "{{ if .Root }}p:white{{ end }}"
+  foreground_ssh: &foreground_ssh "{{ if or .Env.SSH_CONNECTION .Env.SSH_CLIENT .Env.SSH_TTY }}p:orange{{ end }}"
+  hostname: &hostname "{{ first (splitList \".\" .HostName) }} "
+
+# ------------------------------------------------------------------------------
 # Transient prompt (shown after command execution)
 # ------------------------------------------------------------------------------
 transient_prompt:
@@ -87,12 +97,12 @@ blocks:
         background: p:darkblue
         leading_diamond: *icon_corner_tl
         style: diamond
-        template: " {{ if .WSL }}WSL at {{ end }}{{.Icon}} "
+        # template: " {{ if .WSL }}WSL at {{ end }}{{.Icon}} "
         foreground_templates:
-          - "{{ if or .Env.SSH_CONNECTION .Env.SSH_CLIENT .Env.SSH_TTY }}p:orange{{ end }}"
-          - "{{ if .Root }}p:white{{ end }}"
+          - *foreground_ssh
+          - *foreground_root
         background_templates:
-          - "{{ if .Root }}p:red{{ end }}"
+          - *background_root
 
       # Hostname
       - type: session
@@ -100,12 +110,12 @@ blocks:
         foreground: p:blue
         background: p:darkblue
         powerline_symbol: *icon_triangle_right
-        template: "{{ first (splitList \".\" .HostName) }} "
+        template: *hostname
         foreground_templates:
-          - "{{ if or .Env.SSH_CONNECTION .Env.SSH_CLIENT .Env.SSH_TTY }}p:orange{{ end }}"
-          - "{{ if .Root }}p:white{{ end }}"
+          - *foreground_ssh
+          - *foreground_root
         background_templates:
-          - "{{ if .Root }}p:red{{ end }}"
+          - *background_root
 
       # Separator >
       - type: text
@@ -114,9 +124,9 @@ blocks:
         background: p:darkblue
         template: *icon_divider_right
         foreground_templates:
-          - "{{ if .Root }}p:white{{ end }}"
+          - *foreground_root
         background_templates:
-          - "{{ if .Root }}p:red{{ end }}"
+          - *background_root
 
       # Username
       - type: session
@@ -160,6 +170,7 @@ blocks:
           - "{{ if gt .Behind 0 }}p:pink{{ end }}"
         foreground: p:black
         foreground_templates:
+          - "{{ if or (.Working.Changed) (.Staging.Changed) }}p:black{{ end }}"
           - "{{ if and (gt .Ahead 0) (gt .Behind 0) }}p:white{{ end }}"
         powerline_symbol: *icon_triangle_right
         properties:
@@ -189,7 +200,7 @@ blocks:
         powerline_symbol: *icon_triangle_left
         properties:
           always_enabled: true
-        template: ' {{ if gt .Code 0 }}{{ reason .Code }}{{ else }}{{ .Var.ok }}{{ end }} '
+        template: " {{ if gt .Code 0 }}{{ reason .Code }}{{ else }}{{ .Var.ok }}{{ end }} "
 
       # Execution time
       - type: executiontime
@@ -206,7 +217,7 @@ blocks:
         background: p:darkblue
         foreground: p:blue
         invert_powerline: true
-        template: ' {{ .CurrentDate | date .Format }} {{ .Var.clock }} '
+        template: " {{ .CurrentDate | date .Format }} {{ .Var.clock }} "
         trailing_diamond: *icon_corner_tr
         foreground_templates:
           - "{{ if .Root }}p:white{{ end }}"
