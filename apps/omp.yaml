@@ -78,6 +78,7 @@ template_strings:
   foreground_root: &foreground_root "{{ if .Root }}p:white{{ end }}"
   background_ssh: &background_ssh "{{ if or .Env.SSH_CONNECTION .Env.SSH_CLIENT .Env.SSH_TTY }}p:orange{{ end }}"
   foreground_ssh: &foreground_ssh "{{ if or .Env.SSH_CONNECTION .Env.SSH_CLIENT .Env.SSH_TTY }}p:black{{ end }}"
+  foreground_ssh_inv: &foreground_ssh_inv "{{ if or .Env.SSH_CONNECTION .Env.SSH_CLIENT .Env.SSH_TTY }}p:orange{{ end }}"
   hostname: &hostname " {{ first (splitList \".\" .HostName) }} "
 
 # ------------------------------------------------------------------------------
@@ -240,6 +241,8 @@ blocks:
         trailing_diamond: *icon_corner_tr
         style: diamond
         template: "{{ if .SSHSession }}{{ .Var.network }}{{ else }}{{ .Var.computer }}{{ end }}"
+        foreground_templates:
+          - *foreground_ssh_inv
   
   ## Bottom left part of the prompt
   - type: prompt
