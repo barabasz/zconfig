@@ -251,8 +251,6 @@ blocks:
         style: plain
         template: *icon_corner_bl
         type: text
-        foreground_templates:
-          - *background_root
   
   ## Bottom right part of the prompt
   - type: rprompt
@@ -263,5 +261,3 @@ blocks:
         style: plain
         template: *icon_corner_br
         type: text
-        foreground_templates:
-          - *background_root
