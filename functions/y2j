@@ -1,0 +1,81 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
+# Convert YAML to JSON using yq
+# Use 'y2j --help' for more information.
+
+local -A _fn=(
+    [info]="Convert YAML to JSON"
+    [desc]="Converts YAML input to JSON format using yq. Input can be a file or stdin.
+            Output goes to stdout by default, or to a specified file."
+    [version]="0.1.1"
+    [created]="2026-02-05"
+    [modified]="2026-02-05"
+    [license]="MIT"
+    [author]="Andrzej Barabasz"
+    [notes]="Requires yq (https://github.com/mikefarah/yq)."
+)
+
+local -a _fn_args=(
+    "input|Input YAML file (use - for stdin)|o"
+    "output|Output JSON file (default: stdout)|o"
+)
+
+local -a _fn_opts=(
+    "force|f|Overwrite output file without confirmation"
+    "compact|c|Compact JSON output (no pretty-print)"
+)
+
+local -a _fn_examples=(
+    "y2j config.yaml|Convert and print to stdout"
+    "y2j config.yaml config.json|Convert to file"
+    "y2j - out.json < in.yaml|Read from stdin, write to file"
+    "y2j -c data.yaml|Output compact JSON (single line)"
+)
+
+local -A opts=() args=()
+_fn_init "$@" || return $REPLY
+
+# Check if yq is available
+if ! is_installed yq; then
+    printe "yq is required but not installed"
+    printi "Install with: ${g}brew install yq${x}"
+    return 1
+fi
+
+local input=${args[input]:-"-"}
+local output=${args[output]:-""}
+local force=$(( ${+opts[force]} ))
+local compact=$(( ${+opts[compact]} ))
+
+# Validate input file (if not stdin)
+if [[ $input != "-" && ! -f $input ]]; then
+    printe "Input file not found: ${c}$input${x}"
+    return 1
+fi
+
+# Check output file
+if [[ -n $output && -f $output ]] && (( ! force )); then
+    if ! confirm "File ${c}$output${x} exists. Overwrite?"; then
+        return 1
+    fi
+fi
+
+# Build yq options
+local -a yq_opts=(-oj)
+(( ! compact )) && yq_opts+=(-P)
+
+# Perform conversion
+if [[ -n $output ]]; then
+    if [[ $input == "-" ]]; then
+        yq "${yq_opts[@]}" < /dev/stdin > "$output"
+    else
+        yq "${yq_opts[@]}" "$input" > "$output"
+    fi
+    (( $? == 0 )) && prints "Converted: ${c}$input${x} -> ${c}$output${x}"
+else
+    if [[ $input == "-" ]]; then
+        yq "${yq_opts[@]}" < /dev/stdin
+    else
+        yq "${yq_opts[@]}" "$input"
+    fi
+fi
