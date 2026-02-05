@@ -20,6 +20,7 @@ palette:
   blue: '#7aa2f7'
   cyan: '#7dcfff'
   darkblue: '#3b4261'
+  darkpurple: '#faba4a' #1e1828
   green: '#9ece6a'
   lightblue: '#c0caf5'
   orange: '#faba4a'
@@ -33,16 +34,18 @@ palette:
 icons:
   icon_check: &icon_check "\uf00c"                     # ☑︎
   icon_clock: &icon_clock "\uf017"                     # ⏲
+  icon_computer: &icon_computer " \uf4a9 "             # 💻
   icon_corner_bl: &icon_corner_bl "\u2570\u2500"       # └─
   icon_corner_br: &icon_corner_br "\u2500\u256F"       # ─┘
   icon_corner_tl: &icon_corner_tl "\u256D\u2500\ue0b2" # ┌◀
   icon_corner_tr: &icon_corner_tr "\ue0b0\u2500\u256E" # ▶┐
   icon_divider_left: &icon_divider_left "\ue0b3"       # <
-  icon_divider_right: &icon_divider_right "\ue0b1"     # >
+  icon_divider_right: &icon_divider_right " \ue0b1"    # >
   icon_edit: &icon_edit "\uf044"                       # 📝
   icon_floppy: &icon_floppy "\ueb4b"                   # 💾
   icon_folder: &icon_folder "\uf07c"                   # 📁 
   icon_git: &icon_git "\uf126 "                        # git
+  icon_python: &icon_python "\ue235"                   # python
   icon_hourglass: &icon_hourglass "\uf252"             # ⌛
   icon_lock: &icon_lock "\uf023"                       # 🔒
   icon_ok: &icon_ok "\uf00c"                           # ✔
@@ -55,6 +58,7 @@ icons:
 var:
   check: *icon_check
   clock: *icon_clock
+  computer: *icon_computer
   edit: *icon_edit
   floppy: *icon_floppy
   folder: *icon_folder
@@ -62,6 +66,7 @@ var:
   hourglass: *icon_hourglass
   lock: *icon_lock
   ok: *icon_ok
+  python: *icon_python
 
 # ------------------------------------------------------------------------------
 # Template strings
@@ -70,7 +75,7 @@ template_strings:
   background_root: &background_root "{{ if .Root }}p:red{{ end }}"
   foreground_root: &foreground_root "{{ if .Root }}p:white{{ end }}"
   foreground_ssh: &foreground_ssh "{{ if or .Env.SSH_CONNECTION .Env.SSH_CLIENT .Env.SSH_TTY }}p:orange{{ end }}"
-  hostname: &hostname "{{ first (splitList \".\" .HostName) }} "
+  hostname: &hostname " {{ first (splitList \".\" .HostName) }} "
 
 # ------------------------------------------------------------------------------
 # Transient prompt (shown after command execution)
@@ -97,49 +102,12 @@ blocks:
         background: p:darkblue
         leading_diamond: *icon_corner_tl
         style: diamond
-        # template: " {{ if .WSL }}WSL at {{ end }}{{.Icon}} "
+        template: " {{.Icon}}  "
         foreground_templates:
           - *foreground_ssh
           - *foreground_root
         background_templates:
           - *background_root
-
-      # Hostname
-      - type: session
-        style: powerline
-        foreground: p:blue
-        background: p:darkblue
-        powerline_symbol: *icon_triangle_right
-        template: *hostname
-        foreground_templates:
-          - *foreground_ssh
-          - *foreground_root
-        background_templates:
-          - *background_root
-
-      # Separator >
-      - type: text
-        style: powerline
-        foreground: p:blue
-        background: p:darkblue
-        template: *icon_divider_right
-        foreground_templates:
-          - *foreground_root
-        background_templates:
-          - *background_root
-
-      # Username
-      - type: session
-        style: powerline
-        foreground: p:blue
-        background: p:darkblue
-        powerline_symbol: *icon_triangle_right
-        template: "{{ .UserName }} "
-        foreground_templates:
-          - "{{ if .SSHSession }}p:orange{{ end }}"
-          - "{{ if .Root }}p:white{{ end }}"
-        background_templates:
-          - "{{ if .Root }}p:red{{ end }}"
 
       # Current path
       - type: path
@@ -147,7 +115,7 @@ blocks:
         background: p:blue
         background_templates:
           - "{{ if not .Writable }}p:red{{ end }}"
-        foreground: p:black
+        foreground: p:darkblue
         foreground_templates:
           - "{{ if not .Writable }}p:white{{ end }}"
         powerline_symbol: *icon_triangle_right
@@ -180,6 +148,16 @@ blocks:
           fetch_upstream_icon: true
         style: powerline
         template: " {{ .HEAD }}{{if .BranchStatus }} {{ .BranchStatus }}{{ end }}{{ if .Working.Changed }} {{ .Var.edit }} {{ .Working.String }}{{ end }}{{ if and (.Working.Changed) (.Staging.Changed) }} |{{ end }}{{ if .Staging.Changed }} {{ .Var.check }} {{ .Staging.String }}{{ end }}{{ if gt .StashCount 0 }} {{ .Var.floppy }} {{ .StashCount }}{{ end }} "
+
+      # Languages
+      - type: python
+        style: powerline
+        powerline_symbol: *icon_triangle_right
+        foreground: p:white
+        background: p:darkblue
+        properties:
+          display_mode: files
+        template: " {{ .Var.python }} "
   
   ## Top right part of the prompt
   - type: prompt
@@ -200,7 +178,7 @@ blocks:
         powerline_symbol: *icon_triangle_left
         properties:
           always_enabled: true
-        template: " {{ if gt .Code 0 }}{{ reason .Code }}{{ else }}{{ .Var.ok }}{{ end }} "
+        template: " {{ if gt .Code 0 }}{{ reason .Code }}{{ else }}{{ .Var.ok }}{{ end }}  "
 
       # Execution time
       - type: executiontime
@@ -211,18 +189,55 @@ blocks:
         powerline_symbol: *icon_triangle_left
         template: " {{ .FormattedMs }} {{ .Var.hourglass }} "
 
-      # Current time
-      - type: time
-        style: diamond
-        background: p:darkblue
+      # # Current time
+      # - type: time
+      #   style: diamond
+      #   background: p:darkblue
+      #   foreground: p:blue
+      #   invert_powerline: true
+      #   template: " {{ .CurrentDate | date .Format }} {{ .Var.clock }} "
+      #   trailing_diamond: *icon_corner_tr
+      #   foreground_templates:
+      #     - *foreground_root
+      #   background_templates:
+      #     - *background_root
+
+      # Username
+      - type: session
+        style: powerline
         foreground: p:blue
+        background: p:darkblue
         invert_powerline: true
-        template: " {{ .CurrentDate | date .Format }} {{ .Var.clock }} "
-        trailing_diamond: *icon_corner_tr
+        powerline_symbol: *icon_triangle_left
+        template: " {{ .UserName }} "
         foreground_templates:
+          - "{{ if .SSHSession }}p:orange{{ end }}"
           - "{{ if .Root }}p:white{{ end }}"
         background_templates:
           - "{{ if .Root }}p:red{{ end }}"
+
+      # Hostname
+      - type: session
+        style: powerline
+        foreground: p:darkblue
+        background: p:blue
+        invert_powerline: true
+        powerline_symbol: *icon_triangle_left
+        template: *hostname
+        foreground_templates:
+          - *foreground_ssh
+          - *foreground_root
+        background_templates:
+          - *background_root
+
+      # Computer icon
+      - type: text
+        foreground: p:blue
+        background: p:orange
+        invert_powerline: true
+        trailing_diamond: *icon_corner_tr
+        style: diamond
+        template: *icon_computer
   
   ## Bottom left part of the prompt
   - type: prompt
@@ -235,7 +250,7 @@ blocks:
         template: *icon_corner_bl
         type: text
         foreground_templates:
-          - "{{ if .Root }}p:red{{ end }}"
+          - *background_root
   
   ## Bottom right part of the prompt
   - type: rprompt
@@ -247,4 +262,4 @@ blocks:
         template: *icon_corner_br
         type: text
         foreground_templates:
-          - "{{ if .Root }}p:red{{ end }}"
+          - *background_root
