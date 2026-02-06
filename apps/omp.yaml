@@ -52,6 +52,7 @@ icons:
   icon_ok: &icon_ok "\uf00c "                          # ✔
   icon_triangle_left: &icon_triangle_left "\ue0b2"     # ◀
   icon_triangle_right: &icon_triangle_right "\ue0b0"   # ▶
+  icon_tooltip: &icon_tooltip "\ue0b0\u2500\u256F"     # ▶┘
 
 # ------------------------------------------------------------------------------
 # Template variables
@@ -81,8 +82,9 @@ template_strings:
   background_ssh: &background_ssh "{{ if or .Env.SSH_CONNECTION .Env.SSH_CLIENT .Env.SSH_TTY }}p:orange{{ end }}"
   foreground_ssh: &foreground_ssh "{{ if or .Env.SSH_CONNECTION .Env.SSH_CLIENT .Env.SSH_TTY }}p:black{{ end }}"
   foreground_ssh_inv: &foreground_ssh_inv "{{ if or .Env.SSH_CONNECTION .Env.SSH_CLIENT .Env.SSH_TTY }}p:orange{{ end }}"
-  hostname: &hostname " {{ first (splitList \".\" .HostName) }} "
+  hostname: &hostname "{{ if .SSHSession }} {{ first (splitList \".\" .HostName) }} {{ end }}"
   hosticon: &hosticon "{{ if .SSHSession }}{{ .Var.network }}{{ else }}{{ .Var.computer }}{{ end }} "
+  username: &username "{{ if .SSHSession }} {{ .UserName }} {{ end }}"
 
 # ------------------------------------------------------------------------------
 # Transient prompt (shown after command execution)
@@ -200,7 +202,7 @@ blocks:
         background: p:darkblue
         invert_powerline: true
         powerline_symbol: *icon_triangle_left
-        template: " {{ .UserName }} "
+        template: *username
         foreground_templates:
           - "{{ if .SSHSession }}p:orange{{ end }}"
           - *foreground_root
