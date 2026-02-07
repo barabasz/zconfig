@@ -8,7 +8,10 @@ zfile_track_start "$ZDOTDIR/.zshrc"
 source "$ZSH_INC_DIR/history.zsh"
 
 # Colors variables
-source "$ZSH_INC_DIR/colors.zsh"
+(( ZSH_LOAD_COLORS )) && source "$ZSH_INC_DIR/colors.zsh"
+
+# Completion configuration
+(( ZSH_LOAD_COMPLETION )) && source "$ZSH_INC_DIR/completion.zsh"
 
 # Icons and glyphs
 source "$ZSH_INC_DIR/icons.zsh"
@@ -16,20 +19,27 @@ source "$ZSH_INC_DIR/icons.zsh"
 # PROMPT fallback
 source "$ZSH_INC_DIR/prompt.zsh"
 
-# Zsh functions
-source "$ZSH_INC_DIR/functions.zsh"
+# Autoloadable Shell Functions
+if (( ZSH_LOAD_SHELL_FUNCS )); then
+    autoload -Uz zargs
+    autoload -Uz zmv
+fi
+
 
 # User functions
-if (( ZSH_LOAD_FUNCS )); then
+if (( ZSH_LOAD_USER_FUNCS )); then
     fpath=($ZSH_FUNCS_DIR $fpath)
     autoload -Uz $ZSH_FUNCS_DIR/[^_.]*(N.:t)
 fi
 
 # Aliases
-source $ZSH_INC_DIR/aliases.zsh
+(( ZSH_LOAD_ALIASES )) && source $ZSH_INC_DIR/aliases.zsh
+
+# Key bindings
+(( ZSH_LOAD_KEYS )) && source "$ZSH_INC_DIR/keys.zsh"
 
 # Directory hashes
-source "$ZSH_INC_DIR/hashdirs.zsh"
+(( ZSH_LOAD_HASHDIRS )) && source "$ZSH_INC_DIR/hashdirs.zsh"
 
 # App configurations
 (( ZSH_LOAD_APPS )) && source_zsh_dir "$ZSH_APPS_DIR"

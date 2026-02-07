@@ -16,17 +16,17 @@ shell_integration: true
 # Color palette (Tokyo Night inspired)
 # ------------------------------------------------------------------------------
 palette:
-  black: '#000000'
-  blue: '#7aa2f7'
-  cyan: '#7dcfff'
-  darkblue: '#3b4261'
-  darkpurple: '#faba4a' #1e1828
-  green: '#9ece6a'
-  lightblue: '#c0caf5'
-  orange: '#faba4a'
-  pink: '#c05a93'
-  red: '#c53b53'
-  white: '#ffffff'
+  black: "#000000"
+  blue: "#7aa2f7"
+  cyan: "#7dcfff"
+  darkblue: "#3b4261"
+  darkpurple: "#faba4a"
+  green: "#9ece6a"
+  lightblue: "#c0caf5"
+  orange: "#faba4a"
+  pink: "#c05a93"
+  red: "#c53b53"
+  white: "#ffffff"
 
 # ------------------------------------------------------------------------------
 # Icons (Nerd Font required)

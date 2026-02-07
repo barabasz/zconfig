@@ -16,7 +16,7 @@ export SAVEHIST=10000
 # Options
 setopt append_history           # Append to history file
 setopt extended_history         # Save timestamps
-setopt hist_expire_dups_first   # Delete duplicates first when HISTSIZE exceeded
+setopt hist_expire_dups_first   # Delete duplicates first when HISTFILE size exceeds HISTSIZE
 setopt hist_ignore_dups         # Ignore consecutive duplicates
 setopt hist_ignore_all_dups     # Delete old recorded entry if new entry is a duplicate
 setopt hist_find_no_dups        # Do not display a line previously found

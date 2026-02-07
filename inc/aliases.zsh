@@ -44,6 +44,9 @@ alias gup='git pull --rebase'
 alias gsb='git status -sb'
 alias gst='git status -s'
 
+# Force zsh to show the complete history
+alias history="history 0"
+
 # HTTP Server
 alias serve='http-server -c-1 -o'
 
