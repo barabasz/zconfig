@@ -18,3 +18,4 @@ plugins/*/
 # other files and directories
 .claude/
 .DS_Store
+/old_*

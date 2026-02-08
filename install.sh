@@ -25,7 +25,7 @@
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.4.0"
+SCRIPT_VERSION="0.5.0"
 SCRIPT_DATE="2026-02-08"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
@@ -40,14 +40,30 @@ XDG_DATA_HOME=${XDG_DATA_HOME:-$HOME/.local/share}
 XDG_STATE_HOME=${XDG_STATE_HOME:-$HOME/.local/state}
 TEMP=${TEMP:-$XDG_TMP_HOME}
 
-# Ensure directories exist                                                                                                                                                     
+# Ensure directories exist
 mkdir -p $XDG_CONFIG_HOME $XDG_CACHE_HOME $XDG_BIN_HOME $XDG_LIB_HOME $XDG_TMP_HOME $XDG_DATA_HOME $XDG_STATE_HOME
+
+# Logging - all output is logged to this file
+LOGFILE="$XDG_TMP_HOME/zconfig_$(date +%Y%m%d_%H%M%S).log"
+
+# Step counter - UPDATE THIS when adding/removing installation steps!
+# macOS: 11 steps, Linux: 16 steps (set dynamically after OS detection)
+TOTAL_STEPS=11
+STEP_NUM=0
 
 URL_HOMEBREW="https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh"
 URL_OHMYPOSH="https://ohmyposh.dev/install.sh"
 
 # Interactive mode (0 = automatic, 1 = ask questions)
 INTERACTIVE=${INTERACTIVE:-0}
+
+# Force English locale during installation to avoid parsing issues
+export LANG=en_US.UTF-8
+export LC_ALL=en_US.UTF-8
+
+# Homebrew environment - cleaner output
+export HOMEBREW_NO_ENV_HINTS=1
+export HOMEBREW_NO_EMOJI=1
 
 # =============================================================================
 # Colors and output functions (bash/zsh compatible)
@@ -74,81 +90,132 @@ ZCONFIG="${g}zconfig${x}"
 INSTALLED=()
 SKIPPED=()
 
-# Step counter and timing
-STEP_NUM=0
-# Check if EPOCHREALTIME is available and has a value
-if [[ -n "${EPOCHREALTIME:-}" ]]; then
-    USE_EPOCH=1
-    START_TIME=$EPOCHREALTIME
-else
-    USE_EPOCH=0
-    START_TIME=$SECONDS
-fi
+# Timing - record start time
+START_TIME=$SECONDS
 
+# Generate repeated character string
+# Usage: repeat_char "char" count
+repeat_char() {
+    local char="$1" count="$2" result="" i
+    for ((i=0; i<count; i++)); do result+="$char"; done
+    printf '%s' "$result"
+}
+
+# Get elapsed time in MM:SS format
+get_elapsed_time() {
+    local elapsed=$((SECONDS - START_TIME))
+    local minutes=$((elapsed / 60))
+    local seconds=$((elapsed % 60))
+    printf "%02d:%02d" $minutes $seconds
+}
+
+# Log message to file only (not displayed to user)
+# Usage: print_log "message"
+print_log() {
+    echo "█ $1" >> "$LOGFILE"
+}
+
+# Print title in a box (used at script start)
+# ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+# █ zconfig installer v0.5 █
+# ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
+print_title() {
+    local text="$1"
+    local len=$((${#text} + 4))
+    printf "\n${y}$(repeat_char '▁' "$len")\n"
+    printf "${y}█ ${w}%s${y} █\n" "$text"
+    printf "$(repeat_char '▔' "$len")${x}\n\n"
+    # Log title to file
+    {
+        echo ""
+        echo "$(repeat_char '=' 60)"
+        echo "$text"
+        echo "Date: $(date '+%Y-%m-%d %H:%M:%S')"
+        echo "$(repeat_char '=' 60)"
+    } >> "$LOGFILE"
+}
+
+# Print section header with step counter and elapsed time
+# █ 2/9: git setup (elapsed: 00:03)
+# ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
 print_header() {
+    # Refresh sudo credentials to prevent timeout during long operations
+    sudo -v 2>/dev/null || true
+
     ((STEP_NUM++))
-
-    # Calculate elapsed time
     local elapsed
-    if [[ $USE_EPOCH -eq 1 ]] && [[ -n "${EPOCHREALTIME:-}" ]]; then
-        # Floating point with EPOCHREALTIME
-        elapsed=$(awk "BEGIN {printf \"%.2f\", $EPOCHREALTIME - $START_TIME}")
-    else
-        # Integer seconds fallback
-        elapsed=$((SECONDS - START_TIME))
-    fi
+    elapsed=$(get_elapsed_time)
+    local text="${STEP_NUM}/${TOTAL_STEPS}: $1"
+    local text_elapsed=" ${w}(elapsed: ${elapsed})${x}"
+    local len=$((${#text} + 2))
 
-    printf "\n${y}▸${x} [%d] ${y}%s${x} ${d}[%ss]${x}\n" "$STEP_NUM" "$1" "$elapsed"
+    printf "\n${y}█ %s${x}%s\n" "$text" "$text_elapsed"
+    printf "${y}$(repeat_char '▔' "$len")${x}\n"
+
+    # Log section to file
+    {
+        echo ""
+        echo "█ SECTION $text"
+        echo "█ Time: $(date '+%Y-%m-%d %H:%M:%S')"
+        echo "█ Elapsed: $elapsed"
+        echo "$(repeat_char '▔' 40)"
+    } >> "$LOGFILE"
+}
+
+# Print end header (green, for completion)
+print_end_header() {
+    local text="$1"
+    local elapsed
+    elapsed=$(get_elapsed_time)
+    local text_elapsed=" ${w}(total: ${elapsed})${x}"
+    local len=$((${#text} + 4))
+
+    printf "\n${g}$(repeat_char '▁' "$len")\n"
+    printf "${g}█ ${w}%s${g} █${x}%s\n" "$text" "$text_elapsed"
+    printf "${g}$(repeat_char '▔' "$len")${x}\n\n"
 }
 
 print_success() {
     printf "${g}✓${x} %s\n" "$1"
+    print_log "SUCCESS: $1"
 }
 
 print_error() {
     printf "${r}✗${x} %s\n" "$1" >&2
+    print_log "ERROR: $1"
 }
 
 print_warning() {
     printf "${y}!${x} %s\n" "$1"
+    print_log "WARNING: $1"
 }
 
 print_info() {
     printf "${c}→${x} %s\n" "$1"
+    print_log "INFO: $1"
 }
 
 print_comment() {
     printf "${d}# %s${x}\n" "$1"
 }
 
-print_banner() {
-    local text="$1"
-    local width=39
-    local padding=$(( (width - ${#text}) / 2 ))
-    local pad_left=$(printf '%*s' $padding '')
-    local pad_right=$(printf '%*s' $((width - ${#text} - padding)) '')
-    printf "\n${y}"
-    printf "  ┌───────────────────────────────────────┐\n"
-    printf "  │%s%s%s│\n" "$pad_left" "$text" "$pad_right"
-    printf "  └───────────────────────────────────────┘${x}\n"
-    printf "\n"
-}
-
 # =============================================================================
 # Helper functions
 # =============================================================================
 
-# Detect OS type
+# Detect OS type and set TOTAL_STEPS accordingly
 detect_os() {
     case "$(uname -s)" in
         Darwin)
             OS_TYPE="macos"
+            TOTAL_STEPS=11  # macOS has fewer steps (no sudo, apt, etc.)
             ;;
         Linux)
             if [[ -f /etc/os-release ]]; then
                 . /etc/os-release
                 if [[ "$ID" == "debian" || "$ID_LIKE" == *"debian"* ]]; then
                     OS_TYPE="debian"
+                    TOTAL_STEPS=16  # Linux has additional steps
                 else
                     OS_TYPE="linux-other"
                 fi
@@ -228,6 +295,9 @@ spin() {
     local delay=0.15
     local i=0
 
+    # Log the command being executed
+    print_log "Executing: $*"
+
     # Disable job control messages (shell-agnostic)
     if [[ -n "$ZSH_VERSION" ]]; then
         setopt LOCAL_OPTIONS NO_MONITOR NO_NOTIFY
@@ -235,8 +305,8 @@ spin() {
         set +m
     fi
 
-    # Run command in background, suppress all output
-    "$@" &>/dev/null &
+    # Run command in background, log output to file
+    "$@" >> "$LOGFILE" 2>&1 &
     local pid=$!
 
     # Hide cursor
@@ -262,6 +332,13 @@ spin() {
 
     # Re-enable job control (only needed for bash, zsh uses LOCAL_OPTIONS)
     [[ -z "$ZSH_VERSION" ]] && set -m
+
+    # Log result
+    if [[ $exit_code -eq 0 ]]; then
+        print_log "Command completed successfully"
+    else
+        print_log "Command failed with exit code: $exit_code"
+    fi
 
     return $exit_code
 }
@@ -327,8 +404,9 @@ install_pkg() {
 
 # Print installation header
 install_header() {
-    print_banner "zconfig installer"
-    print_comment "Script version: $SCRIPT_VERSION ($SCRIPT_DATE)"
+    print_title "zconfig installer v${SCRIPT_VERSION}"
+    print_comment "Date: $(date '+%Y-%m-%d %H:%M:%S')"
+    print_comment "Log file: $LOGFILE"
     print_info "This will install $ZCONFIG to ${c}$ZCONFIG_DIR${x}"
     # Note for Linux users (OS_TYPE not set yet, so check directly)
     [[ "$(uname -s)" == "Linux" ]] && print_comment "Note: sudo password may be requested several times"
@@ -346,11 +424,21 @@ print_summary() {
 
 # Print installation successful message
 installation_successful() {
-    print_banner "Installation complete!"
+    # Ensure terminal is in a sane state
+    stty sane 2>/dev/null || true
+
+    # Ensure TERM is set to a safe value if kitty-terminfo is not available
+    if ! infocmp xterm-kitty &>/dev/null; then
+        export TERM=xterm-256color
+        export COLORTERM=truecolor
+    fi
+
+    print_end_header "Installation complete!"
     print_summary
     printf "\n"
     print_info "$ZCONFIG installed to: ${c}$ZCONFIG_DIR${x}"
     print_info "Entry point for zsh:  ${c}$ZSHENV_LINK${x}"
+    print_info "Installation log:     ${c}$LOGFILE${x}"
     printf "\n"
     print_info "On first run, $ZCONFIG will automatically:"
     print_info "  - Download and install required plugins"
