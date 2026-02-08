@@ -17,16 +17,15 @@ echo "sudo not found. Installing..."
 USERNAME=$(whoami)
 echo "User: $USERNAME"
 
-# Suppress locale warnings
-export LC_ALL=C
-
-# Install sudo
+# Install sudo (LC_ALL=C and redirections must be INSIDE su -c)
 echo ""
 echo "Step 1: Installing sudo package"
 echo -n "Enter ROOT password: "
-if su -c "apt-get update -qq && apt-get install -y -qq sudo" 2>/dev/null; then
+if su -c "LC_ALL=C apt-get update -qq && LC_ALL=C apt-get install -y -qq sudo" >/dev/null 2>&1; then
+    echo ""
     echo "✓ sudo package installed"
 else
+    echo ""
     echo "✗ Failed to install sudo"
     exit 1
 fi
@@ -36,9 +35,11 @@ echo ""
 echo "Step 2: Configuring sudoers"
 echo -n "Enter ROOT password: "
 SUDOERS_LINE="$USERNAME ALL=(ALL:ALL) ALL"
-if su -c "echo '$SUDOERS_LINE' | sudo EDITOR='tee -a' visudo" 2>/dev/null; then
+if su -c "echo '$SUDOERS_LINE' | EDITOR='tee -a' visudo" >/dev/null 2>&1; then
+    echo ""
     echo "✓ User added to sudoers"
 else
+    echo ""
     echo "✗ Failed to configure sudoers"
     exit 1
 fi
