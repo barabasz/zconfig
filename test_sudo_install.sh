@@ -3,7 +3,7 @@
 # Usage: /bin/bash -c "$(curl -fsSL URL)"
 # NOTE: Do NOT use "curl | bash" - stdin must be free for password prompts!
 
-VERSION="0.0.4"
+VERSION="0.0.5"
 echo "=== Test: sudo installation (v$VERSION) ==="
 
 # Check if sudo exists
@@ -31,12 +31,12 @@ else
     exit 1
 fi
 
-# Add user to sudoers
+# Add user to sudoers (append directly to sudoers file)
 echo ""
 echo "Step 2: Configuring sudoers"
 echo -n "Enter ROOT password: "
 SUDOERS_LINE="$USERNAME ALL=(ALL:ALL) ALL"
-if su -c "echo '$SUDOERS_LINE' | EDITOR='tee -a' visudo >/dev/null 2>&1"; then
+if su -c "echo '$SUDOERS_LINE' >> /etc/sudoers"; then
     echo ""
     echo "✓ User added to sudoers"
 else
