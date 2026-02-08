@@ -2,7 +2,7 @@
 # Part of zconfig · https://github.com/barabasz/zconfig · MIT License
 #
 # zconfig installer script
-# Usage: source <(curl -fsSL https://raw.githubusercontent.com/barabasz/zconfig/main/install.zsh)
+# Usage: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/barabasz/zconfig/main/install.sh)"
 #
 # This script installs zconfig by:
 # 1. Checking system requirements (macOS or Debian-based Linux)
@@ -17,7 +17,7 @@
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.3.1"
+SCRIPT_VERSION="0.3.2"
 SCRIPT_DATE="2026-02-08"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
@@ -501,14 +501,12 @@ install_extra_utils() {
     local tools=(
         # Platform-specific (brew on macOS, apt on Linux)
         "bat:bat:bat"
-        "bc:bc:bc"
         "eza:eza:eza"
         "htop:htop:htop"
         # Brew-only (both systems)
         "gh:gh:"
         "fzf:fzf:"
         "zoxide:zoxide:"
-        "thefuck:thefuck:"
         "yazi:yazi:"
     )
 

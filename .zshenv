@@ -6,7 +6,7 @@ source "$HOME/.config/zsh/inc/zfiles.zsh"
 zfile_track_start ${0:A}
 
 # Zsh-config core environment variables
-source "$HOME/.config/zsh/env.zsh"
+source "$HOME/.config/zsh/inc/env.zsh"
 
 # Zsh module loading
 source "$ZSH_INC_DIR/modules.zsh"

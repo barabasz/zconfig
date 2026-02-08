@@ -189,6 +189,7 @@ List of available functions and helper functions with descriptions.
 | is_writable | files.zsh | Check if file/dir is writable |
 | is_wsl | system.zsh | Check if current OS is Windows (WSL) |
 | is_zero | math.zsh | Check if number is zero |
+| j2y | functions | Convert JSON to YAML using yq |
 | lanip | functions | Retrieve the local IP address (interactive tool) |
 | lcm | math.zsh | Calculate LCM (Least Common Multiple) |
 | list_plugins | plugins.zsh | List all plugins |
@@ -279,6 +280,7 @@ List of available functions and helper functions with descriptions.
 | str_reverse | strings.zsh | Reverse string |
 | str_split | strings.zsh | Split string by delimiter into array |
 | str_starts_with | strings.zsh | Check if string starts with prefix |
+| str_to_unicode | strings.zsh | Convert string to JSON-ready Unicode escape sequences |
 | sub_days | date.zsh | Subtract days from current date |
 | substring | strings.zsh | Get substring |
 | sum | math.zsh | Calculate sum of numbers |
@@ -294,6 +296,7 @@ List of available functions and helper functions with descriptions.
 | uppercase | strings.zsh | Convert string to uppercase |
 | urlinfo | functions | uURL information tool (zsh port of PHP version) |
 | wanip | functions | Retrieve the public IP address (IPv4 or IPv6) |
+| y2j | functions | Convert YAML to JSON using yq |
 | yesno | print.zsh | Ask user a yes/no question |
 | zcalc | math.zsh | Evaluate mathematical expression and print result |
 | zconfig | functions | Open the file defined in $ZCONFIG using the default editor |

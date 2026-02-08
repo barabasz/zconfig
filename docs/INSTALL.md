@@ -12,7 +12,7 @@ Part of [zconfig](../README.md) documentation.
 Run this single command:
 
 ```bash
-source <(curl -fsSL https://raw.githubusercontent.com/barabasz/zconfig/main/install.zsh)
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/barabasz/zconfig/main/install.sh)"
 ```
 
 The installer will:

@@ -10,12 +10,11 @@ Part of [zconfig](../README.md) documentation.
 ├── .zlogin              # Post-login actions
 ├── .zlogout             # Logout cleanup
 ├── .zsh_history         # Command history
-├── env.zsh              # Core configuration variables
 │
 ├── inc/                 # Core configuration modules
+│   ├── env.zsh             # Core configuration variables
 │   ├── zfiles.zsh          # File tracking infrastructure
 │   ├── modules.zsh         # Zsh module loading (zmodload)
-│   ├── functions.zsh       # Zsh autoloaded functions (autoload)
 │   ├── xdg.zsh             # XDG Base Directories
 │   ├── colors.zsh          # ANSI color codes
 │   ├── icons.zsh           # Icon/glyph exports
@@ -24,6 +23,8 @@ Part of [zconfig](../README.md) documentation.
 │   ├── path.zsh            # PATH configuration
 │   ├── hashdirs.zsh        # Named directory hashes
 │   ├── aliases.zsh         # Aliases
+│   ├── keys.zsh            # Key bindings
+│   ├── completion.zsh      # Completion configuration
 │   ├── locales.zsh         # Locale settings
 │   └── plugins.zsh         # Plugin loading
 │

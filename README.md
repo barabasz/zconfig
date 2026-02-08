@@ -44,7 +44,6 @@ For installation instructions, see [INSTALL.md](docs/INSTALL.md).
 ├── .zprofile         # Login shell initialization
 ├── .zlogin           # Post-login actions
 ├── .zlogout          # Logout cleanup
-├── env.zsh           # Core configuration variables
 ├── inc/              # Core configuration modules
 ├── lib/              # Helper function library
 ├── apps/             # Application integrations
@@ -72,9 +71,9 @@ Core configuration split by responsibility. Each file handles one concern.
 
 | File | Purpose |
 |------|---------|
+| `env.zsh` | Core environment variables |
 | `zfiles.zsh` | File tracking infrastructure |
 | `modules.zsh` | Zsh module loading (`zmodload`) |
-| `functions.zsh` | Zsh autoloaded functions (`autoload`) |
 | `xdg.zsh` | XDG Base Directory variables |
 | `colors.zsh` | ANSI color code variables |
 | `icons.zsh` | Icon/glyph variables |
@@ -83,6 +82,8 @@ Core configuration split by responsibility. Each file handles one concern.
 | `path.zsh` | PATH configuration |
 | `hashdirs.zsh` | Named directory hashes (`~zsh`, `~gh`, etc.) |
 | `aliases.zsh` | Command aliases |
+| `keys.zsh` | Key bindings |
+| `completion.zsh` | Completion configuration |
 | `locales.zsh` | Locale settings |
 | `plugins.zsh` | Plugin loading configuration |
 
@@ -175,10 +176,12 @@ Autoloaded functions available on-demand. No function declaration needed in file
 | `collatz` | Calculate Collatz sequences |
 | `primes` | Prime number generator and tester |
 | `getrandom` | Generate random numbers with formatting |
+| `j2y` | Convert JSON to YAML |
+| `y2j` | Convert YAML to JSON |
 
 ## Configuration Variables
 
-All configuration variables are defined in `env.zsh` with sensible defaults. Override them by setting before shell startup (e.g., `ZSH_DEBUG=0 zsh`).
+All configuration variables are defined in `inc/env.zsh` with sensible defaults. Override them by setting before shell startup (e.g., `ZSH_DEBUG=0 zsh`).
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -188,10 +191,16 @@ All configuration variables are defined in `env.zsh` with sensible defaults. Ove
 | `ZSH_SYS_INFO` | 0 | Show system info on startup |
 | `ZSH_AUTOCOMPILE` | 1 | Auto-compile `.zsh` to `.zwc` bytecode |
 | `ZSH_LOAD_LIB` | 1 | Load library files from `lib/` |
-| `ZSH_LOAD_FUNCS` | 1 | Load functions from `functions/` |
+| `ZSH_LOAD_USER_FUNCS` | 1 | Load functions from `functions/` |
+| `ZSH_LOAD_SHELL_FUNCS` | 1 | Autoload shell functions (zargs, zmv, etc.) |
 | `ZSH_LOAD_APPS` | 1 | Load app configurations from `apps/` |
 | `ZSH_LOAD_PLUGINS` | 1 | Load plugins from `plugins/` |
 | `ZSH_PLUGINS_AUTOINSTALL` | 1 | Auto-install missing plugins |
+| `ZSH_LOAD_KEYS` | 1 | Load key bindings from `keys.zsh` |
+| `ZSH_LOAD_ALIASES` | 1 | Load aliases from `aliases.zsh` |
+| `ZSH_LOAD_COLORS` | 1 | Load colors from `colors.zsh` |
+| `ZSH_LOAD_COMPLETION` | 1 | Load completion config from `completion.zsh` |
+| `ZSH_LOAD_HASHDIRS` | 1 | Load directory hashes from `hashdirs.zsh` |
 
 **Examples:**
 ```zsh

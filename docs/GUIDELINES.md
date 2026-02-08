@@ -91,7 +91,7 @@ Plugin directories (`plugins/<name>/`) are git clones and must be in `.gitignore
 
 ## Configuration Variables
 
-Configuration variables in `.zconfig` control shell behavior. Useful for debugging:
+Configuration variables in `inc/env.zsh` control shell behavior. Useful for debugging:
 
 ```zsh
 # Start shell without apps (debug app issues)
