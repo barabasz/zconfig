@@ -4,8 +4,11 @@ Part of [zconfig](../README.md) documentation.
 
 ## Requirements
 
-- **Operating system:** macOS or Debian-based Linux (Debian, Ubuntu, Mint, etc.)
-- **[Nerd Font](https://www.nerdfonts.com/):** installed and configured in your terminal emulator
+- [macOS](https://www.apple.com/os/macos/) or Debian-based Linux ([Debian](https://www.debian.org/), [Kali Linux](https://www.kali.org/), [Linux Mint](https://linuxmint.com/), [Ubuntu](https://ubuntu.com/), etc.)
+- [curl](https://curl.se/) CLI command available in terminal
+- [Nerd Font](https://www.nerdfonts.com/) installed and configured in your terminal
+
+To get the most out of zconfig, you’ll want a modern [terminal emulator](https://en.wikipedia.org/wiki/Terminal_emulator). I highly recommend [kitty](https://sw.kovidgoyal.net/kitty/), [Ghostty](https://ghostty.org/), [WezTerm](https://wezterm.org/), or [Alacritty](https://alacritty.org/).
 
 ## Quick Install (Recommended)
 
@@ -16,14 +19,19 @@ Run this single command:
 ```
 
 The installer will:
-- Check system requirements
-- Install zsh if needed (Linux only)
+- Check system requirements (macOS or Debian-based Linux)
+- Update system packages (Linux: `apt update && apt upgrade`)
+- Install core utilities (Linux: `curl`, `unzip`, `coreutils`)
+- Install Homebrew (if not present)
+- Install extra utilities: `bat`, `eza`, `htop`, `gh`, `fzf`, `zoxide`, `yazi`
+- Install `git` and `zsh`
+- Install `oh-my-posh` prompt theme engine
+- Install `kitty-terminfo` (Linux only)
+- Back up or remove existing zsh configuration
 - Clone the repository to `~/.config/zsh`
-- Create symlink `~/.zshenv`
-- Optionally install Homebrew
+- Create symlink `~/.zshenv` → `~/.config/zsh/.zshenv`
+- Minimize login info (Linux: `.hushlogin`, disable MOTD scripts)
 - Set zsh as your default shell
-
-If you have an existing zsh configuration, the installer will offer to back it up.
 
 ## Manual Installation
 

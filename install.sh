@@ -6,18 +6,26 @@
 #
 # This script installs zconfig by:
 # 1. Checking system requirements (macOS or Debian-based Linux)
-# 2. Installing dependencies (git, zsh, kitty-terminfo)
-# 3. Cloning the repository to ~/.config/zsh
-# 4. Creating symlink ~/.zshenv -> ~/.config/zsh/.zshenv
-# 5. Installing Homebrew if not present
-# 6. Setting zsh as default shell
-# 7. Reloading shell with new configuration
+# 2. Installing sudo and updating system packages (Linux only)
+# 3. Installing core utilities: curl, unzip, coreutils (Linux only)
+# 4. Installing Homebrew (if not present)
+# 5. Installing extra utilities: bat, eza, htop, gh, fzf, zoxide, yazi
+# 6. Installing git and zsh
+# 7. Installing oh-my-posh prompt theme engine
+# 8. Installing kitty-terminfo (Linux only)
+# 9. Checking for uncommitted changes (ALWAYS prompts if found, even in unattended mode)
+# 10. Backing up or removing existing zsh configuration
+# 11. Cloning the zconfig repository to ~/.config/zsh
+# 12. Creating symlink ~/.zshenv -> ~/.config/zsh/.zshenv
+# 13. Minimizing login info: .hushlogin, MOTD scripts (Linux only)
+# 14. Setting zsh as default shell
+# 15. Starting zsh with new configuration
 
 # =============================================================================
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.3.2"
+SCRIPT_VERSION="0.4.0"
 SCRIPT_DATE="2026-02-08"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
@@ -507,6 +515,7 @@ install_extra_utils() {
         "eza:eza:eza"
         "htop:htop:htop"
         # Brew-only (both systems)
+        "ncurses:ncurses:"
         "gh:gh:"
         "fzf:fzf:"
         "zoxide:zoxide:"
@@ -682,6 +691,36 @@ handle_existing() {
     if [[ $has_existing -eq 0 ]]; then
         print_success "No existing installation found"
         return 0
+    fi
+
+    # CRITICAL: Check for uncommitted changes in existing git repo
+    # This check ALWAYS runs, even in unattended mode, to prevent data loss
+    if [[ -d "$ZCONFIG_DIR/.git" ]]; then
+        local git_status
+        git_status=$(git -C "$ZCONFIG_DIR" status --porcelain 2>/dev/null)
+
+        if [[ -n "$git_status" ]]; then
+            print_error "Uncommitted changes detected!"
+            print_warning "The existing installation has local changes that are not committed:"
+            printf "\n"
+            git -C "$ZCONFIG_DIR" status --short 2>/dev/null | head -20
+            printf "\n"
+            print_warning "Continuing will permanently delete these changes!"
+            printf "\n"
+
+            # Force interactive prompt - override INTERACTIVE setting
+            local response
+            printf "${r}!${x} Are you sure you want to continue and lose these changes? [yes/NO] "
+            read -r response
+
+            if [[ "$response" != "yes" ]]; then
+                print_info "Installation cancelled. Your changes are safe."
+                print_info "Commit your changes first: ${g}cd $ZCONFIG_DIR && git add -A && git commit -m 'backup'${x}"
+                return 1
+            fi
+
+            print_warning "Proceeding despite uncommitted changes..."
+        fi
     fi
 
     # Ask if user wants backup (default: no)
