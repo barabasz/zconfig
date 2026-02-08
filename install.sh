@@ -648,25 +648,31 @@ install_extra_utils() {
         return 0
     fi
 
-    # Install via apt (Linux only)
+    # Install via apt (Linux only) - one by one for better feedback
     if [[ ${#missing_apt[@]} -gt 0 ]]; then
         sudo_refresh
-        if spin "Installing via apt: ${missing_apt[*]}..." apt_install "${missing_apt[@]}"; then
-            print_success "Installed via ${g}apt${x}: ${missing_apt[*]}"
-            for pkg in "${missing_apt[@]}"; do track_install "$pkg"; done
-        else
-            print_warning "Some apt packages failed to install (non-critical)"
-        fi
+        local pkg
+        for pkg in "${missing_apt[@]}"; do
+            if spin "Installing ${g}$pkg${x} via apt..." apt_install "$pkg"; then
+                print_success "Installed ${g}$pkg${x}"
+                track_install "$pkg"
+            else
+                print_warning "Failed to install ${g}$pkg${x} (non-critical)"
+            fi
+        done
     fi
 
-    # Install via brew
+    # Install via brew - one by one for better feedback
     if [[ ${#missing_brew[@]} -gt 0 ]]; then
-        if spin "Installing via brew: ${missing_brew[*]}..." brew install "${missing_brew[@]}"; then
-            print_success "Installed via ${g}brew${x}: ${missing_brew[*]}"
-            for pkg in "${missing_brew[@]}"; do track_install "$pkg"; done
-        else
-            print_warning "Some brew packages failed to install (non-critical)"
-        fi
+        local pkg
+        for pkg in "${missing_brew[@]}"; do
+            if spin "Installing ${g}$pkg${x} via brew..." brew install "$pkg"; then
+                print_success "Installed ${g}$pkg${x}"
+                track_install "$pkg"
+            else
+                print_warning "Failed to install ${g}$pkg${x} (non-critical)"
+            fi
+        done
     fi
 
     return 0

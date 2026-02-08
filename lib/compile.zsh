@@ -10,6 +10,17 @@ zfile_track_start ${0:A}
 ##
 
 # =============================================================================
+# Fallback print functions (in case print.zsh isn't loaded yet)
+# =============================================================================
+
+# These are needed because compile.zsh (c) loads before print.zsh (p) alphabetically
+(( ${+functions[printd]} )) || printd() { print "  $*" }
+(( ${+functions[printi]} )) || printi() { print "  $*" }
+(( ${+functions[prints]} )) || prints() { print "  $*" }
+(( ${+functions[printw]} )) || printw() { print "  $*" }
+(( ${+functions[printe]} )) || printe() { print "  $*" >&2 }
+
+# =============================================================================
 # Low-level functions
 # =============================================================================
 
