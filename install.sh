@@ -706,7 +706,6 @@ handle_existing() {
             git -C "$ZCONFIG_DIR" status --short 2>/dev/null | head -20
             printf "\n"
             print_warning "Continuing will permanently delete these changes!"
-            printf "\n"
 
             # Force interactive prompt - override INTERACTIVE setting
             local response

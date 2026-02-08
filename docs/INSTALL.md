@@ -5,10 +5,10 @@ Part of [zconfig](../README.md) documentation.
 ## Requirements
 
 - [macOS](https://www.apple.com/os/macos/) or Debian-based Linux ([Debian](https://www.debian.org/), [Kali Linux](https://www.kali.org/), [Linux Mint](https://linuxmint.com/), [Ubuntu](https://ubuntu.com/), etc.)
-- [curl](https://curl.se/) CLI command available in terminal
+- [curl](https://curl.se/) CLI command available in terminal (see: [How to install curl](#how-to-install-curl))
 - [Nerd Font](https://www.nerdfonts.com/) installed and configured in your terminal
 
-To get the most out of zconfig, you’ll want a modern [terminal emulator](https://en.wikipedia.org/wiki/Terminal_emulator). I highly recommend [kitty](https://sw.kovidgoyal.net/kitty/), [Ghostty](https://ghostty.org/), [WezTerm](https://wezterm.org/), or [Alacritty](https://alacritty.org/).
+To get the most out of zconfig, you’ll want a modern [terminal emulator](https://en.wikipedia.org/wiki/Terminal_emulator). I highly recommend [kitty](https://sw.kovidgoyal.net/kitty/) 😻, [Ghostty](https://ghostty.org/) 👻, [WezTerm](https://wezterm.org/), or [Alacritty](https://alacritty.org/).
 
 ## Quick Install (Recommended)
 
@@ -23,10 +23,11 @@ The installer will:
 - Update system packages (Linux: `apt update && apt upgrade`)
 - Install core utilities (Linux: `curl`, `unzip`, `coreutils`)
 - Install Homebrew (if not present)
-- Install extra utilities: `bat`, `eza`, `htop`, `gh`, `fzf`, `zoxide`, `yazi`
+- Install extra utilities: `bat`, `eza`, `htop`, `ncurses`, `gh`, `fzf`, `zoxide`, `yazi`
 - Install `git` and `zsh`
 - Install `oh-my-posh` prompt theme engine
 - Install `kitty-terminfo` (Linux only)
+- Check for uncommitted local changes (prompts before overwriting)
 - Back up or remove existing zsh configuration
 - Clone the repository to `~/.config/zsh`
 - Create symlink `~/.zshenv` → `~/.config/zsh/.zshenv`
@@ -98,4 +99,33 @@ Then set your shell back to bash (if desired):
 
 ```zsh
 chsh -s /bin/bash
+```
+
+## How to install curl
+
+### macOS
+
+`curl` is pre-installed on macOS. You can verify it by running:
+
+```bash
+curl --version
+```
+
+### Debian-based Linux
+
+It is extremely unlikely that `curl` is not installed on a Debian-based Linux system, but you can check by running:
+
+```bash
+curl --version
+```
+
+If `curl` is not installed, you can install it using the package manager:
+
+```bash
+# Log in as root
+su -
+# Update package lists
+apt update
+# Install curl
+apt install curl -y
 ```
