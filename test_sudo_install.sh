@@ -1,7 +1,7 @@
 #!/bin/bash
 # Mini-script to test sudo installation on Debian
-# Run on fresh Debian without sudo: bash test_sudo_install.sh
-# Or via curl: bash -c "$(curl -fsSL URL)"
+# Usage: /bin/bash -c "$(curl -fsSL URL)"
+# NOTE: Do NOT use "curl | bash" - stdin must be free for password prompts!
 
 echo "=== Test: sudo installation ==="
 
@@ -17,11 +17,14 @@ echo "sudo not found. Installing..."
 USERNAME=$(whoami)
 echo "User: $USERNAME"
 
-# Install sudo (read password from /dev/tty to work with curl|bash)
+# Suppress locale warnings
+export LC_ALL=C
+
+# Install sudo
 echo ""
 echo "Step 1: Installing sudo package"
-echo "Enter ROOT password:"
-if su -c "apt-get update -qq && apt-get install -y -qq sudo" </dev/tty; then
+echo -n "Enter ROOT password: "
+if su -c "apt-get update -qq && apt-get install -y -qq sudo" 2>/dev/null; then
     echo "✓ sudo package installed"
 else
     echo "✗ Failed to install sudo"
@@ -31,9 +34,9 @@ fi
 # Add user to sudoers
 echo ""
 echo "Step 2: Configuring sudoers"
-echo "Enter ROOT password again:"
+echo -n "Enter ROOT password: "
 SUDOERS_LINE="$USERNAME ALL=(ALL:ALL) ALL"
-if su -c "echo '$SUDOERS_LINE' | sudo EDITOR='tee -a' visudo" </dev/tty; then
+if su -c "echo '$SUDOERS_LINE' | sudo EDITOR='tee -a' visudo" 2>/dev/null; then
     echo "✓ User added to sudoers"
 else
     echo "✗ Failed to configure sudoers"
@@ -43,8 +46,7 @@ fi
 # Verify sudo works
 echo ""
 echo "Step 3: Verifying sudo access"
-echo "Enter YOUR password for sudo:"
-if sudo -v </dev/tty; then
+if sudo -v; then
     echo "✓ sudo works!"
 else
     echo "✗ sudo verification failed"
