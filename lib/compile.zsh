@@ -38,7 +38,13 @@ needs_compile() {
 compile_file() {
     (( ARGC == 1 )) || return 2
     [[ -f $1 && $1 == *.zsh ]] || return 1
-    zcompile "$1" 2>/dev/null
+
+    if (( ZSH_DEBUG )); then
+        # Show errors directly (no capture - avoids file descriptor issues)
+        zcompile "$1"
+    else
+        zcompile "$1" 2>/dev/null
+    fi
 }
 
 # =============================================================================
@@ -56,9 +62,10 @@ compile_dir() {
     local dir=$1
     local quiet=${2:-0} # default to 0 (not quiet), if 1 suppress output
     local file compiled=0 failed=0
+    local -a failed_files=()
 
     [[ -d $dir ]] || {
-        print -u2 "compile_dir: directory not found: $dir"
+        (( ZSH_DEBUG )) && printe "compile_dir: directory not found: ${c}$dir${x}"
         return 1
     }
 
@@ -66,15 +73,21 @@ compile_dir() {
         if needs_compile "$file"; then
             if compile_file "$file"; then
                 (( compiled++ ))
+                (( ZSH_DEBUG && ! quiet )) && printd "Compiled: ${file:t}"
             else
                 (( failed++ ))
+                failed_files+=("${file:t}")
+                (( ZSH_DEBUG )) && printe "Failed to compile: ${c}${file:t}${x}"
             fi
         fi
     done
 
     if (( ! quiet )); then
         (( compiled > 0 )) && printd "Compiled $compiled file(s) in ${dir:t}"
-        (( failed > 0 )) && printw "$failed file(s) failed to compile in ${dir:t}"
+        (( failed > 0 )) && printw "$failed file(s) failed to compile in ${dir:t}: ${failed_files[*]}"
+    elif (( failed > 0 && ZSH_DEBUG )); then
+        # Even in quiet mode, show failures when debugging
+        printw "$failed file(s) failed in ${c}${dir:t}${x}: ${failed_files[*]}"
     fi
     (( failed == 0 ))
 }
@@ -117,17 +130,27 @@ compile_zsh_config() {
     (( ${+opts[-q]} + ${+opts[--quiet]} )) && quiet=1
 
     local failed=0
+    local -a failed_dirs=()
 
     (( quiet )) || printi "Compiling zsh configuration..."
 
-    compile_dir "$ZSH_LIB_DIR" $quiet || (( failed++ ))
-    compile_dir "$ZSH_INC_DIR" $quiet || (( failed++ ))
-    compile_dir "$ZSH_APPS_DIR" $quiet || (( failed++ ))
+    if ! compile_dir "$ZSH_LIB_DIR" $quiet; then
+        (( failed++ ))
+        failed_dirs+=("lib")
+    fi
+    if ! compile_dir "$ZSH_INC_DIR" $quiet; then
+        (( failed++ ))
+        failed_dirs+=("inc")
+    fi
+    if ! compile_dir "$ZSH_APPS_DIR" $quiet; then
+        (( failed++ ))
+        failed_dirs+=("apps")
+    fi
 
     if (( failed == 0 )); then
         (( quiet )) || prints "Zsh configuration compiled successfully"
     else
-        printw "Some directories failed to compile"
+        printw "Failed to compile directories: ${failed_dirs[*]}"
     fi
 
     (( failed == 0 ))
