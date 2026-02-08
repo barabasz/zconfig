@@ -5,39 +5,126 @@
 
 local -A _fn=(
     [info]="Edit zconfig file using the default editor"
-    [version]="0.7.5"
+    [desc]="Opens a zconfig file in the default editor. You can specify the file
+            using an option (${p}-k${x}) or by name (${c}keys${x}, ${c}keys.zsh${x}, ${c}key${x}).
+            Partial matching is supported."
+    [version]="0.8.0"
     [created]="2025"
-    [modified]="2026-02-02"
+    [modified]="2026-02-08"
     [license]="MIT"
     [author]="Andrzej Barabasz"
 )
 
+local -a _fn_args=(
+    "file|File name or partial match|o"
+)
+
 # Options define: long|short|file_path (file_path shown as description in help)
 local -a _fn_opts=(
-    "aliases|a|inc/aliases.zsh"
-    "colors|C|inc/colors.zsh"
-    "config|c|env.zsh"
-    "env|e|.zshenv"
-    "history|H|inc/history.zsh"
-    "icons|i|inc/icons.zsh"
-    "locales|L|inc/locales.zsh"
+    "zshenv|e|.zshenv"
+    "zshrc|r|.zshrc"
+    "profile|R|.zprofile"
     "login|l|.zlogin"
     "logout|o|.zlogout"
+    "aliases|a|inc/aliases.zsh"
+    "colors|C|inc/colors.zsh"
+    "completions|c|inc/completions.zsh"
+    "hashdirs|d|inc/hashdirs.zsh"
+    "env|E|inc/env.zsh"
+    "history|H|inc/history.zsh"
+    "icons|i|inc/icons.zsh"
+    "keys|k|inc/keys.zsh"
+    "locales|L|inc/locales.zsh"
     "modules|m|inc/modules.zsh"
     "path|p|inc/path.zsh"
     "plugins|P|inc/plugins.zsh"
-    "profile|R|.zprofile"
     "prompt|t|inc/prompt.zsh"
-    "rc|r|.zshrc"
     "xdg|x|inc/xdg.zsh"
+)
+
+local -a _fn_examples=(
+    "zconfig -k|Edit keys.zsh using option"
+    "zconfig keys.zsh|Edit by full filename"
+    "zconfig keys|Edit by name without extension"
+    "zconfig key|Edit by partial match"
+    "zconfig zshrc|Edit .zshrc (dotfile without dot)"
 )
 
 local -A opts=() args=()
 _fn_init "$@" || return $REPLY
 
-# Find selected option and its file path
-local selected="" file_path=""
-local spec long_name
+local zsh_dir="${ZDOTDIR:-${XDG_CONFIG_HOME:-$HOME/.config}/zsh}"
+local file_path=""
+
+# Build list of known files from options
+local -a known_files=()
+local -A file_to_path=()
+local spec long_name fpath_entry
+for spec in "${_fn_opts[@]}"; do
+    long_name="${spec%%|*}"
+    [[ "$long_name" == "help" || "$long_name" == "version" ]] && continue
+    fpath_entry="${${spec#*|}#*|}"
+    known_files+=( "$fpath_entry" )
+    file_to_path[$fpath_entry]="$fpath_entry"
+done
+
+# Try to match file argument
+_match_file() {
+    local query="$1"
+    local -a matches=()
+    local f fname fname_noext fname_nodot
+
+    for f in "${known_files[@]}"; do
+        # Get just the filename (without directory)
+        fname="${f:t}"
+        # Name without extension
+        fname_noext="${fname%.zsh}"
+        fname_noext="${fname_noext%.zprofile}"
+        fname_noext="${fname_noext%.zshenv}"
+        fname_noext="${fname_noext%.zshrc}"
+        fname_noext="${fname_noext%.zlogin}"
+        fname_noext="${fname_noext%.zlogout}"
+        # Name without leading dot
+        fname_nodot="${fname#.}"
+
+        # Exact match (full path or filename)
+        if [[ "$query" == "$f" || "$query" == "$fname" ]]; then
+            REPLY="$f"
+            return 0
+        fi
+
+        # Match without extension
+        if [[ "$query" == "$fname_noext" ]]; then
+            matches+=( "$f" )
+            continue
+        fi
+
+        # Match dotfile without dot (e.g., "zshrc" -> ".zshrc")
+        if [[ "$fname" == .* && "$query" == "$fname_nodot" ]]; then
+            matches+=( "$f" )
+            continue
+        fi
+
+        # Partial match (query is substring of filename)
+        if [[ "$fname_noext" == *"$query"* || "$fname_nodot" == *"$query"* ]]; then
+            matches+=( "$f" )
+        fi
+    done
+
+    # Return results
+    if (( ${#matches} == 1 )); then
+        REPLY="${matches[1]}"
+        return 0
+    elif (( ${#matches} > 1 )); then
+        REPLY="${(j:, :)matches}"
+        return 2  # Ambiguous
+    fi
+
+    return 1  # No match
+}
+
+# Check if option was used
+local selected=""
 for spec in "${_fn_opts[@]}"; do
     long_name="${spec%%|*}"
     [[ "$long_name" == "help" || "$long_name" == "version" ]] && continue
@@ -47,19 +134,39 @@ for spec in "${_fn_opts[@]}"; do
             return 1
         fi
         selected=$long_name
-        # Extract file path (3rd field)
         file_path="${${spec#*|}#*|}"
     fi
 done
 
-# No option selected - show help
-if [[ -z "$selected" ]]; then
+# Check if file argument was provided
+if [[ -n "${args[file]}" ]]; then
+    if [[ -n "$selected" ]]; then
+        printe "Cannot use both option and file argument"
+        return 1
+    fi
+
+    _match_file "${args[file]}"
+    local match_status=$?
+
+    if (( match_status == 0 )); then
+        file_path="$REPLY"
+    elif (( match_status == 2 )); then
+        printe "Ambiguous match '${args[file]}': $REPLY"
+        return 1
+    else
+        printe "No matching file for '${args[file]}'"
+        printi "Use ${g}zconfig --help${x} to see available files"
+        return 1
+    fi
+fi
+
+# No option or argument - show help
+if [[ -z "$file_path" ]]; then
     _fn_usage >&2
     return 0
 fi
 
 # Build target path
-local zsh_dir="${ZDOTDIR:-${XDG_CONFIG_HOME:-$HOME/.config}/zsh}"
 local target="$zsh_dir/$file_path"
 
 # Check if file exists

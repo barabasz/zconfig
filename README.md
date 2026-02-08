@@ -2,7 +2,9 @@
 
 **zconfig** is a modern, modular, performance-optimized zsh configuration focused on maintainability and fast startup times. The configuration is split across specialized directories with clear separation of concerns.
 
-For installation instructions, see [INSTALL.md](docs/INSTALL.md).
+👉 For installation instructions, see [INSTALL.md](docs/INSTALL.md).
+
+![zconfig](zconfig.png)
 
 ## Documentation
 

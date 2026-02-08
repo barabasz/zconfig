@@ -15,6 +15,7 @@ export SAVEHIST=10000
 
 # Options
 setopt append_history           # Append to history file
+unsetopt banghist               # Don't add commands to history when they start with '!'
 setopt extended_history         # Save timestamps
 setopt hist_expire_dups_first   # Delete duplicates first when HISTFILE size exceeds HISTSIZE
 setopt hist_ignore_dups         # Ignore consecutive duplicates

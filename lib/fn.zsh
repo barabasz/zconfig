@@ -631,13 +631,6 @@ _fn_usage() {
         _fn_description "${_fn[desc]}"
     fi
 
-    # Requirements
-    if [[ -n "${_fn[required]:-}" ]]; then
-        _fn_section "Requirements"
-        local -a _req_cmds=( ${=_fn[required]} )
-        print "  ${c}${(j:, :)_req_cmds}${x}"
-    fi
-
     # Calculate max width for left column (arguments + options)
     local _max_width=0 _len _label _spec
     local -a _fld=()
@@ -772,6 +765,14 @@ _fn_usage() {
         done
     fi
 
+    # Requirements section
+    if [[ -n "${_fn[required]:-}" ]]; then
+        _fn_section "Requirements"
+        local -a _req_cmds=( ${=_fn[required]} )
+        local _req_str="${(j:, :)_req_cmds}"
+        print "  ${g}${_req_str//, /${x}, ${g}}${x}"
+    fi
+
     # Examples section
     if (( ${+_fn_examples} && ${#_fn_examples} > 0 )); then
         _fn_section "Examples"
@@ -791,30 +792,40 @@ _fn_usage() {
             done
         fi
 
-        local _ex_entry _ex_cmd _ex_desc _ex_cmd_colored _ex_rest _ex_colored_rest _ex_word
-        for _ex_entry in "${_fn_examples[@]}"; do
-            _ex_cmd="${_ex_entry%%|*}"
-            _ex_desc="${_ex_entry#*|}"
-
-            # Color: function name green, options purple, arguments cyan
-            if [[ "$_ex_cmd" == "${name} "* ]]; then
-                _ex_rest="${_ex_cmd#${name} }"
-                # Color each word: options purple, rest cyan
-                _ex_colored_rest=""
-                for _ex_word in ${=_ex_rest}; do
-                    # Purple if: known option OR short option (-x) OR long option (--xxx)
-                    if (( ${+_ex_valid_opts[$_ex_word]} )) || [[ "$_ex_word" == -[^-] ]] || [[ "$_ex_word" == --?* ]]; then
-                        _ex_colored_rest+="${p}${_ex_word}${x} "
-                    else
-                        _ex_colored_rest+="${c}${_ex_word}${x} "
-                    fi
-                done
-                _ex_cmd_colored="${g}${name}${x} ${_ex_colored_rest% }"
-            elif [[ "$_ex_cmd" == "${name}" ]]; then
-                _ex_cmd_colored="${g}${name}${x}"
+        # Helper: color a single word based on its type
+        # Usage: _color_word <word> <is_first> → result in REPLY
+        _color_word() {
+            local word=$1 is_first=${2:-0}
+            if (( is_first )) || [[ "$word" == "${name}" ]]; then
+                REPLY="${g}${word}${x}"
+            elif (( ${+_ex_valid_opts[$word]} )) || [[ "$word" == -[^-] ]] || [[ "$word" == --?* ]]; then
+                REPLY="${p}${word}${x}"
+            elif [[ "$word" == ("|"|"||"|"&&"|"|&"|";"|"&"|"!"|">"*|"<"*|[0-9]">&"*|">&"*) ]]; then
+                REPLY="${word}"
             else
-                _ex_cmd_colored="${c}${_ex_cmd}${x}"
+                REPLY="${c}${word}${x}"
             fi
+        }
+
+        # Helper: color entire example command
+        # Usage: _color_example <cmd> → result in REPLY
+        _color_example() {
+            local cmd=$1 result="" word is_first=1
+            for word in ${=cmd}; do
+                _color_word "$word" "$is_first"
+                result+="${REPLY} "
+                is_first=0
+            done
+            REPLY="${result% }"
+        }
+
+        local _ex_entry _ex_cmd _ex_desc _ex_cmd_colored
+        for _ex_entry in "${_fn_examples[@]}"; do
+            _ex_cmd="${_ex_entry%|*}"
+            _ex_desc="${_ex_entry##*|}"
+
+            _color_example "$_ex_cmd"
+            _ex_cmd_colored="$REPLY"
 
             if [[ "$_ex_desc" == "$_ex_cmd" ]]; then
                 print "  ${_ex_cmd_colored}"

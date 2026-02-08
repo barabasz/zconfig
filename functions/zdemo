@@ -1,0 +1,42 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
+# Zsh demo function to showcase various features of the zsh shell.
+# Use 'zdemo --help' for more information.
+
+local -A _fn=(
+    [info]="Zsh demo function showcasing shell features"
+    [version]="0.2.0"
+    [created]="2025"
+    [modified]="2026-02-08"
+    [license]="MIT"
+    [author]="Andrzej Barabasz"
+)
+
+local -A opts=() args=()
+_fn_init "$@" || return $REPLY
+
+# Print with "--" to prevent options from being misinterpreted
+print -- Hello World! My name is $0 version $ZSH_VERSION
+
+# Print with -P option allows to use prompt sequences for colors and formatting
+print -P -- "Hello World! My name is %F{green}${(C)0#-}%f version %F{yellow}$ZSH_VERSION%f"
+
+# Generate Fibonacci sequence and print it with colors
+typeset -a fib=(0 1); while ((fib[-1]+fib[-2]<=1000000)) { fib+=($((fib[-1]+fib[-2]))) }
+s="Fibonacci sequence:\n"
+for n in $fib; s+="%F{$((16+n%216))}$n%f "
+print -P $s
+
+# Create a colorful sine wave pattern
+zmodload zsh/mathfunc
+typeset -A pos
+integer w=${COLUMNS:-80} h=25
+for ((x=0; x<w; x++)) pos[$x]=$((int(h/2+(h/2-2)*sin(x*0.18))))
+for ((l=0; l<h; l++)) {
+  r=""
+  for ((x=0; x<w; x++)) {
+    ((pos[$x]==l||pos[$x]-1==l)) && \
+      r+="%F{$((16+(x*3)%216))}█%f" || r+=" "
+  }
+  print -P $r
+}
