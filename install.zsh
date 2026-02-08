@@ -500,10 +500,11 @@ install_extra_utils() {
 
     local tools=(
         # Platform-specific (brew on macOS, apt on Linux)
-        "bat:bat:bat"
         "bc:bc:bc"
+        "eza:eza:eza"
         "htop:htop:htop"
         # Brew-only (both systems)
+        "bat:bat:"
         "gh:gh:"
         "fzf:fzf:"
         "zoxide:zoxide:"
@@ -844,6 +845,20 @@ set_default_shell() {
     fi
 }
 
+post_install_fixes() {
+    # Fix permissions for .config directory (common issue on Linux)
+    if [[ -d "$XDG_CONFIG_HOME" ]]; then
+        sudo chown -R "$(whoami)" "$XDG_CONFIG_HOME"
+        print_info "Ensured ownership of ${c}$XDG_CONFIG_HOME${x}"
+    fi
+
+    # Create symlink for bat if batcat exists (common on Debian-based Linux)
+    if is_debian && [[ -x /usr/bin/batcat ]]; then
+        sudo ln -s /usr/bin/batcat /usr/local/bin/bat 2>/dev/null
+        print_info "Created symlink for bat: ${c}bat${x} -> ${c}batcat${x}"
+    fi
+}
+
 # =============================================================================
 # Main installation flow
 # =============================================================================
@@ -878,7 +893,11 @@ main() {
     # Minimize login info on Linux
     minimize_login_info
 
+    # Set default shell to zsh
     set_default_shell
+
+    # Perform any necessary post-installation fixes
+    post_install_fixes
 
     # Success message
     installation_successful
