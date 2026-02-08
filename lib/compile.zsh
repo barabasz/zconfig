@@ -50,11 +50,11 @@ compile_file() {
     (( ARGC == 1 )) || return 2
     [[ -f $1 && $1 == *.zsh ]] || return 1
 
+    # LC_ALL=C prevents locale-related parsing issues with zcompile
     if (( ZSH_DEBUG )); then
-        # Show errors directly (no capture - avoids file descriptor issues)
-        zcompile "$1"
+        LC_ALL=C zcompile "$1"
     else
-        zcompile "$1" 2>/dev/null
+        LC_ALL=C zcompile "$1" 2>/dev/null
     fi
 }
 

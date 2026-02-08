@@ -122,9 +122,9 @@ print_log() {
 print_title() {
     local text="$1"
     local len=$((${#text} + 4))
-    printf "\n${y}$(repeat_char '▁' "$len")\n"
+    printf "${y}$(repeat_char '▁' "$len")\n"
     printf "${y}█ ${w}%s${y} █\n" "$text"
-    printf "$(repeat_char '▔' "$len")${x}\n\n"
+    printf "$(repeat_char '▔' "$len")${x}\n"
     # Log title to file
     {
         echo ""
@@ -1043,4 +1043,3 @@ main() {
 
 # Run main function
 main
-
