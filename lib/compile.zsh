@@ -50,7 +50,9 @@ compile_file() {
     (( ARGC == 1 )) || return 2
     [[ -f $1 && $1 == *.zsh ]] || return 1
 
-    # LC_ALL=C prevents locale-related parsing issues with zcompile
+    # Disable global aliases for this scope (G='| grep' breaks files containing 'G')
+    # LC_ALL=C prevents locale-related parsing issues
+    setopt localoptions noaliases
     if (( ZSH_DEBUG )); then
         LC_ALL=C zcompile "$1"
     else

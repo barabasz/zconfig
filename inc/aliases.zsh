@@ -8,9 +8,6 @@ zfile_track_start ${0:A}
 # Aliases
 ##
 
-# Global
-alias -g G='| grep'
-
 # Common
 alias info='sysinfo && logininfo'
 alias reload="reload_shell"
