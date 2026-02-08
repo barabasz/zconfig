@@ -34,6 +34,7 @@ local -A _fn=(
     [info]="Short description"  # One-liner shown in help header
     [desc]="Full description"   # Shown in Description section
     [notes]="Additional notes"  # Shown in Notes section (after Examples)
+    [required]="yq jq"          # Space-separated list of required commands
     [author]="Author Name"      # Shown in footer with ©
     [created]="2025-01-15"      # Creation date (year used in © range)
     [modified]="2026-02-02"     # Last modified date (shown after version)
@@ -48,6 +49,7 @@ local -A _fn=(
 | `info`     | One-line description (help header)       | `-h/--help` |
 | `desc`     | Multi-line description                   | `-h/--help` |
 | `notes`    | Additional notes (after Examples)        | `-h/--help` |
+| `required` | Space-separated list of required commands | auto-check on init |
 | `author`   | Author name (shown in footer with ©)     | - |
 | `created`  | Creation date YYYY-MM-DD (year for ©)    | - |
 | `modified` | Modified date YYYY-MM-DD (shown in footer) | - |
@@ -362,6 +364,30 @@ fi
 (( ${+opts[quiet]} )) || print "Backup created: ${dst}/${backup_name}"
 ```
 
+## Required Commands
+
+The `required` key specifies external commands that must be available:
+
+```zsh
+local -A _fn=(
+    [info]="Convert JSON to YAML"
+    [required]="yq"              # Single command
+    # or
+    [required]="yq jq curl"      # Multiple commands (space-separated)
+)
+```
+
+If any required command is missing, `_fn_init` will:
+1. Print an error listing the missing commands
+2. Suggest installation command (auto-detects brew or apt)
+3. Return with exit code 1
+
+Example error output:
+```
+❌ Required command not found: yq
+→ Install with: brew install yq
+```
+
 ## Help Output Structure
 
 When `-h/--help` is invoked, the output follows this structure:
@@ -373,6 +399,9 @@ Usage: function_name [options] <required_arg> [optional_arg]
 
 Description
   Full description from _fn[desc]
+
+Requirements                             # Only shown if _fn[required] defined
+  yq, jq
 
 Arguments
   <source>       Source file to backup  [required, string]

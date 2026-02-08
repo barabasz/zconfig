@@ -7,12 +7,13 @@ local -A _fn=(
     [info]="Inspect SSL/TLS certificates using openssl"
     [desc]="Wrapper around openssl to inspect certificates from remote hosts or local files.
             Supports multiple display modes for different certificate information."
-    [version]="0.9.5"
+    [version]="0.9.6"
     [created]="2024-08-15"
-    [modified]="2026-02-02"
+    [modified]="2026-02-08"
     [license]="MIT"
     [author]="Andrzej Barabasz"
-    [notes]="Requires openssl. Display modes are mutually exclusive (default: --most).
+    [required]="openssl"
+    [notes]="Display modes are mutually exclusive (default: --most).
             Port defaults to 443 if not specified."
 )
 
@@ -46,9 +47,6 @@ local -a _fn_examples=(
 
 local -A opts=() args=()
 _fn_init "$@" || return $REPLY
-
-# Dependency check
-(( ${+commands[openssl]} )) || { printe "openssl is required."; return 1 }
 
 # Configuration
 local host port="443"

@@ -7,12 +7,13 @@ local -A _fn=(
     [info]="Query URL and display detailed connection, SSL, and timing information"
     [desc]="Fetches a URL and displays comprehensive information including HTTP status,
             IP geolocation, SSL certificate details, response headers, and timing metrics."
-    [version]="1.0.8"
+    [version]="1.0.9"
     [created]="2023-07-11"
-    [modified]="2026-02-02"
+    [modified]="2026-02-08"
     [license]="MIT"
     [author]="Andrzej Barabasz"
-    [notes]="Requires curl. For IP geolocation, optionally set IPINFO_TOKEN environment variable."
+    [required]="curl"
+    [notes]="For IP geolocation, optionally set IPINFO_TOKEN environment variable."
 )
 
 local -a _fn_args=(
@@ -95,12 +96,6 @@ _urlinfo_fmt_date() {
 }
 
 # --- Main Logic ---
-
-# Check if curl is available
-if ! is_installed curl; then
-    printe "curl not found"
-    return 1
-fi
 
 local url="${args[url]}"
 local -F start_time=$EPOCHREALTIME

@@ -7,11 +7,12 @@ local -A _fn=(
     [info]="Git wrapper for bulk operations on repositories"
     [desc]="Performs git operations (pull, push, status, reset) on all repositories
             located in the ${c}\$GHDIR${x} directory."
-    [version]="0.5.0"
+    [version]="0.5.1"
     [created]="2025"
-    [modified]="2026-02-02"
+    [modified]="2026-02-08"
     [license]="MIT"
     [author]="Andrzej Barabasz"
+    [required]="git"
     [notes]="Requires ${c}\$GHDIR${x} to be set to the parent directory containing your git repositories."
 )
 

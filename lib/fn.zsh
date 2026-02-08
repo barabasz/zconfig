@@ -256,6 +256,42 @@ _fn_type_error() {
     printe "$REPLY" >&2
 }
 
+# _fn_check_required - Check if required commands are available
+# Reads: _fn[required] - space-separated list of required commands
+# Returns: 0 if all available, 1 if any missing (with error message)
+_fn_check_required() {
+    [[ -z "${_fn[required]:-}" ]] && return 0
+
+    local -a required=( ${=_fn[required]} )
+    local -a missing=()
+    local cmd
+
+    for cmd in "${required[@]}"; do
+        command -v "$cmd" &>/dev/null || missing+=( "$cmd" )
+    done
+
+    (( ${#missing} == 0 )) && return 0
+
+    # Build error message
+    local missing_str="${(j:, :)missing}"
+    if (( ${#missing} == 1 )); then
+        printe "Required command not found: ${g}${missing[1]}${x}" >&2
+    else
+        printe "Required commands not found: ${g}${missing_str}${x}" >&2
+    fi
+
+    # Suggest installation
+    local install_hint=""
+    if [[ -f /opt/homebrew/bin/brew || -f /usr/local/bin/brew || -f /home/linuxbrew/.linuxbrew/bin/brew ]]; then
+        install_hint="brew install ${missing_str// /, }"
+    elif [[ -f /etc/debian_version ]]; then
+        install_hint="sudo apt install ${missing_str// /, }"
+    fi
+    [[ -n "$install_hint" ]] && printi "Install with: ${c}${install_hint}${x}" >&2
+
+    return 1
+}
+
 # _fn_has_args - Check if _fn_args is defined and non-empty
 # Returns: 0 if has arguments, 1 otherwise
 _fn_has_args() {
@@ -593,6 +629,13 @@ _fn_usage() {
     if [[ -n "${_fn[desc]}" ]]; then
         _fn_section "Description"
         _fn_description "${_fn[desc]}"
+    fi
+
+    # Requirements
+    if [[ -n "${_fn[required]:-}" ]]; then
+        _fn_section "Requirements"
+        local -a _req_cmds=( ${=_fn[required]} )
+        print "  ${c}${(j:, :)_req_cmds}${x}"
     fi
 
     # Calculate max width for left column (arguments + options)
@@ -947,6 +990,9 @@ _fn_init() {
     # Validate definitions before processing
     _fn_validate_args || { REPLY=3; return 3; }
     _fn_validate_opts || { REPLY=3; return 3; }
+
+    # Check required commands
+    _fn_check_required || { REPLY=1; return 1; }
 
     local -A parsed_opts=()
     local -a remaining_args=()

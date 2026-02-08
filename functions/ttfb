@@ -7,12 +7,13 @@ local -A _fn=(
     [info]="Measure Time To First Byte (TTFB) for a URL"
     [desc]="Measures how long it takes to receive the first byte from a server.
             Useful for testing server response time and latency."
-    [version]="0.5.0"
+    [version]="0.5.1"
     [created]="2024-03-10"
-    [modified]="2026-02-02"
+    [modified]="2026-02-08"
     [license]="MIT"
     [author]="Andrzej Barabasz"
-    [notes]="Requires curl. Protocol (https://) is added automatically if missing."
+    [required]="curl"
+    [notes]="Protocol (https://) is added automatically if missing."
 )
 
 local -a _fn_args=(
@@ -26,9 +27,6 @@ local -a _fn_examples=(
 
 local -A opts=() args=()
 _fn_init "$@" || return $REPLY
-
-# Dependency check
-(( ${+commands[curl]} )) || { printe "curl is required."; return 1 }
 
 local url="${args[url]}"
 

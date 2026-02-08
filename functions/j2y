@@ -7,12 +7,12 @@ local -A _fn=(
     [info]="Convert JSON to YAML"
     [desc]="Converts JSON input to YAML format using yq. Input can be a file or stdin.
             Output goes to stdout by default, or to a specified file."
-    [version]="0.1.1"
+    [version]="0.2.0"
     [created]="2026-02-05"
-    [modified]="2026-02-05"
+    [modified]="2026-02-08"
     [license]="MIT"
     [author]="Andrzej Barabasz"
-    [notes]="Requires yq (https://github.com/mikefarah/yq)."
+    [required]="yq"
 )
 
 local -a _fn_args=(
@@ -33,13 +33,6 @@ local -a _fn_examples=(
 
 local -A opts=() args=()
 _fn_init "$@" || return $REPLY
-
-# Check if yq is available
-if ! is_installed yq; then
-    printe "yq is required but not installed"
-    printi "Install with: ${g}brew install yq${x}"
-    return 1
-fi
 
 local input=${args[input]:-"-"}
 local output=${args[output]:-""}

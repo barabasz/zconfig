@@ -7,13 +7,14 @@ local -A _fn=(
     [info]="Query multiple DNS servers and display results in a table"
     [desc]="Queries a domain against multiple DNS servers simultaneously and displays
             results sorted by response time with color-coded timing."
-    [version]="0.5.0"
+    [version]="0.5.1"
     [created]="2025"
-    [modified]="2026-02-02"
+    [modified]="2026-02-08"
     [license]="MIT"
     [author]="Andrzej Barabasz"
-    [notes]="Requires dig command. Override default servers by setting MDIG_SERVERS
-            associative array (e.g., MDIG_SERVERS=(Google 8.8.8.8 CloudFlare 1.1.1.1))."
+    [required]="dig"
+    [notes]="Override default servers by setting MDIG_SERVERS associative array
+            (e.g., MDIG_SERVERS=(Google 8.8.8.8 CloudFlare 1.1.1.1))."
 )
 
 local -a _fn_args=(
@@ -29,12 +30,6 @@ local -A opts=() args=()
 _fn_init "$@" || return $REPLY
 
 local domain=${args[domain]}
-
-# Check if dig is available
-if ! whence dig >/dev/null 2>&1; then
-    printe "dig not found in PATH"
-    return 1
-fi
 
 # DNS servers configuration (name=ip)
 local -A dns_servers
