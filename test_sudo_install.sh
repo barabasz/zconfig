@@ -3,7 +3,8 @@
 # Usage: /bin/bash -c "$(curl -fsSL URL)"
 # NOTE: Do NOT use "curl | bash" - stdin must be free for password prompts!
 
-echo "=== Test: sudo installation ==="
+VERSION="0.0.4"
+echo "=== Test: sudo installation (v$VERSION) ==="
 
 # Check if sudo exists
 if command -v sudo &>/dev/null; then
@@ -17,11 +18,11 @@ echo "sudo not found. Installing..."
 USERNAME=$(whoami)
 echo "User: $USERNAME"
 
-# Install sudo (LC_ALL=C and redirections must be INSIDE su -c)
+# Install sudo (redirections INSIDE su -c command)
 echo ""
 echo "Step 1: Installing sudo package"
 echo -n "Enter ROOT password: "
-if su -c "LC_ALL=C apt-get update -qq && LC_ALL=C apt-get install -y -qq sudo" >/dev/null 2>&1; then
+if su -c "LC_ALL=C apt-get update -qq >/dev/null 2>&1 && LC_ALL=C apt-get install -y -qq sudo >/dev/null 2>&1"; then
     echo ""
     echo "✓ sudo package installed"
 else
@@ -35,7 +36,7 @@ echo ""
 echo "Step 2: Configuring sudoers"
 echo -n "Enter ROOT password: "
 SUDOERS_LINE="$USERNAME ALL=(ALL:ALL) ALL"
-if su -c "echo '$SUDOERS_LINE' | EDITOR='tee -a' visudo" >/dev/null 2>&1; then
+if su -c "echo '$SUDOERS_LINE' | EDITOR='tee -a' visudo >/dev/null 2>&1"; then
     echo ""
     echo "✓ User added to sudoers"
 else
