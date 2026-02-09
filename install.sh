@@ -23,7 +23,7 @@
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.8.1"
+SCRIPT_VERSION="0.8.2"
 SCRIPT_DATE="2026-02-09"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
@@ -697,6 +697,7 @@ install_extra_utils() {
         "zoxide:zoxide:"
         "yazi:yazi:"
         "kitty-terminfo::kitty-terminfo"
+        "tmux:tmux:tmux"
     )
     install_utils "Installing utilities" "${utils[@]}"
 }
