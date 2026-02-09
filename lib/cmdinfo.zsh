@@ -87,6 +87,78 @@ get_cmd_path() {
 }
 
 # =============================================================================
+# get_func_size - Get size of function definition in bytes
+# =============================================================================
+# Usage: get_func_size <function_name>
+# Returns: size in bytes (calculated from function body)
+# Sets: $REPLY with the result
+get_func_size() {
+    local cmd="$1"
+    
+    # Check if function exists in memory
+    if (( ${+functions[$cmd]} )); then
+        local func_body="${functions[$cmd]}"
+        
+        # Calculate size in bytes.
+        # Note: ${#func_body} returns character count. For strict byte count
+        # (considering multibyte chars), we use wc -c via a pipe.
+        REPLY=$(print -rn -- "$func_body" | wc -c | tr -d '[:space:]')
+        
+        print -r -- "$REPLY"
+        return 0
+    fi
+
+    REPLY=0
+    print -r -- "$REPLY"
+    return 1
+}
+
+# =============================================================================
+# get_cmd_size - Get size of the command target in bytes
+# =============================================================================
+# Usage: get_cmd_size <command>
+# Returns: size in bytes (file size for binaries, code size for functions)
+# Sets: $REPLY with the result
+# Dependencies: get_cmd_path, get_file_size, get_func_size
+get_cmd_size() {
+    local cmd="$1"
+    [[ -z "$cmd" ]] && { REPLY=0; return 1; }
+
+    # Resolve alias to actual command name first (needed for function lookup)
+    local real_cmd="$cmd"
+    if (( ${+aliases[$cmd]} )); then
+        real_cmd="${aliases[$cmd]%% *}"
+    fi
+
+    # Use existing helper to resolve path or type
+    # We suppress stdout because get_cmd_path prints the result,
+    # but we only need the value set in $REPLY.
+    get_cmd_path "$cmd" >/dev/null
+    local target="$REPLY"
+
+    # Case 1: Target is a file (binary, script, or function source file)
+    # get_cmd_path returns the absolute path if found.
+    if [[ -n "$target" && -f "$target" ]]; then
+        # Use the external/global get_file_size function
+        get_file_size "$target"
+        return $?
+    fi
+
+    # Case 2: Target is a function loaded in memory without a tracked source file
+    # (get_cmd_path returned "function")
+    if [[ "$target" == "function" ]]; then
+        get_func_size "$real_cmd"
+        return $?
+    fi
+
+    # Case 3: Builtins, aliases (that don't resolve to files), reserved words
+    # These effectively have 0 size in this context.
+    REPLY=0
+    print -r -- "$REPLY"
+    return 1
+}
+
+# =============================================================================
 # get_cmd_version - Get command version number
 # =============================================================================
 # Usage: get_cmd_version <command> [version_flag]
@@ -157,6 +229,39 @@ get_cmd_version() {
     REPLY="${version:-unknown}"
     print -r -- "$REPLY"
     [[ -n "$version" ]] && return 0 || return 1
+}
+
+# =============================================================================
+# get_cmd_manpath - Get path to the manual page file
+# =============================================================================
+# Usage: get_cmd_manpath <command>
+# Returns: path to the man page file (e.g., /usr/share/man/man1/ls.1.gz)
+# Sets: $REPLY with the result
+get_cmd_manpath() {
+    local cmd="$1"
+    [[ -z "$cmd" ]] && { REPLY=""; return 1; }
+
+    # Resolve alias to actual command
+    local real_cmd="$cmd"
+    if (( ${+aliases[$cmd]} )); then
+        real_cmd="${aliases[$cmd]%% *}"
+    fi
+
+    # Use 'man -w' to locate the file.
+    # This works on both Linux (man-db) and macOS (mandoc).
+    # We redirect stderr to suppress "No manual entry for..." messages.
+    local man_path
+    man_path=$(man -w "$real_cmd" 2>/dev/null)
+
+    if [[ -n "$man_path" && -f "$man_path" ]]; then
+        REPLY="$man_path"
+        print -r -- "$REPLY"
+        return 0
+    fi
+
+    # Fallback/Fail
+    REPLY=""
+    return 1
 }
 
 # =============================================================================
