@@ -7,26 +7,23 @@
 # This script installs zconfig by:
 # 1. Checking system requirements (macOS or Debian-based Linux)
 # 2. Installing sudo and updating system packages (Linux only)
-# 3. Installing core utilities: curl, unzip, coreutils (Linux only)
-# 4. Installing git (required before Homebrew)
+# 3. Installing core utilities: unzip, coreutils (Linux only)
+# 4. Installing git (xcode-select on macOS, apt on Linux)
 # 5. Installing Homebrew (if not present)
-# 6. Installing extra utilities: bat, eza, htop, gh, fzf, zoxide, yazi
-# 7. Installing zsh
-# 8. Installing oh-my-posh prompt theme engine
-# 9. Installing kitty-terminfo (Linux only)
-# 10. Checking for uncommitted changes (ALWAYS prompts if found, even in unattended mode)
-# 11. Backing up or removing existing zsh configuration
-# 12. Cloning the zconfig repository to ~/.config/zsh
-# 13. Creating symlink ~/.zshenv -> ~/.config/zsh/.zshenv
-# 14. Minimizing login info: .hushlogin, MOTD scripts (Linux only)
-# 15. Setting zsh as default shell
-# 16. Starting zsh with new configuration
+# 6. Installing utilities: zsh, bat, eza, htop, gh, fzf, zoxide, yazi, kitty-terminfo
+# 7. Installing oh-my-posh prompt theme engine
+# 8. Handling existing installation (backup/remove)
+# 9. Cloning the zconfig repository to ~/.config/zsh
+# 10. Creating symlink ~/.zshenv -> ~/.config/zsh/.zshenv
+# 11. Minimizing login info: .hushlogin, MOTD scripts (Linux only)
+# 12. Setting zsh as default shell
+# 13. Starting zsh with new configuration
 
 # =============================================================================
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.7.4"
+SCRIPT_VERSION="0.8.0"
 SCRIPT_DATE="2026-02-09"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
@@ -48,8 +45,8 @@ mkdir -p $XDG_CONFIG_HOME $XDG_CACHE_HOME $XDG_BIN_HOME $XDG_LIB_HOME $XDG_TMP_H
 LOGFILE="$XDG_TMP_HOME/zconfig_$(date +%Y%m%d_%H%M%S).log"
 
 # Step counter - UPDATE THIS when adding/removing installation steps!
-# macOS: 11 steps, Linux: 16 steps (set dynamically after OS detection)
-TOTAL_STEPS=11
+# macOS: 10 steps, Linux: 14 steps (set dynamically after OS detection)
+TOTAL_STEPS=10
 STEP_NUM=0
 
 URL_HOMEBREW="https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh"
@@ -216,7 +213,7 @@ detect_os() {
                 . /etc/os-release
                 if [[ "$ID" == "debian" || "$ID_LIKE" == *"debian"* ]]; then
                     OS_TYPE="debian"
-                    TOTAL_STEPS=16  # Linux has additional steps
+                    TOTAL_STEPS=14  # Linux has additional steps
                 else
                     OS_TYPE="linux-other"
                 fi
@@ -428,56 +425,118 @@ spin() {
 track_install() { INSTALLED+=("$1"); }
 track_skip()    { SKIPPED+=("$1"); }
 
-# Generic package installer
-# Usage: install_pkg <cmd> <name> <brew_pkg> <apt_pkg> [critical=1]
-# - cmd: command to check if already installed
-# - name: display name
-# - brew_pkg: Homebrew package name (empty = not available via brew)
-# - apt_pkg: apt package name (empty = not available via apt)
-# - critical: 1 = fail on error (default), 0 = warn and continue
-install_pkg() {
-    local cmd="$1" name="$2" brew_pkg="$3" apt_pkg="$4" critical="${5:-1}"
+# =============================================================================
+# install_utils - Universal package installer
+# =============================================================================
+# Usage: install_utils "Header" tool1 tool2 ...
+# Format: "command:brew_package:apt_package[:critical]"
+#   - command: command name to check if already installed
+#   - brew_package: Homebrew package name (empty = apt-only, skipped on macOS)
+#   - apt_package: apt package name (empty = brew-only)
+#   - critical: 1 = fail on error, 0 = warn and continue (default: 0)
+#
+# Examples:
+#   "bat:bat:bat"              # Both brew and apt
+#   "gh:gh:"                   # Brew-only
+#   "unzip::unzip"             # Apt-only (Linux)
+#   "zsh:zsh:zsh:1"            # Critical (fail if can't install)
+#   "kitty-terminfo::kitty-terminfo"  # Apt-only, no command (check via dpkg)
+# =============================================================================
+install_utils() {
+    local header="$1"
+    shift
+    local tools=("$@")
 
-    print_header "Installing $name"
+    print_header "$header"
 
-    # Check if already installed
-    if cmd_exists "$cmd"; then
-        print_success "${g}$name${x} is available$(fmt_version "$cmd")"
-        track_skip "$name"
-        return 0
-    fi
+    local missing_brew=()
+    local missing_apt=()
+    local critical_tools=()
+    local cmd brew_pkg apt_pkg critical
 
-    print_warning "${g}$name${x} is not installed"
+    # Phase 1: Check what's missing
+    for tool in "${tools[@]}"; do
+        # Parse format: command:brew_package:apt_package[:critical]
+        IFS=':' read -r cmd brew_pkg apt_pkg critical <<< "$tool"
+        critical="${critical:-0}"
 
-    local success=0
-
-    if [[ "$OS_TYPE" == "macos" ]]; then
-        # macOS: use brew
-        if [[ -n "$brew_pkg" ]] && cmd_exists brew; then
-            spin "Installing $name via Homebrew..." brew install "$brew_pkg" && success=1
+        # Skip if already installed (check command)
+        if cmd_exists "$cmd"; then
+            track_skip "$cmd"
+            continue
         fi
-    else
-        # Linux: prefer apt, fallback to brew
-        if [[ -n "$apt_pkg" ]]; then
-            spin "Installing $name via apt..." apt_install "$apt_pkg" && success=1
-        elif [[ -n "$brew_pkg" ]] && cmd_exists brew; then
-            spin "Installing $name via Homebrew..." brew install "$brew_pkg" && success=1
+
+        # For apt-only packages without a command, check via dpkg
+        if [[ "$OS_TYPE" != "macos" && -n "$apt_pkg" && -z "$brew_pkg" ]]; then
+            if dpkg -l "$apt_pkg" &>/dev/null 2>&1; then
+                track_skip "$apt_pkg"
+                continue
+            fi
         fi
-    fi
 
-    if (( success )); then
-        print_success "${g}$name${x} installed$(fmt_version "$cmd")"
-        track_install "$name"
+        # Track critical tools
+        (( critical )) && critical_tools+=("$cmd")
+
+        # Determine installation method
+        if [[ "$OS_TYPE" == "macos" ]]; then
+            # macOS: use brew (skip if brew_pkg is empty = apt-only)
+            if [[ -n "$brew_pkg" ]]; then
+                [[ ! " ${missing_brew[*]} " =~ " ${brew_pkg} " ]] && missing_brew+=("$brew_pkg:$cmd")
+            fi
+        else
+            # Linux: prefer apt if available, otherwise brew
+            if [[ -n "$apt_pkg" ]]; then
+                [[ ! " ${missing_apt[*]} " =~ " ${apt_pkg} " ]] && missing_apt+=("$apt_pkg:$cmd")
+            elif [[ -n "$brew_pkg" ]]; then
+                [[ ! " ${missing_brew[*]} " =~ " ${brew_pkg} " ]] && missing_brew+=("$brew_pkg:$cmd")
+            fi
+        fi
+    done
+
+    # Nothing to install
+    if [[ ${#missing_brew[@]} -eq 0 && ${#missing_apt[@]} -eq 0 ]]; then
+        print_success "All utilities available"
         return 0
     fi
 
-    if (( critical )); then
-        print_error "Failed to install ${g}$name${x}"
-        return 1
-    else
-        print_warning "Failed to install ${g}$name${x} (non-critical)"
-        return 0
-    fi
+    local failed=()
+    local pkg pkg_name cmd_name
+
+    # Phase 2: Install via apt (Linux only)
+    for pkg in "${missing_apt[@]}"; do
+        pkg_name="${pkg%%:*}"
+        cmd_name="${pkg#*:}"
+        if spin "Installing ${g}$pkg_name${x} via apt..." apt_install "$pkg_name"; then
+            print_success "Installed ${g}$pkg_name${x}$(fmt_apt_version "$pkg_name")"
+            track_install "$pkg_name"
+        else
+            print_warning "Failed to install ${g}$pkg_name${x}"
+            failed+=("$cmd_name")
+        fi
+    done
+
+    # Phase 3: Install via brew
+    for pkg in "${missing_brew[@]}"; do
+        pkg_name="${pkg%%:*}"
+        cmd_name="${pkg#*:}"
+        if spin "Installing ${g}$pkg_name${x} via brew..." brew install "$pkg_name"; then
+            print_success "Installed ${g}$pkg_name${x}$(fmt_version "$cmd_name")"
+            track_install "$pkg_name"
+        else
+            print_warning "Failed to install ${g}$pkg_name${x}"
+            failed+=("$cmd_name")
+        fi
+    done
+
+    # Phase 4: Check if any critical tool failed
+    for cmd in "${critical_tools[@]}"; do
+        if [[ " ${failed[*]} " =~ " ${cmd} " ]]; then
+            print_error "Critical package ${g}$cmd${x} failed to install"
+            return 1
+        fi
+    done
+
+    return 0
 }
 
 # Print installation header
@@ -611,145 +670,36 @@ update_system() {
 }
 
 install_git() {
-    install_pkg git Git git git 1
-}
+    print_header "Installing git"
 
-install_zsh() {
-    install_pkg zsh Zsh zsh zsh 1
-}
-
-install_core_utils() {
-    is_debian || return 0
-
-    print_header "Installing core utilities"
-
-    # Tools and their packages (command:package)
-    local tools=(
-        "curl:curl"
-        "unzip:unzip"
-        "realpath:coreutils"
-        "dirname:coreutils"
-    )
-
-    local missing=()
-    local cmd pkg
-
-    for tool in "${tools[@]}"; do
-        cmd="${tool%%:*}"
-        pkg="${tool##*:}"
-        if cmd_exists "$cmd"; then
-            track_skip "$cmd"
-        else
-            print_warning "${g}$cmd${x} is not available"
-            # Add package if not already in list
-            [[ ! " ${missing[*]} " =~ " ${pkg} " ]] && missing+=("$pkg")
-        fi
-    done
-
-    if [[ ${#missing[@]} -eq 0 ]]; then
-        print_success "All core utilities available"
+    if cmd_exists git; then
+        print_success "${g}git${x} is available$(fmt_version git)"
+        track_skip "git"
         return 0
     fi
 
-    if spin "Installing ${missing[*]}..." apt_install "${missing[@]}"; then
-        print_success "Core utilities installed"
-        for pkg in "${missing[@]}"; do
-            track_install "$pkg"
-        done
-    else
-        print_error "Failed to install core utilities"
+    print_warning "${g}git${x} is not installed"
+
+    if [[ "$OS_TYPE" == "macos" ]]; then
+        # macOS: git comes with Xcode Command Line Tools
+        print_info "On macOS, git is installed with Xcode Command Line Tools"
+        print_info "Run: ${g}xcode-select --install${x}"
+        if confirm "Install Xcode Command Line Tools now?"; then
+            xcode-select --install 2>/dev/null
+            print_info "Follow the dialog to complete installation, then re-run this script"
+        fi
         return 1
-    fi
-}
-
-install_extra_utils() {
-    print_header "Installing extra utilities"
-
-    # -------------------------------------------------------------------------
-    # Tool definitions - easy to extend
-    # Format: "command:brew_package:apt_package"
-    # - If apt_package is empty, tool is brew-only
-    # -------------------------------------------------------------------------
-
-    local tools=(
-        # Platform-specific (brew on macOS, apt on Linux)
-        "bat:bat:bat"
-        "eza:eza:eza"
-        "htop:htop:htop"
-        # Brew-only (both systems)
-        "ncurses:ncurses:"
-        "gh:gh:"
-        "fzf:fzf:"
-        "tldr:tldr:"
-        "zoxide:zoxide:"
-        "yazi:yazi:"
-    )
-
-    # -------------------------------------------------------------------------
-
-    local missing_brew=()
-    local missing_apt=()
-    local cmd brew_pkg apt_pkg
-
-    for tool in "${tools[@]}"; do
-        cmd="${tool%%:*}"
-        local rest="${tool#*:}"
-        brew_pkg="${rest%%:*}"
-        apt_pkg="${rest#*:}"
-
-        # Skip if already installed
-        if cmd_exists "$cmd"; then
-            track_skip "$cmd"
-            continue
-        fi
-
-        # Determine installation method
-        if [[ "$OS_TYPE" == "macos" ]]; then
-            # macOS: always use brew
-            [[ ! " ${missing_brew[*]} " =~ " ${brew_pkg} " ]] && missing_brew+=("$brew_pkg")
+    else
+        # Linux: install via apt
+        if spin "Installing git via apt..." apt_install git; then
+            print_success "${g}git${x} installed$(fmt_version git)"
+            track_install "git"
+            return 0
         else
-            # Linux: prefer apt if available, otherwise brew
-            if [[ -n "$apt_pkg" ]]; then
-                [[ ! " ${missing_apt[*]} " =~ " ${apt_pkg} " ]] && missing_apt+=("$apt_pkg")
-            else
-                [[ ! " ${missing_brew[*]} " =~ " ${brew_pkg} " ]] && missing_brew+=("$brew_pkg")
-            fi
+            print_error "Failed to install ${g}git${x}"
+            return 1
         fi
-    done
-
-    # Nothing to install
-    if [[ ${#missing_brew[@]} -eq 0 && ${#missing_apt[@]} -eq 0 ]]; then
-        print_success "All extra utilities available"
-        return 0
     fi
-
-    # Install via apt (Linux only) - one by one for better feedback
-    if [[ ${#missing_apt[@]} -gt 0 ]]; then
-        local pkg
-        for pkg in "${missing_apt[@]}"; do
-            if spin "Installing ${g}$pkg${x} via apt..." apt_install "$pkg"; then
-                print_success "Installed ${g}$pkg${x}$(fmt_version "$pkg")"
-                track_install "$pkg"
-            else
-                print_warning "Failed to install ${g}$pkg${x} (non-critical)"
-            fi
-        done
-    fi
-
-    # Install via brew - one by one for better feedback
-    if [[ ${#missing_brew[@]} -gt 0 ]]; then
-        local pkg
-        for pkg in "${missing_brew[@]}"; do
-            if spin "Installing ${g}$pkg${x} via brew..." brew install "$pkg"; then
-                print_success "Installed ${g}$pkg${x}$(fmt_version "$pkg")"
-                track_install "$pkg"
-            else
-                print_warning "Failed to install ${g}$pkg${x} (non-critical)"
-            fi
-        done
-    fi
-
-    return 0
 }
 
 install_omp() {
@@ -784,27 +734,6 @@ install_omp() {
         print_warning "Failed to install ${g}oh-my-posh${x} (non-critical)"
         return 0
     fi
-}
-
-install_kitty_terminfo() {
-    is_debian || return 0
-
-    print_header "Installing kitty-terminfo"
-
-    # Check if already installed
-    if dpkg -l kitty-terminfo &>/dev/null 2>&1; then
-        print_success "${g}kitty-terminfo${x} is available$(fmt_apt_version kitty-terminfo)"
-        track_skip "kitty-terminfo"
-        return 0
-    fi
-
-    if spin "Installing kitty-terminfo..." apt_install kitty-terminfo; then
-        print_success "${g}kitty-terminfo${x} installed$(fmt_apt_version kitty-terminfo)"
-        track_install "kitty-terminfo"
-    else
-        print_warning "Could not install ${g}kitty-terminfo${x} (non-critical)"
-    fi
-    return 0
 }
 
 minimize_login_info() {
@@ -1087,15 +1016,35 @@ main() {
     install_sudo || return 1
     init_sudo || return 1             # Get sudo password (used for all subsequent operations)
     update_system
-    install_core_utils || return 1
+
+    # Core utilities (Linux only, required before git/homebrew)
+    if is_debian; then
+        install_utils "Installing core utilities" \
+            "unzip::unzip:1" \
+            "realpath::coreutils:1" \
+            "dirname::coreutils:1" || return 1
+    fi
+
+    # Special installations (dedicated installers)
     install_git || return 1           # git required before Homebrew
     install_homebrew || return 1
-    install_extra_utils
-    install_zsh || return 1
-    install_omp
 
-    # Optional installs for Linux
-    install_kitty_terminfo
+    # All utilities via unified installer
+    # Format: "command:brew_package:apt_package[:critical]"
+    install_utils "Installing utilities" \
+        "zsh:zsh:zsh:1" \
+        "bat:bat:bat" \
+        "eza:eza:eza" \
+        "htop:htop:htop" \
+        "ncurses:ncurses:" \
+        "gh:gh:" \
+        "fzf:fzf:" \
+        "tldr:tldr:" \
+        "zoxide:zoxide:" \
+        "yazi:yazi:" \
+        "kitty-terminfo::kitty-terminfo" || return 1
+
+    install_omp
 
     # Handle existing installation
     handle_existing || return 1
