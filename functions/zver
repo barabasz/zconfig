@@ -8,7 +8,7 @@ local -A _fn=(
     [desc]="Extracts version number from a command's version output. Automatically
             tries --version, -v, and -V flags if no version command is specified.
             Returns just the version number (e.g., '3.12.0'), nothing else."
-    [version]="1.0.0"
+    [version]="1.1.0"
     [created]="2026"
     [modified]="2026-02-09"
     [license]="MIT"
@@ -36,15 +36,22 @@ local cmd="${args[command]}"
 local vercmd="${args[vercmd]}"
 local output="" version=""
 
+# Resolve aliases to get the actual command
+local real_cmd="$cmd"
+if (( ${+aliases[$cmd]} )); then
+    # Extract first word from alias definition (the actual command)
+    real_cmd="${aliases[$cmd]%% *}"
+fi
+
+# Get binary path using whence -p (ignores aliases/functions)
+local cmd_path
+cmd_path=$(whence -p "$real_cmd" 2>/dev/null)
+
 # Check if command exists
-if ! command -v "$cmd" &>/dev/null; then
+if [[ -z "$cmd_path" || ! -x "$cmd_path" ]]; then
     print "unknown"
     return 1
 fi
-
-# Get command path (resolve aliases if needed)
-local cmd_path
-cmd_path=$(command -v "$cmd" 2>/dev/null)
 
 # If explicit version command provided, use it
 if [[ -n "$vercmd" ]]; then

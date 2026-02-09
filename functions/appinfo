@@ -8,7 +8,7 @@ local -A _fn=(
     [desc]="Displays version number and location for executables, or type information
             for aliases, functions, builtins, and keywords. Uses zver for version
             extraction and zwhere for location."
-    [version]="1.0.0"
+    [version]="1.1.0"
     [created]="2026"
     [modified]="2026-02-09"
     [license]="MIT"
@@ -61,8 +61,25 @@ case "$cmd_type" in
         print "${g}${appname}${x} ${y}${ver:-unknown}${x} is installed in ${c}${cmd_path}${x}"
         ;;
     alias)
+        # Resolve alias to get the actual command
         local definition="${aliases[$cmd]}"
-        print "${g}${cmd}${x} is an alias for ${p}${definition}${x}"
+        local real_cmd="${definition%% *}"  # First word is the actual command
+
+        # Get version and path of the underlying command
+        local ver cmd_path
+        if [[ -n "$vercmd" ]]; then
+            ver=$(zver "$real_cmd" "$vercmd")
+        else
+            ver=$(zver "$real_cmd")
+        fi
+        cmd_path=$(whence -p "$real_cmd" 2>/dev/null)
+
+        if [[ -n "$cmd_path" && -x "$cmd_path" ]]; then
+            print "${g}${appname}${x} ${y}${ver:-unknown}${x} is installed in ${c}${cmd_path}${x}"
+        else
+            # Fallback: just show alias definition
+            print "${g}${cmd}${x} is an alias for ${p}${definition}${x}"
+        fi
         ;;
     function)
         # Try to get version from fn.zsh-based functions
