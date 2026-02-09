@@ -26,7 +26,7 @@
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.5.3"
+SCRIPT_VERSION="0.5.4"
 SCRIPT_DATE="2026-02-09"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
@@ -140,9 +140,6 @@ print_title() {
 # █ 2/9: git setup (elapsed: 00:03)
 # ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
 print_header() {
-    # Refresh sudo credentials to prevent timeout during long operations
-    sudo -v 2>/dev/null || true
-
     ((STEP_NUM++))
     local elapsed
     elapsed=$(get_elapsed_time)
