@@ -3,7 +3,7 @@
 # Usage: /bin/bash -c "$(curl -fsSL URL)"
 # NOTE: Do NOT use "curl | bash" - stdin must be free for password prompts!
 
-VERSION="0.4.0"
+VERSION="0.5.0"
 LOGFILE="/tmp/test_install_$$.log"
 
 echo "=== Complete Installation Test (v$VERSION) ==="
@@ -15,40 +15,46 @@ USERNAME=$(whoami)
 echo "User: $USERNAME"
 
 # =============================================================================
-# Diagnostic function - check sudo status
+# Sudo wrapper - uses stored password via sudo -S
+# This approach is used by many professional installers
 # =============================================================================
-check_sudo_status() {
-    local label="$1"
-    echo -n "  [DEBUG $label] sudo -n -v: "
-    if sudo -n -v 2>/dev/null; then
-        echo "OK (cached)"
-    else
-        echo "FAILED (not cached)"
+SUDO_PASS=""
+
+# Ask for password once and validate it
+init_sudo() {
+    if command -v sudo &>/dev/null; then
+        echo ""
+        echo "Sudo password required (will be asked only once):"
+        read -s -p "[sudo] password for $USERNAME: " SUDO_PASS
+        echo ""
+
+        # Validate password
+        if echo "$SUDO_PASS" | sudo -S -v 2>/dev/null; then
+            echo "✓ Sudo password verified"
+            return 0
+        else
+            echo "✗ Invalid password"
+            return 1
+        fi
     fi
 }
 
-# =============================================================================
-# Sudo keepalive - refresh credentials every 30 seconds in background
-# =============================================================================
-start_sudo_keepalive() {
-    echo ""
-    echo "Starting sudo keepalive (will refresh every 30s)..."
-    (
-        while true; do
-            sudo -n -v 2>/dev/null
-            sleep 30
-        done
-    ) &
-    SUDO_KEEPALIVE_PID=$!
-    echo "✓ Sudo keepalive started (PID: $SUDO_KEEPALIVE_PID)"
+# Run command with sudo using stored password
+do_sudo() {
+    echo "$SUDO_PASS" | sudo -S "$@" 2>/dev/null
 }
 
-stop_sudo_keepalive() {
-    if [[ -n "$SUDO_KEEPALIVE_PID" ]]; then
-        kill "$SUDO_KEEPALIVE_PID" 2>/dev/null
-        wait "$SUDO_KEEPALIVE_PID" 2>/dev/null
-        echo "✓ Sudo keepalive stopped"
-    fi
+# Silent apt-get with sudo
+apt_install() {
+    echo "$SUDO_PASS" | sudo -S DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$@" >> "$LOGFILE" 2>&1
+}
+
+apt_update() {
+    echo "$SUDO_PASS" | sudo -S DEBIAN_FRONTEND=noninteractive apt-get update -qq >> "$LOGFILE" 2>&1
+}
+
+apt_upgrade() {
+    echo "$SUDO_PASS" | sudo -S DEBIAN_FRONTEND=noninteractive apt-get upgrade -y -qq >> "$LOGFILE" 2>&1
 }
 
 # =============================================================================
@@ -69,7 +75,7 @@ else
 
     if su -c "LC_ALL=C apt-get update -qq >/dev/null 2>&1 && LC_ALL=C apt-get install -y -qq sudo >/dev/null 2>&1 && printf '%s\n' '$SUDOERS_LINE' '$SUDOERS_TIMEOUT' >> /etc/sudoers"; then
         echo ""
-        echo "✓ sudo installed (with timestamp_timeout=30)"
+        echo "✓ sudo installed"
     else
         echo ""
         echo "✗ Failed to install sudo"
@@ -78,20 +84,13 @@ else
 fi
 
 # =============================================================================
-# Step 2: First sudo usage (will prompt for password, then cache for 30 min)
+# Step 2: Get sudo password (will be used for all subsequent operations)
 # =============================================================================
 echo ""
-echo "Step 2: Activating sudo (this will ask for password once)"
+echo "Step 2: Initializing sudo"
 
-if sudo -v; then
-    echo "✓ sudo activated"
-    check_sudo_status "after activation"
-    # Start keepalive to prevent timeout during long operations
-    start_sudo_keepalive
-    sleep 1
-    check_sudo_status "after keepalive start"
-else
-    echo "✗ sudo activation failed"
+if ! init_sudo; then
+    echo "✗ Failed to initialize sudo"
     exit 1
 fi
 
@@ -102,14 +101,14 @@ echo ""
 echo "Step 3: Updating system packages"
 
 echo "Updating package lists..."
-if sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq >> "$LOGFILE" 2>&1; then
+if apt_update; then
     echo "✓ Package lists updated"
 else
     echo "✗ Failed to update package lists"
 fi
 
 echo "Upgrading packages..."
-if sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -y -qq >> "$LOGFILE" 2>&1; then
+if apt_upgrade; then
     echo "✓ Packages upgraded"
 else
     echo "! Package upgrade had issues (continuing)"
@@ -126,7 +125,7 @@ for pkg in curl unzip coreutils; do
         echo "✓ $pkg already installed"
     else
         echo "Installing $pkg..."
-        if sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$pkg" >> "$LOGFILE" 2>&1; then
+        if apt_install "$pkg"; then
             echo "✓ $pkg installed"
         else
             echo "✗ Failed to install $pkg"
@@ -144,7 +143,7 @@ if command -v git &>/dev/null; then
     echo "✓ git is already installed"
 else
     echo "Installing git..."
-    if sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git >> "$LOGFILE" 2>&1; then
+    if apt_install git; then
         echo "✓ git installed"
     else
         echo "✗ Failed to install git"
@@ -158,18 +157,15 @@ fi
 echo ""
 echo "Step 6: Installing Homebrew"
 
-check_sudo_status "before Homebrew"
-
 if command -v brew &>/dev/null || [[ -x /home/linuxbrew/.linuxbrew/bin/brew ]]; then
     echo "✓ Homebrew is already installed"
-    # Make sure brew is in PATH
     [[ -x /home/linuxbrew/.linuxbrew/bin/brew ]] && eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 else
     echo "Installing Homebrew (this takes a while)..."
 
     # Ensure directory exists
-    sudo mkdir -p /home/linuxbrew/
-    sudo chmod 755 /home/linuxbrew/
+    do_sudo mkdir -p /home/linuxbrew/
+    do_sudo chmod 755 /home/linuxbrew/
 
     # Install Homebrew
     if NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" >> "$LOGFILE" 2>&1; then
@@ -181,21 +177,18 @@ else
     fi
 fi
 
-check_sudo_status "after Homebrew"
-
 # =============================================================================
 # Step 7: Install extra utilities via apt (Linux-native)
 # =============================================================================
 echo ""
 echo "Step 7: Installing extra utilities via apt"
-check_sudo_status "before step 7"
 
 for pkg in bat eza htop; do
     if command -v "$pkg" &>/dev/null || command -v "${pkg}cat" &>/dev/null; then
         echo "✓ $pkg already installed"
     else
         echo "Installing $pkg..."
-        if sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$pkg" >> "$LOGFILE" 2>&1; then
+        if apt_install "$pkg"; then
             echo "✓ $pkg installed"
         else
             echo "! Failed to install $pkg (non-critical)"
@@ -227,13 +220,12 @@ done
 # =============================================================================
 echo ""
 echo "Step 9: Installing zsh via apt"
-check_sudo_status "before step 9"
 
 if command -v zsh &>/dev/null; then
     echo "✓ zsh is already installed"
 else
     echo "Installing zsh..."
-    if sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq zsh >> "$LOGFILE" 2>&1; then
+    if apt_install zsh; then
         echo "✓ zsh installed"
     else
         echo "✗ Failed to install zsh"
@@ -247,7 +239,7 @@ fi
 echo ""
 echo "Step 10: Installing oh-my-posh"
 
-if command -v oh-my-posh &>/dev/null; then
+if command -v oh-my-posh &>/dev/null || [[ -x ~/.local/bin/oh-my-posh ]]; then
     echo "✓ oh-my-posh is already installed"
 else
     echo "Installing oh-my-posh..."
@@ -268,7 +260,7 @@ if dpkg -l kitty-terminfo &>/dev/null; then
     echo "✓ kitty-terminfo already installed"
 else
     echo "Installing kitty-terminfo..."
-    if sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq kitty-terminfo >> "$LOGFILE" 2>&1; then
+    if apt_install kitty-terminfo; then
         echo "✓ kitty-terminfo installed"
     else
         echo "! Failed to install kitty-terminfo (non-critical)"
@@ -291,11 +283,11 @@ else
 
     # Ensure zsh is in /etc/shells
     if ! grep -q "^${ZSH_PATH}$" /etc/shells 2>/dev/null; then
-        echo "$ZSH_PATH" | sudo tee -a /etc/shells >/dev/null
+        echo "$ZSH_PATH" | do_sudo tee -a /etc/shells >/dev/null
     fi
 
-    # Use sudo chsh to avoid extra password prompt
-    if sudo chsh -s "$ZSH_PATH" "$USERNAME"; then
+    # Use sudo chsh
+    if do_sudo chsh -s "$ZSH_PATH" "$USERNAME"; then
         echo "✓ Default shell changed to zsh"
     else
         echo "! Failed to change default shell"
@@ -303,19 +295,21 @@ else
 fi
 
 # =============================================================================
+# Cleanup - clear password from memory
+# =============================================================================
+SUDO_PASS=""
+unset SUDO_PASS
+
+# =============================================================================
 # Done
 # =============================================================================
-
-# Stop the sudo keepalive
-stop_sudo_keepalive
-
 echo ""
 echo "=========================================="
 echo "=== SUCCESS ==="
 echo "=========================================="
 echo ""
 echo "Password prompts summary:"
-echo "  - Debian (no sudo): should be 2 (root + first sudo)"
-echo "  - Ubuntu (has sudo): should be 1 (first sudo)"
+echo "  - Debian (no sudo): should be 2 (root + sudo)"
+echo "  - Ubuntu (has sudo): should be 1 (sudo)"
 echo ""
 echo "Log file: $LOGFILE"
