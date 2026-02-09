@@ -1,12 +1,12 @@
 #!/bin/bash
-# Mini-script to test sudo + git + Homebrew installation on Debian
+# Complete installation test script for Debian/Ubuntu
 # Usage: /bin/bash -c "$(curl -fsSL URL)"
 # NOTE: Do NOT use "curl | bash" - stdin must be free for password prompts!
 
-VERSION="0.1.0"
+VERSION="0.2.0"
 LOGFILE="/tmp/test_install_$$.log"
 
-echo "=== Test: sudo + git + Homebrew (v$VERSION) ==="
+echo "=== Complete Installation Test (v$VERSION) ==="
 echo "Log: $LOGFILE"
 echo ""
 
@@ -15,7 +15,7 @@ USERNAME=$(whoami)
 echo "User: $USERNAME"
 
 # =============================================================================
-# Step 1: Install sudo (if needed)
+# Step 1: Install sudo (if needed) - Debian only
 # =============================================================================
 echo ""
 echo "Step 1: Checking/installing sudo"
@@ -54,10 +54,49 @@ else
 fi
 
 # =============================================================================
-# Step 3: Install git via apt (should NOT ask for password)
+# Step 3: Update system packages
 # =============================================================================
 echo ""
-echo "Step 3: Installing git via apt"
+echo "Step 3: Updating system packages"
+
+echo "Updating package lists..."
+if sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq >> "$LOGFILE" 2>&1; then
+    echo "✓ Package lists updated"
+else
+    echo "✗ Failed to update package lists"
+fi
+
+echo "Upgrading packages..."
+if sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -y -qq >> "$LOGFILE" 2>&1; then
+    echo "✓ Packages upgraded"
+else
+    echo "! Package upgrade had issues (continuing)"
+fi
+
+# =============================================================================
+# Step 4: Install core utilities via apt
+# =============================================================================
+echo ""
+echo "Step 4: Installing core utilities via apt"
+
+for pkg in curl unzip coreutils; do
+    if dpkg -l "$pkg" &>/dev/null; then
+        echo "✓ $pkg already installed"
+    else
+        echo "Installing $pkg..."
+        if sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$pkg" >> "$LOGFILE" 2>&1; then
+            echo "✓ $pkg installed"
+        else
+            echo "✗ Failed to install $pkg"
+        fi
+    fi
+done
+
+# =============================================================================
+# Step 5: Install git via apt
+# =============================================================================
+echo ""
+echo "Step 5: Installing git via apt"
 
 if command -v git &>/dev/null; then
     echo "✓ git is already installed"
@@ -72,13 +111,15 @@ else
 fi
 
 # =============================================================================
-# Step 4: Install Homebrew (should NOT ask for password)
+# Step 6: Install Homebrew
 # =============================================================================
 echo ""
-echo "Step 4: Installing Homebrew"
+echo "Step 6: Installing Homebrew"
 
 if command -v brew &>/dev/null || [[ -x /home/linuxbrew/.linuxbrew/bin/brew ]]; then
     echo "✓ Homebrew is already installed"
+    # Make sure brew is in PATH
+    [[ -x /home/linuxbrew/.linuxbrew/bin/brew ]] && eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 else
     echo "Installing Homebrew (this takes a while)..."
 
@@ -89,8 +130,6 @@ else
     # Install Homebrew
     if NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" >> "$LOGFILE" 2>&1; then
         echo "✓ Homebrew installed"
-
-        # Setup brew in current session
         eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
     else
         echo "✗ Failed to install Homebrew"
@@ -99,20 +138,119 @@ else
 fi
 
 # =============================================================================
-# Step 5: Install something via brew (to verify it works)
+# Step 7: Install extra utilities via apt (Linux-native)
 # =============================================================================
 echo ""
-echo "Step 5: Testing brew install (fzf)"
+echo "Step 7: Installing extra utilities via apt"
 
-if command -v fzf &>/dev/null; then
-    echo "✓ fzf is already installed"
-else
-    echo "Installing fzf via brew..."
-    if brew install fzf >> "$LOGFILE" 2>&1; then
-        echo "✓ fzf installed via brew"
+for pkg in bat eza htop; do
+    if command -v "$pkg" &>/dev/null || command -v "${pkg}cat" &>/dev/null; then
+        echo "✓ $pkg already installed"
     else
-        echo "✗ Failed to install fzf"
+        echo "Installing $pkg..."
+        if sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$pkg" >> "$LOGFILE" 2>&1; then
+            echo "✓ $pkg installed"
+        else
+            echo "! Failed to install $pkg (non-critical)"
+        fi
+    fi
+done
+
+# =============================================================================
+# Step 8: Install utilities via brew
+# =============================================================================
+echo ""
+echo "Step 8: Installing utilities via brew"
+
+for pkg in ncurses gh fzf zoxide yazi; do
+    if command -v "$pkg" &>/dev/null; then
+        echo "✓ $pkg already installed"
+    else
+        echo "Installing $pkg via brew..."
+        if brew install "$pkg" >> "$LOGFILE" 2>&1; then
+            echo "✓ $pkg installed"
+        else
+            echo "! Failed to install $pkg (non-critical)"
+        fi
+    fi
+done
+
+# =============================================================================
+# Step 9: Install zsh via apt
+# =============================================================================
+echo ""
+echo "Step 9: Installing zsh via apt"
+
+if command -v zsh &>/dev/null; then
+    echo "✓ zsh is already installed"
+else
+    echo "Installing zsh..."
+    if sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq zsh >> "$LOGFILE" 2>&1; then
+        echo "✓ zsh installed"
+    else
+        echo "✗ Failed to install zsh"
         exit 1
+    fi
+fi
+
+# =============================================================================
+# Step 10: Install oh-my-posh
+# =============================================================================
+echo ""
+echo "Step 10: Installing oh-my-posh"
+
+if command -v oh-my-posh &>/dev/null; then
+    echo "✓ oh-my-posh is already installed"
+else
+    echo "Installing oh-my-posh..."
+    if curl -fsSL https://ohmyposh.dev/install.sh | bash -s -- -d ~/.local/bin >> "$LOGFILE" 2>&1; then
+        echo "✓ oh-my-posh installed"
+    else
+        echo "! Failed to install oh-my-posh (non-critical)"
+    fi
+fi
+
+# =============================================================================
+# Step 11: Install kitty-terminfo via apt
+# =============================================================================
+echo ""
+echo "Step 11: Installing kitty-terminfo via apt"
+
+if dpkg -l kitty-terminfo &>/dev/null; then
+    echo "✓ kitty-terminfo already installed"
+else
+    echo "Installing kitty-terminfo..."
+    if sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq kitty-terminfo >> "$LOGFILE" 2>&1; then
+        echo "✓ kitty-terminfo installed"
+    else
+        echo "! Failed to install kitty-terminfo (non-critical)"
+    fi
+fi
+
+# =============================================================================
+# Step 12: Set zsh as default shell
+# =============================================================================
+echo ""
+echo "Step 12: Setting zsh as default shell"
+
+ZSH_PATH=$(command -v zsh)
+CURRENT_SHELL="${SHELL##*/}"
+
+if [[ "$CURRENT_SHELL" == "zsh" ]]; then
+    echo "✓ zsh is already the default shell"
+else
+    echo "Changing default shell to zsh..."
+
+    # Ensure zsh is in /etc/shells
+    if ! grep -q "^${ZSH_PATH}$" /etc/shells 2>/dev/null; then
+        echo "$ZSH_PATH" | sudo tee -a /etc/shells >/dev/null
+    fi
+
+    # Use sudo chsh to avoid extra password prompt
+    if sudo chsh -s "$ZSH_PATH" "$USERNAME"; then
+        echo "✓ Default shell changed to zsh"
+    else
+        echo "! Failed to change default shell"
     fi
 fi
 
@@ -120,7 +258,12 @@ fi
 # Done
 # =============================================================================
 echo ""
+echo "=========================================="
 echo "=== SUCCESS ==="
+echo "=========================================="
 echo ""
-echo "If you only saw 2 password prompts (root + sudo), the fix works!"
+echo "Password prompts summary:"
+echo "  - Debian (no sudo): should be 2 (root + first sudo)"
+echo "  - Ubuntu (has sudo): should be 1 (first sudo)"
+echo ""
 echo "Log file: $LOGFILE"
