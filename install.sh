@@ -8,24 +8,25 @@
 # 1. Checking system requirements (macOS or Debian-based Linux)
 # 2. Installing sudo and updating system packages (Linux only)
 # 3. Installing core utilities: curl, unzip, coreutils (Linux only)
-# 4. Installing Homebrew (if not present)
-# 5. Installing extra utilities: bat, eza, htop, gh, fzf, zoxide, yazi
-# 6. Installing git and zsh
-# 7. Installing oh-my-posh prompt theme engine
-# 8. Installing kitty-terminfo (Linux only)
-# 9. Checking for uncommitted changes (ALWAYS prompts if found, even in unattended mode)
-# 10. Backing up or removing existing zsh configuration
-# 11. Cloning the zconfig repository to ~/.config/zsh
-# 12. Creating symlink ~/.zshenv -> ~/.config/zsh/.zshenv
-# 13. Minimizing login info: .hushlogin, MOTD scripts (Linux only)
-# 14. Setting zsh as default shell
-# 15. Starting zsh with new configuration
+# 4. Installing git (required before Homebrew)
+# 5. Installing Homebrew (if not present)
+# 6. Installing extra utilities: bat, eza, htop, gh, fzf, zoxide, yazi
+# 7. Installing zsh
+# 8. Installing oh-my-posh prompt theme engine
+# 9. Installing kitty-terminfo (Linux only)
+# 10. Checking for uncommitted changes (ALWAYS prompts if found, even in unattended mode)
+# 11. Backing up or removing existing zsh configuration
+# 12. Cloning the zconfig repository to ~/.config/zsh
+# 13. Creating symlink ~/.zshenv -> ~/.config/zsh/.zshenv
+# 14. Minimizing login info: .hushlogin, MOTD scripts (Linux only)
+# 15. Setting zsh as default shell
+# 16. Starting zsh with new configuration
 
 # =============================================================================
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.5.1"
+SCRIPT_VERSION="0.5.2"
 SCRIPT_DATE="2026-02-09"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
@@ -1005,9 +1006,9 @@ main() {
     install_sudo || return 1
     update_system
     install_core_utils || return 1
+    install_git || return 1           # git required before Homebrew
     install_homebrew || return 1
     install_extra_utils
-    install_git || return 1
     install_zsh || return 1
     install_omp
 
