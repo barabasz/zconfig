@@ -26,7 +26,7 @@
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.5.4"
+SCRIPT_VERSION="0.5.5"
 SCRIPT_DATE="2026-02-09"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
@@ -279,9 +279,22 @@ apt_install() {
     apt_run install -y "$@"
 }
 
-# Refresh sudo credentials (call before spin with sudo commands)
-sudo_refresh() {
-    sudo -v 2>/dev/null || sudo -v
+# Run command quietly in foreground (for sudo commands - no spinner)
+# Usage: run_quiet "message" command [args...]
+run_quiet() {
+    local msg="$1"
+    shift
+    printf "${c}→${x} %s... " "$msg"
+    print_log "Executing: $*"
+    if "$@" >> "$LOGFILE" 2>&1; then
+        printf "done\n"
+        print_log "Command completed successfully"
+        return 0
+    else
+        printf "failed\n"
+        print_log "Command failed"
+        return 1
+    fi
 }
 
 # Run command with spinner
@@ -378,8 +391,7 @@ install_pkg() {
     else
         # Linux: prefer apt, fallback to brew
         if [[ -n "$apt_pkg" ]]; then
-            sudo_refresh
-            spin "Installing $name via apt..." apt_install "$apt_pkg" && success=1
+            run_quiet "Installing $name via apt" apt_install "$apt_pkg" && success=1
         elif [[ -n "$brew_pkg" ]] && cmd_exists brew; then
             spin "Installing $name via Homebrew..." brew install "$brew_pkg" && success=1
         fi
@@ -524,8 +536,8 @@ update_system() {
     # Cache sudo credentials (will prompt for password if needed)
     sudo -v || return 1
 
-    spin "Updating package lists..." apt_run update
-    spin "Upgrading packages..." apt_run upgrade -y
+    run_quiet "Updating package lists" apt_run update
+    run_quiet "Upgrading packages" apt_run upgrade -y
 
     print_success "System packages updated"
     return 0
@@ -572,8 +584,7 @@ install_core_utils() {
         return 0
     fi
 
-    sudo_refresh
-    if spin "Installing ${missing[*]}..." apt_install "${missing[@]}"; then
+    if run_quiet "Installing ${missing[*]}" apt_install "${missing[@]}"; then
         print_success "Core utilities installed"
         for pkg in "${missing[@]}"; do
             track_install "$pkg"
@@ -646,10 +657,9 @@ install_extra_utils() {
 
     # Install via apt (Linux only) - one by one for better feedback
     if [[ ${#missing_apt[@]} -gt 0 ]]; then
-        sudo_refresh
         local pkg
         for pkg in "${missing_apt[@]}"; do
-            if spin "Installing ${g}$pkg${x} via apt..." apt_install "$pkg"; then
+            if run_quiet "Installing $pkg via apt" apt_install "$pkg"; then
                 print_success "Installed ${g}$pkg${x}"
                 track_install "$pkg"
             else
@@ -716,8 +726,7 @@ install_kitty_terminfo() {
         return 0
     fi
 
-    sudo_refresh
-    if spin "Installing kitty-terminfo..." apt_install kitty-terminfo; then
+    if run_quiet "Installing kitty-terminfo" apt_install kitty-terminfo; then
         print_success "${g}kitty-terminfo${x} installed"
         track_install "kitty-terminfo"
     else
