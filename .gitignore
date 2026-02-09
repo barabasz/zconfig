@@ -19,3 +19,4 @@ plugins/*/
 .claude/
 .DS_Store
 /old_*
+/test_*
