@@ -7,7 +7,7 @@
 # This script installs zconfig by:
 # 1. Checking system requirements (macOS or Debian-based Linux)
 # 2. Installing sudo and updating system packages (Linux only)
-# 3. Installing core utilities: unzip, coreutils (Linux only)
+# 3. Installing core utilities (Linux only)
 # 4. Installing git (xcode-select on macOS, apt on Linux)
 # 5. Installing Homebrew (if not present)
 # 6. Installing utilities: zsh, bat, eza, htop, gh, fzf, zoxide, yazi, kitty-terminfo
@@ -669,6 +669,33 @@ update_system() {
     return 0
 }
 
+install_core_utils() {
+    is_debian || return 0
+
+    local utils=(
+        "unzip::unzip:1"
+        "coreutils::coreutils:1"
+    )
+    install_utils "Installing core utilities" "${utils[@]}"
+}
+
+install_extra_utils() {
+    local utils=(
+        "zsh:zsh:zsh:1"
+        "bat:bat:bat"
+        "eza:eza:eza"
+        "htop:htop:htop"
+        "ncurses:ncurses:"
+        "gh:gh:"
+        "fzf:fzf:"
+        "tldr:tldr:"
+        "zoxide:zoxide:"
+        "yazi:yazi:"
+        "kitty-terminfo::kitty-terminfo"
+    )
+    install_utils "Installing utilities" "${utils[@]}"
+}
+
 install_git() {
     print_header "Installing git"
 
@@ -1017,33 +1044,11 @@ main() {
     init_sudo || return 1             # Get sudo password (used for all subsequent operations)
     update_system
 
-    # Core utilities (Linux only, required before git/homebrew)
-    if is_debian; then
-        install_utils "Installing core utilities" \
-            "unzip::unzip:1" \
-            "realpath::coreutils:1" \
-            "dirname::coreutils:1" || return 1
-    fi
-
-    # Special installations (dedicated installers)
-    install_git || return 1           # git required before Homebrew
+    # Install utilities
+    install_core_utils || return 1
+    install_git || return 1
     install_homebrew || return 1
-
-    # All utilities via unified installer
-    # Format: "command:brew_package:apt_package[:critical]"
-    install_utils "Installing utilities" \
-        "zsh:zsh:zsh:1" \
-        "bat:bat:bat" \
-        "eza:eza:eza" \
-        "htop:htop:htop" \
-        "ncurses:ncurses:" \
-        "gh:gh:" \
-        "fzf:fzf:" \
-        "tldr:tldr:" \
-        "zoxide:zoxide:" \
-        "yazi:yazi:" \
-        "kitty-terminfo::kitty-terminfo" || return 1
-
+    install_extra_utils || return 1
     install_omp
 
     # Handle existing installation
