@@ -100,42 +100,60 @@ elif (( show_desc )); then
         (( quiet )) || print "$desc"
     fi
 elif (( show_all )); then
-    # Full output based on command type
+    # Full output: description + location info
+    local line1="" line2=""
+
+    # Line 1: appname: description
+    if [[ "$desc" != "No description available" ]]; then
+        line1="${g}${appname}${x}: ${desc}"
+    fi
+
+    # Line 2: location/type info
     case "$cmd_type" in
         command|alias)
-            # For binaries and aliases (resolved to binary)
             if [[ "$cmd_loc" == /* ]]; then
-                REPLY="${g}${appname}${x} ${y}${ver}${x} is installed in ${c}${cmd_loc}${x}"
+                line2="${g}${cmd}${x} ${y}${ver}${x} is installed in ${c}${cmd_loc}${x}"
             else
-                REPLY="${g}${appname}${x} is ${p}${cmd_loc}${x}"
+                line2="${g}${cmd}${x} is ${p}${cmd_loc}${x}"
             fi
             ;;
         function)
             if [[ "$cmd_loc" == /* ]]; then
                 if [[ "$ver" != "unknown" ]]; then
-                    REPLY="${g}${appname}${x} ${y}${ver}${x} is a function in ${c}${cmd_loc}${x}"
+                    line2="${g}${cmd}${x} ${y}${ver}${x} is a function in ${c}${cmd_loc}${x}"
                 else
-                    REPLY="${g}${appname}${x} is a function in ${c}${cmd_loc}${x}"
+                    line2="${g}${cmd}${x} is a function in ${c}${cmd_loc}${x}"
                 fi
             else
                 if [[ "$ver" != "unknown" ]]; then
-                    REPLY="${g}${appname}${x} ${y}${ver}${x} is a ${p}function${x}"
+                    line2="${g}${cmd}${x} ${y}${ver}${x} is a ${p}function${x}"
                 else
-                    REPLY="${g}${appname}${x} is a ${p}function${x}"
+                    line2="${g}${cmd}${x} is a ${p}function${x}"
                 fi
             fi
             ;;
         builtin)
-            REPLY="${g}${appname}${x} is a ${p}builtin${x}"
+            line2="${g}${cmd}${x} is a ${p}builtin${x}"
             ;;
         reserved)
-            REPLY="${g}${appname}${x} is a ${p}reserved word${x}"
+            line2="${g}${cmd}${x} is a ${p}reserved word${x}"
             ;;
         *)
-            REPLY="${g}${appname}${x} is a ${p}${cmd_type}${x}"
+            line2="${g}${cmd}${x} is a ${p}${cmd_type}${x}"
             ;;
     esac
-    (( quiet )) || print "$REPLY"
+
+    # Build REPLY and print
+    if [[ -n "$line1" ]]; then
+        REPLY="${line1}\n${line2}"
+        if (( ! quiet )); then
+            print "$line1"
+            print "$line2"
+        fi
+    else
+        REPLY="$line2"
+        (( quiet )) || print "$line2"
+    fi
 fi
 
 return 0
