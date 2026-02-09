@@ -3,7 +3,7 @@
 # Usage: /bin/bash -c "$(curl -fsSL URL)"
 # NOTE: Do NOT use "curl | bash" - stdin must be free for password prompts!
 
-VERSION="0.3.0"
+VERSION="0.4.0"
 LOGFILE="/tmp/test_install_$$.log"
 
 echo "=== Complete Installation Test (v$VERSION) ==="
@@ -15,16 +15,30 @@ USERNAME=$(whoami)
 echo "User: $USERNAME"
 
 # =============================================================================
-# Sudo keepalive - refresh credentials every 50 seconds in background
-# This is a common technique used by many installers (e.g., macOS Command Line Tools)
+# Diagnostic function - check sudo status
+# =============================================================================
+check_sudo_status() {
+    local label="$1"
+    echo -n "  [DEBUG $label] sudo -n -v: "
+    if sudo -n -v 2>/dev/null; then
+        echo "OK (cached)"
+    else
+        echo "FAILED (not cached)"
+    fi
+}
+
+# =============================================================================
+# Sudo keepalive - refresh credentials every 30 seconds in background
 # =============================================================================
 start_sudo_keepalive() {
     echo ""
-    echo "Starting sudo keepalive (will refresh every 50s)..."
-    while true; do
-        sudo -n -v 2>/dev/null
-        sleep 50
-    done &
+    echo "Starting sudo keepalive (will refresh every 30s)..."
+    (
+        while true; do
+            sudo -n -v 2>/dev/null
+            sleep 30
+        done
+    ) &
     SUDO_KEEPALIVE_PID=$!
     echo "✓ Sudo keepalive started (PID: $SUDO_KEEPALIVE_PID)"
 }
@@ -71,8 +85,11 @@ echo "Step 2: Activating sudo (this will ask for password once)"
 
 if sudo -v; then
     echo "✓ sudo activated"
+    check_sudo_status "after activation"
     # Start keepalive to prevent timeout during long operations
     start_sudo_keepalive
+    sleep 1
+    check_sudo_status "after keepalive start"
 else
     echo "✗ sudo activation failed"
     exit 1
@@ -141,6 +158,8 @@ fi
 echo ""
 echo "Step 6: Installing Homebrew"
 
+check_sudo_status "before Homebrew"
+
 if command -v brew &>/dev/null || [[ -x /home/linuxbrew/.linuxbrew/bin/brew ]]; then
     echo "✓ Homebrew is already installed"
     # Make sure brew is in PATH
@@ -162,11 +181,14 @@ else
     fi
 fi
 
+check_sudo_status "after Homebrew"
+
 # =============================================================================
 # Step 7: Install extra utilities via apt (Linux-native)
 # =============================================================================
 echo ""
 echo "Step 7: Installing extra utilities via apt"
+check_sudo_status "before step 7"
 
 for pkg in bat eza htop; do
     if command -v "$pkg" &>/dev/null || command -v "${pkg}cat" &>/dev/null; then
@@ -205,6 +227,7 @@ done
 # =============================================================================
 echo ""
 echo "Step 9: Installing zsh via apt"
+check_sudo_status "before step 9"
 
 if command -v zsh &>/dev/null; then
     echo "✓ zsh is already installed"
