@@ -32,8 +32,9 @@ get_cmd_path() {
         return 0
     fi
 
-    # Check command type for non-binaries
-    local cmd_type=$(whence -w "$cmd" 2>/dev/null | cut -d: -f2 | tr -d ' ')
+    # Check command type for non-binaries (use zsh string ops, not external commands)
+    local whence_out=$(whence -w "$cmd" 2>/dev/null)
+    local cmd_type="${whence_out##*: }"  # Extract type after ": "
 
     case "$cmd_type" in
         function)

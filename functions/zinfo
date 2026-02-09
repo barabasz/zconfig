@@ -64,7 +64,8 @@ local show_all=0
 reply=("" "" "")
 
 # Get command type first
-local cmd_type=$(whence -w "$cmd" 2>/dev/null | cut -d: -f2 | tr -d ' ')
+local whence_out=$(whence -w "$cmd" 2>/dev/null)
+local cmd_type="${whence_out##*: }"
 
 if [[ -z "$cmd_type" || "$cmd_type" == "none" ]]; then
     REPLY="${y}${cmd}${x} not found"
