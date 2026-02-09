@@ -26,7 +26,7 @@
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.6.0"
+SCRIPT_VERSION="0.6.1"
 SCRIPT_DATE="2026-02-09"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
@@ -499,10 +499,10 @@ install_sudo() {
     local username
     username=$(whoami)
     # Add user to sudoers with extended timeout (30 min) to avoid repeated prompts during install
-    local sudoers_config="$username ALL=(ALL:ALL) ALL
-Defaults:$username timestamp_timeout=30"
+    local sudoers_line="$username ALL=(ALL:ALL) ALL"
+    local sudoers_timeout="Defaults:$username timestamp_timeout=30"
 
-    if su -c "LC_ALL=C apt-get update -qq >/dev/null 2>&1 && LC_ALL=C apt-get install -y -qq sudo >/dev/null 2>&1 && echo '$sudoers_config' >> /etc/sudoers"; then
+    if su -c "LC_ALL=C apt-get update -qq >/dev/null 2>&1 && LC_ALL=C apt-get install -y -qq sudo >/dev/null 2>&1 && printf '%s\n' '$sudoers_line' '$sudoers_timeout' >> /etc/sudoers"; then
         print_success "${g}sudo${x} installed and user added to sudoers"
         track_install "sudo"
         return 0
