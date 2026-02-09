@@ -1,217 +1,144 @@
 # Part of zconfig · https://github.com/barabasz/zconfig · MIT License
 #
-# Display short description of any command
+# Universal command information tool
 # Use 'zinfo --help' for more information.
 
 local -A _fn=(
-    [info]="Display short description of any command"
-    [desc]="Shows a one-line description of any command, function, or builtin.
-            Sources (in priority order):
-            1. zconfig functions - extracts [info] field
-            2. tldr - community-maintained command descriptions
-            3. whatis - man page descriptions
-            4. brew info - Homebrew package descriptions
-            5. apt show - APT package descriptions (Linux)
+    [info]="Display version, path, and description of any command"
+    [desc]="Universal command information tool. Shows version, location, and
+            description for any command - binaries, functions, aliases, builtins.
 
-            Sets \$REPLY with the description for scripting use."
-    [version]="2.0.0"
+            By default shows all info. Use options to get specific fields:
+              -p/--path        Show only path/location
+              -v/--version     Show only version number
+              -d/--description Show only one-line description
+              -s/--source      Show description source (with -d)
+
+            Sets \$REPLY and \$reply array for scripting:
+              reply[1]=version, reply[2]=path, reply[3]=description"
+    [version]="3.0.0"
     [created]="2025"
     [modified]="2026-02-09"
     [license]="MIT"
     [author]="Andrzej Barabasz"
-    [notes]="Returns 'No description available' if no source has info."
+    [notes]="Uses helper functions: get_cmd_path, get_cmd_version, get_cmd_info"
 )
 
 local -a _fn_args=(
-    "command|Command name to describe|r"
+    "command|Command name to inspect|r"
+    "appname|Display name (defaults to command)|o"
 )
 
 local -a _fn_opts=(
+    "path|p|Show only path/location"
+    "ver|v|Show only version number"
+    "description|d|Show only description"
+    "source|s|Show description source (with -d)"
     "quiet|q|Only set REPLY, don't print"
-    "source|s|Show which source provided the description"
 )
 
 local -a _fn_examples=(
-    "zinfo git|Show: 'Distributed revision control system'"
-    "zinfo ls|Show: 'List directory contents'"
-    "zinfo appinfo|Show zconfig function description"
-    "zinfo -s curl|Show description with source info"
+    "zinfo git|Show full info: 'git 2.47.0 is installed in /usr/bin/git'"
+    "zinfo -p git|Show only path: '/usr/bin/git'"
+    "zinfo -v git|Show only version: '2.47.0'"
+    "zinfo -d git|Show only description: 'Distributed revision control system'"
+    "zinfo -ds curl|Show description with source: 'Transfer a URL [whatis]'"
 )
 
 local -A opts=() args=()
 _fn_init "$@" || return $REPLY
 
 local cmd="${args[command]}"
-local quiet=$(( ${+opts[quiet]} ))
+local appname="${args[appname]:-$cmd}"
+local show_path=$(( ${+opts[path]} ))
+local show_ver=$(( ${+opts[ver]} ))
+local show_desc=$(( ${+opts[description]} ))
 local show_source=$(( ${+opts[source]} ))
-local zsh_dir="${ZDOTDIR:-${XDG_CONFIG_HOME:-$HOME/.config}/zsh}"
-local description="" source_name=""
+local quiet=$(( ${+opts[quiet]} ))
 
-# Resolve alias to actual command for external lookups
-local real_cmd="$cmd"
-if (( ${+aliases[$cmd]} )); then
-    real_cmd="${aliases[$cmd]%% *}"
+# If no specific option, show all
+local show_all=0
+(( show_path + show_ver + show_desc == 0 )) && show_all=1
+
+# Initialize reply array: [1]=version, [2]=path, [3]=description
+reply=("" "" "")
+
+# Get command type first
+local cmd_type=$(whence -w "$cmd" 2>/dev/null | cut -d: -f2 | tr -d ' ')
+
+if [[ -z "$cmd_type" || "$cmd_type" == "none" ]]; then
+    REPLY="${y}${cmd}${x} not found"
+    (( quiet )) || print "$REPLY"
+    return 1
 fi
 
-# -----------------------------------------------------------------------------
-# Source 1: zconfig functions (highest priority for our own functions)
-# -----------------------------------------------------------------------------
-_try_zconfig() {
-    local func_dir="$zsh_dir/functions"
-    local lib_dir="$zsh_dir/lib"
+# Gather information using helper functions
+local ver="" path="" desc="" desc_source=""
 
-    # Check functions/ directory
-    if [[ -f "$func_dir/$cmd" ]]; then
-        local content=$(<"$func_dir/$cmd")
-        if [[ "$content" =~ '\[info\]="([^"]+)"' ]]; then
-            description="${match[1]}"
-            source_name="zconfig"
-            return 0
-        fi
-    fi
+get_cmd_version "$cmd"
+ver="$REPLY"
+reply[1]="$ver"
 
-    # Check lib/ directory
-    local file line
-    local -a comment_block=()
-    for file in "$lib_dir"/*.zsh(.N); do
-        comment_block=()
-        while IFS= read -r line; do
-            if [[ "$line" =~ "^${cmd}\\s*\\(\\)" ]]; then
-                for cmt in "${comment_block[@]}"; do
-                    cmt="${cmt#\#}"
-                    cmt="${cmt# }"
-                    if [[ -n "$cmt" ]]; then
-                        description="$cmt"
-                        source_name="zconfig"
-                        return 0
-                    fi
-                done
-            elif [[ "$line" == \#* ]]; then
-                comment_block+=("$line")
-            else
-                comment_block=()
-            fi
-        done < "$file"
-    done
-    return 1
-}
+get_cmd_path "$cmd"
+path="$REPLY"
+reply[2]="$path"
 
-# -----------------------------------------------------------------------------
-# Source 2: tldr (excellent community descriptions)
-# -----------------------------------------------------------------------------
-_try_tldr() {
-    command -v tldr &>/dev/null || return 1
+get_cmd_info "$cmd"
+desc="$REPLY"
+desc_source="${reply[1]}"
+reply[3]="$desc"
 
-    local output
-    output=$(tldr "$real_cmd" 2>/dev/null) || return 1
-
-    # Extract description (first non-empty line after command name)
-    local line in_desc=0
-    while IFS= read -r line; do
-        line="${line#"${line%%[![:space:]]*}"}"  # trim leading whitespace
-        [[ -z "$line" ]] && continue
-        [[ "$line" == "$real_cmd" ]] && { in_desc=1; continue; }
-        if (( in_desc )); then
-            # Remove trailing period for consistency
-            description="${line%.}"
-            source_name="tldr"
-            return 0
-        fi
-    done <<< "$output"
-    return 1
-}
-
-# -----------------------------------------------------------------------------
-# Source 3: whatis (man page one-liners)
-# -----------------------------------------------------------------------------
-_try_whatis() {
-    command -v whatis &>/dev/null || return 1
-
-    local output
-    output=$(whatis "$real_cmd" 2>/dev/null) || return 1
-
-    # Find exact match: "cmd(section) - description"
-    local line
-    while IFS= read -r line; do
-        # Match: cmd(1) - description  OR  cmd, cmd2(1) - description
-        if [[ "$line" =~ "^${real_cmd}[,(]" || "$line" =~ "^${real_cmd} " ]]; then
-            # Extract after " - "
-            if [[ "$line" == *" - "* ]]; then
-                description="${line#* - }"
-                # Capitalize first letter
-                description="${(U)description[1]}${description[2,-1]}"
-                source_name="whatis"
-                return 0
-            fi
-        fi
-    done <<< "$output"
-    return 1
-}
-
-# -----------------------------------------------------------------------------
-# Source 4: brew info (Homebrew packages)
-# -----------------------------------------------------------------------------
-_try_brew() {
-    command -v brew &>/dev/null || return 1
-
-    local output
-    output=$(brew info "$real_cmd" 2>/dev/null) || return 1
-
-    # Line 2 contains the description
-    local line_num=0
-    while IFS= read -r line; do
-        ((line_num++))
-        if (( line_num == 2 )); then
-            [[ -n "$line" && "$line" != "Not installed" ]] || return 1
-            description="$line"
-            source_name="brew"
-            return 0
-        fi
-    done <<< "$output"
-    return 1
-}
-
-# -----------------------------------------------------------------------------
-# Source 5: apt show (Debian/Ubuntu packages)
-# -----------------------------------------------------------------------------
-_try_apt() {
-    command -v apt &>/dev/null || return 1
-
-    local output
-    output=$(apt show "$real_cmd" 2>/dev/null) || return 1
-
-    # Find "Description:" line
-    local line
-    while IFS= read -r line; do
-        if [[ "$line" == "Description: "* ]]; then
-            description="${line#Description: }"
-            # Capitalize first letter
-            description="${(U)description[1]}${description[2,-1]}"
-            source_name="apt"
-            return 0
-        fi
-    done <<< "$output"
-    return 1
-}
-
-# -----------------------------------------------------------------------------
-# Try sources in priority order
-# -----------------------------------------------------------------------------
-_try_zconfig || _try_tldr || _try_whatis || _try_brew || _try_apt
-
-# -----------------------------------------------------------------------------
-# Output
-# -----------------------------------------------------------------------------
-if [[ -n "$description" ]]; then
-    REPLY="$description"
-    if (( show_source )); then
-        (( quiet )) || print "$description ${d}[$source_name]${x}"
+# Output based on options
+if (( show_path )); then
+    REPLY="$path"
+    (( quiet )) || print "$path"
+elif (( show_ver )); then
+    REPLY="$ver"
+    (( quiet )) || print "$ver"
+elif (( show_desc )); then
+    REPLY="$desc"
+    if (( show_source && ${#desc_source} > 0 )); then
+        (( quiet )) || print "$desc ${d}[$desc_source]${x}"
     else
-        (( quiet )) || print "$description"
+        (( quiet )) || print "$desc"
     fi
-    return 0
-else
-    REPLY="No description available"
-    (( quiet )) || print "${d}No description available${x}"
-    return 1
+elif (( show_all )); then
+    # Full output based on command type
+    case "$cmd_type" in
+        command|alias)
+            # For binaries and aliases (resolved to binary)
+            if [[ "$path" == /* ]]; then
+                REPLY="${g}${appname}${x} ${y}${ver}${x} is installed in ${c}${path}${x}"
+            else
+                REPLY="${g}${appname}${x} is ${p}${path}${x}"
+            fi
+            ;;
+        function)
+            if [[ "$path" == /* ]]; then
+                if [[ "$ver" != "unknown" ]]; then
+                    REPLY="${g}${appname}${x} ${y}${ver}${x} is a function in ${c}${path}${x}"
+                else
+                    REPLY="${g}${appname}${x} is a function in ${c}${path}${x}"
+                fi
+            else
+                if [[ "$ver" != "unknown" ]]; then
+                    REPLY="${g}${appname}${x} ${y}${ver}${x} is a ${p}function${x}"
+                else
+                    REPLY="${g}${appname}${x} is a ${p}function${x}"
+                fi
+            fi
+            ;;
+        builtin)
+            REPLY="${g}${appname}${x} is a ${p}builtin${x}"
+            ;;
+        reserved)
+            REPLY="${g}${appname}${x} is a ${p}reserved word${x}"
+            ;;
+        *)
+            REPLY="${g}${appname}${x} is a ${p}${cmd_type}${x}"
+            ;;
+    esac
+    (( quiet )) || print "$REPLY"
 fi
+
+return 0

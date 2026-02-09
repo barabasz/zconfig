@@ -314,7 +314,9 @@ List of available functions and helper functions with descriptions.
 | urlinfo | functions | Query URL and display detailed connection, SSL, and timing information |
 | utime2iso | date.zsh | Convert unix timestamp to ISO 8601 date (UTC) |
 | utype | varia.zsh | Ultra-fast command type detector |
-| appinfo | functions | Show version and location info for a command |
+| get_cmd_info | cmdinfo.zsh | Get one-line description of a command |
+| get_cmd_path | cmdinfo.zsh | Get command path (resolves aliases) |
+| get_cmd_version | cmdinfo.zsh | Get command version number |
 | wanip | functions | Retrieve the public IP address (IPv4 or IPv6) |
 | y2j | functions | Convert YAML to JSON using yq |
 | yesno | print.zsh | Ask user a yes/no question |
@@ -326,10 +328,10 @@ List of available functions and helper functions with descriptions.
 | zfiles | functions | Show loaded shell files in order with status and load time |
 | zgit | functions | Git wrapper for bulk operations on repositories defined in $GHDIR |
 | zhelp | functions | Display helpful commands and documentation for zconfig |
-| zinfo | functions | Display help information for a function from lib/ or functions/ |
+| zinfo | functions | Display version, path, and description of any command |
 | zip_folder | archive.zsh | Create a zip archive of a folder (ignoring common junk) |
 | zman | functions | List all user functions from lib/ and functions/ directories |
 | zspeed | functions | Measure zsh startup performance |
 | zupdate | functions | Update zconfig, plugins, and system packages |
 | zver | functions | Get version number of a command |
-| zwhere | functions | Universal command locator - find where a command is defined |
+| zwhere | functions | Find where a command is defined (wrapper for zinfo -p) |
