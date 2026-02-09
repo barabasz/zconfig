@@ -1,20 +1,20 @@
 # Part of zconfig · https://github.com/barabasz/zconfig · MIT License
 #
-# Display help information for a function from lib/ or functions/
+# Display short description of a zconfig function
 # Use 'zinfo --help' for more information.
 
 local -A _fn=(
-    [info]="Display help information for a zconfig function"
-    [desc]="Searches for a function in the functions/ directory or lib/*.zsh files
-            and displays its documentation comments."
-    [version]="0.3.5"
+    [info]="Display short description of a zconfig function"
+    [desc]="Shows the one-line description of a function from functions/ or lib/.
+            For functions using fn.zsh framework, extracts the [info] field.
+            For lib helpers, shows the first comment line.
+            Use zwhere for location, --help for full documentation."
+    [version]="1.0.0"
     [created]="2025"
-    [modified]="2026-02-02"
+    [modified]="2026-02-09"
     [license]="MIT"
     [author]="Andrzej Barabasz"
-    [notes]="Extracts raw comments directly from source code. Most useful for helper
-            functions in lib/. For interactive user functions, try running the function
-            with ${p}--help${x} flag instead for formatted documentation."
+    [notes]="For full help, run the function with --help flag."
 )
 
 local -a _fn_args=(
@@ -22,8 +22,8 @@ local -a _fn_args=(
 )
 
 local -a _fn_examples=(
-    "zinfo printe|Show help for printe function"
-    "zinfo zfiles|Show help for zfiles function"
+    "zinfo appinfo|Show: 'Show version and location info for a command'"
+    "zinfo printe|Show: 'Print error message to stderr'"
 )
 
 local -A opts=() args=()
@@ -36,25 +36,35 @@ local func_dir="$zsh_dir/functions"
 
 # Check if it's a function from /functions directory
 if [[ -f "$func_dir/$func_name" ]]; then
-    print "${g}${func_name}${x} is a function from ${c}/functions/${func_name}${x}"
+    local content=$(<"$func_dir/$func_name")
 
-    local line first=1
+    # Try to extract [info] field from _fn array (fn.zsh framework)
+    if [[ "$content" =~ '\[info\]="([^"]+)"' ]]; then
+        print "${match[1]}"
+        return 0
+    fi
+
+    # Fallback: extract description from comments (skip header lines)
+    local line
     while IFS= read -r line; do
         [[ "$line" != \#* ]] && break
         line="${line#\#}"
         line="${line# }"
-        if (( first )); then
-            print -r -- "${y}${line}${x}"
-            first=0
-        else
-            print -r -- "$line"
-        fi
+        # Skip empty lines and "Part of zconfig" header
+        [[ -z "$line" || "$line" == "Part of zconfig"* ]] && continue
+        # Skip "Use ... --help" lines
+        [[ "$line" == "Use '"*"' --help"* ]] && continue
+        # Found the description
+        print "$line"
+        return 0
     done < "$func_dir/$func_name"
-    return 0
+
+    printe "No description found for '$func_name'"
+    return 1
 fi
 
 # Search in /lib directory
-local file
+local file line
 local -a comment_block=()
 
 for file in "$lib_dir"/*.zsh(.N); do
@@ -62,19 +72,14 @@ for file in "$lib_dir"/*.zsh(.N); do
 
     while IFS= read -r line; do
         if [[ "$line" =~ "^${func_name}\\s*\\(\\)" ]]; then
-            print "${g}${func_name}${x} is a helper function from ${c}/lib/${file:t}${x}"
-            local first=1
+            # Found the function - print first non-empty comment
             for cmt in "${comment_block[@]}"; do
                 cmt="${cmt#\#}"
                 cmt="${cmt# }"
-                if (( first )); then
-                    print -r -- "${y}${cmt}${x}"
-                    first=0
-                else
-                    print -r -- "$cmt"
-                fi
+                [[ -n "$cmt" ]] && { print "$cmt"; return 0; }
             done
-            return 0
+            printe "No description found for '$func_name'"
+            return 1
         elif [[ "$line" == \#* ]]; then
             comment_block+=("$line")
         else
