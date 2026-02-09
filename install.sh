@@ -26,7 +26,7 @@
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.7.2"
+SCRIPT_VERSION="0.7.3"
 SCRIPT_DATE="2026-02-09"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
@@ -501,7 +501,6 @@ prompt_start_zsh() {
 
 check_os() {
     print_header "Checking operating system"
-    detect_os
 
     case "$OS_TYPE" in
         macos)
@@ -1031,6 +1030,9 @@ post_install_fixes() {
 # =============================================================================
 
 main() {
+    # Detect OS first (sets TOTAL_STEPS for correct counter display)
+    detect_os
+
     # Print header
     install_header
 
