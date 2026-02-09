@@ -25,8 +25,8 @@
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.5.0"
-SCRIPT_DATE="2026-02-08"
+SCRIPT_VERSION="0.5.1"
+SCRIPT_DATE="2026-02-09"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
 ZSHENV_LINK="$HOME/.zshenv"
@@ -498,24 +498,22 @@ install_sudo() {
         return 0
     fi
 
-    # sudo not found - install it via su
+    # sudo not found - install it via su (single password prompt)
     print_warning "${g}sudo${x} is not installed"
-    print_info "Installing ${g}sudo${x} (root password required)..."
+    print_info "Installing ${g}sudo${x} and configuring sudoers..."
+    print_info "Root password required:"
 
-    # Install sudo using su
-    if ! su -c "apt-get update -qq && apt-get install -y -qq sudo" 2>/dev/null; then
-        print_error "Failed to install ${g}sudo${x}"
-        return 1
-    fi
+    # Install sudo AND configure sudoers in one su -c command
+    local username
+    username=$(whoami)
+    local sudoers_line="$username ALL=(ALL:ALL) ALL"
 
-    # Add current user to sudoers
-    local sudoers_line="$(whoami) ALL=(ALL:ALL) ALL"
-    if su -c "echo '$sudoers_line' | EDITOR='tee -a' visudo" 2>/dev/null; then
-        print_success "${g}sudo${x} installed and configured"
+    if su -c "LC_ALL=C apt-get update -qq >/dev/null 2>&1 && LC_ALL=C apt-get install -y -qq sudo >/dev/null 2>&1 && echo '$sudoers_line' >> /etc/sudoers"; then
+        print_success "${g}sudo${x} installed and user added to sudoers"
         track_install "sudo"
         return 0
     else
-        print_error "Failed to configure sudoers"
+        print_error "Failed to install/configure ${g}sudo${x}"
         return 1
     fi
 }
