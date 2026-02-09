@@ -1,0 +1,77 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
+# Get version number of a command
+# Use 'zver --help' for more information.
+
+local -A _fn=(
+    [info]="Get version number of a command"
+    [desc]="Extracts version number from a command's version output. Automatically
+            tries --version, -v, and -V flags if no version command is specified.
+            Returns just the version number (e.g., '3.12.0'), nothing else."
+    [version]="1.0.0"
+    [created]="2026"
+    [modified]="2026-02-09"
+    [license]="MIT"
+    [author]="Andrzej Barabasz"
+    [notes]="Uses get_version() from strings.zsh to extract version numbers.
+            Returns 'unknown' if version cannot be determined."
+)
+
+local -a _fn_args=(
+    "command|Command to get version for|r"
+    "vercmd|Version command (e.g., '-V' or '--version'). Auto-detected if omitted.|o"
+)
+
+local -a _fn_examples=(
+    "zver git|Get git version (auto-detects --version)"
+    "zver python3|Get Python version (auto-tries --version, -v, -V)"
+    "zver python3 -V|Get Python version with explicit -V flag"
+    "zver brew|Get Homebrew version"
+)
+
+local -A opts=() args=()
+_fn_init "$@" || return $REPLY
+
+local cmd="${args[command]}"
+local vercmd="${args[vercmd]}"
+local output="" version=""
+
+# Check if command exists
+if ! command -v "$cmd" &>/dev/null; then
+    print "unknown"
+    return 1
+fi
+
+# Get command path (resolve aliases if needed)
+local cmd_path
+cmd_path=$(command -v "$cmd" 2>/dev/null)
+
+# If explicit version command provided, use it
+if [[ -n "$vercmd" ]]; then
+    output=$("$cmd_path" "$vercmd" 2>&1)
+    version=$(get_version "$output")
+    print "${version:-unknown}"
+    return 0
+fi
+
+# Auto-detect: try common version flags in order
+local -a version_flags=("--version" "-v" "-V" "version" "-version")
+
+for flag in "${version_flags[@]}"; do
+    output=$("$cmd_path" "$flag" 2>&1)
+    # Check if command succeeded and output contains version-like pattern
+    if [[ $? -eq 0 || "$output" == *[0-9].[0-9]* ]]; then
+        version=$(get_version "$output")
+        if [[ -n "$version" ]]; then
+            print "$version"
+            return 0
+        fi
+    fi
+done
+
+# Last resort: try running command with no args (some tools print version)
+output=$("$cmd_path" 2>&1 | head -5)
+version=$(get_version "$output")
+
+print "${version:-unknown}"
+[[ -n "$version" ]] && return 0 || return 1

@@ -314,7 +314,7 @@ List of available functions and helper functions with descriptions.
 | urlinfo | functions | Query URL and display detailed connection, SSL, and timing information |
 | utime2iso | date.zsh | Convert unix timestamp to ISO 8601 date (UTC) |
 | utype | varia.zsh | Ultra-fast command type detector |
-| verinfo | functions | Show version and location info for a command |
+| appinfo | functions | Show version and location info for a command |
 | wanip | functions | Retrieve the public IP address (IPv4 or IPv6) |
 | y2j | functions | Convert YAML to JSON using yq |
 | yesno | print.zsh | Ask user a yes/no question |
@@ -331,4 +331,5 @@ List of available functions and helper functions with descriptions.
 | zman | functions | List all user functions from lib/ and functions/ directories |
 | zspeed | functions | Measure zsh startup performance |
 | zupdate | functions | Update zconfig, plugins, and system packages |
+| zver | functions | Get version number of a command |
 | zwhere | functions | Universal command locator - find where a command is defined |
