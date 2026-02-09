@@ -26,7 +26,7 @@
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.7.0"
+SCRIPT_VERSION="0.7.1"
 SCRIPT_DATE="2026-02-09"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
@@ -954,9 +954,8 @@ install_homebrew() {
         do_sudo chmod 755 /home/linuxbrew/
     fi
 
-    # Download and run Homebrew installer (no spinner - has internal sudo calls)
-    print_info "Installing Homebrew (this may take a while)..."
-    if NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL "$URL_HOMEBREW")" >> "$LOGFILE" 2>&1; then
+    # Download and run Homebrew installer with spinner
+    if spin "Installing Homebrew (this may take a while)..." env NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL "$URL_HOMEBREW")"; then
         print_success "${g}Homebrew${x} installed successfully"
         track_install "Homebrew"
         init_brew_shellenv
