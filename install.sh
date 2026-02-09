@@ -26,7 +26,7 @@
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.5.2"
+SCRIPT_VERSION="0.5.3"
 SCRIPT_DATE="2026-02-09"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
@@ -921,14 +921,9 @@ install_homebrew() {
         sudo chmod 755 /home/linuxbrew/
     fi
 
-    # Download and run Homebrew installer with spinner
-    local brew_script
-    brew_script=$(curl -fsSL "$URL_HOMEBREW") || {
-        print_error "Failed to download ${g}Homebrew${x} installer"
-        return 1
-    }
-
-    if spin "Installing ${g}Homebrew${x}..." env NONINTERACTIVE=1 bash -c "$brew_script"; then
+    # Download and run Homebrew installer (no spinner - needs sudo interaction)
+    print_info "Installing Homebrew (this may take a while)..."
+    if NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL "$URL_HOMEBREW")" >> "$LOGFILE" 2>&1; then
         print_success "${g}Homebrew${x} installed successfully"
         track_install "Homebrew"
         init_brew_shellenv
@@ -966,8 +961,8 @@ set_default_shell() {
         echo "$zsh_path" | sudo tee -a /etc/shells >/dev/null
     fi
 
-    # Change default shell
-    if chsh -s "$zsh_path"; then
+    # Change default shell (use sudo to avoid password prompt)
+    if sudo chsh -s "$zsh_path" "$USER"; then
         print_success "Default shell changed to ${g}zsh${x}"
         return 0
     else
