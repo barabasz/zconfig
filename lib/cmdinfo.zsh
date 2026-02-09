@@ -137,8 +137,9 @@ get_cmd_version() {
         fi
     done
 
-    # Last resort: try running command with no args
-    output=$("$cmd_path" 2>&1 | head -5)
+    # Last resort: try running command with no args (limit to first 5 lines, no external head)
+    output=$("$cmd_path" 2>&1)
+    output="${(F)${(f)output}[1,5]}"  # Split by newlines, take first 5, rejoin
     version=$(get_version "$output")
 
     REPLY="${version:-unknown}"
