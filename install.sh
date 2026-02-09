@@ -2,7 +2,7 @@
 # Part of zconfig · https://github.com/barabasz/zconfig · MIT License
 #
 # zconfig installer script
-# Usage: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/barabasz/zconfig/main/install.sh)"
+# Usage: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/barabasz/zconfig/HEAD/install.sh)"
 #
 # This script installs zconfig by:
 # 1. Checking system requirements (macOS or Debian-based Linux)

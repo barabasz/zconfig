@@ -15,7 +15,7 @@ To get the most out of zconfig, you’ll want a modern [terminal emulator](https
 Run this single command:
 
 ```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/barabasz/zconfig/main/install.sh)"
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/barabasz/zconfig/HEAD/install.sh)"
 ```
 
 The installer will:
