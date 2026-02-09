@@ -26,7 +26,7 @@
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.7.3"
+SCRIPT_VERSION="0.7.4"
 SCRIPT_DATE="2026-02-09"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
@@ -235,6 +235,48 @@ cmd_exists() {
     command -v "$1" &>/dev/null
 }
 
+# Get version of a command (searches all output lines for version pattern)
+# Usage: get_version <command>
+# Returns: version string or "unknown"
+get_version() {
+    local cmd="$1"
+    cmd_exists "$cmd" || { echo "unknown"; return 1; }
+
+    local output
+    output=$("$cmd" --version 2>/dev/null) || \
+    output=$("$cmd" -v 2>/dev/null) || \
+    output=$("$cmd" -V 2>/dev/null) || \
+    { echo "unknown"; return 1; }
+
+    # Extract version number from any line
+    local version
+    version=$(echo "$output" | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
+    echo "${version:-unknown}"
+}
+
+# Format version for display: (version) with cyan version and white parentheses
+fmt_version() {
+    local cmd="$1"
+    local ver
+    ver=$(get_version "$cmd")
+    [[ "$ver" != "unknown" ]] && echo " (${c}${ver}${x})"
+}
+
+# Get apt package version
+# Usage: get_apt_version <package>
+get_apt_version() {
+    local pkg="$1"
+    dpkg -s "$pkg" 2>/dev/null | grep -oP '^Version: \K[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1
+}
+
+# Format apt package version for display
+fmt_apt_version() {
+    local pkg="$1"
+    local ver
+    ver=$(get_apt_version "$pkg")
+    [[ -n "$ver" ]] && echo " (${c}${ver}${x})"
+}
+
 # Check if running on Debian-based Linux
 is_debian() {
     [[ "$OS_TYPE" == "debian" ]]
@@ -400,9 +442,7 @@ install_pkg() {
 
     # Check if already installed
     if cmd_exists "$cmd"; then
-        local version
-        version=$("$cmd" --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
-        print_success "${g}$name${x} is available${version:+ ($version)}"
+        print_success "${g}$name${x} is available$(fmt_version "$cmd")"
         track_skip "$name"
         return 0
     fi
@@ -426,7 +466,7 @@ install_pkg() {
     fi
 
     if (( success )); then
-        print_success "${g}$name${x} installed successfully"
+        print_success "${g}$name${x} installed$(fmt_version "$cmd")"
         track_install "$name"
         return 0
     fi
@@ -530,7 +570,7 @@ install_sudo() {
     print_header "Installing sudo"
 
     if cmd_exists sudo; then
-        print_success "${g}sudo${x} is available"
+        print_success "${g}sudo${x} is available$(fmt_version sudo)"
         track_skip "sudo"
         return 0
     fi
@@ -548,7 +588,8 @@ install_sudo() {
     local sudoers_timeout="Defaults:$username timestamp_timeout=30"
 
     if su -c "LC_ALL=C apt-get update -qq >/dev/null 2>&1 && LC_ALL=C apt-get install -y -qq sudo >/dev/null 2>&1 && printf '%s\n' '$sudoers_line' '$sudoers_timeout' >> /etc/sudoers"; then
-        print_success "${g}sudo${x} installed and user added to sudoers"
+        print_success "${g}sudo${x} installed$(fmt_version sudo)"
+        print_info "User added to sudoers with 30min timeout"
         track_install "sudo"
         return 0
     else
@@ -686,7 +727,7 @@ install_extra_utils() {
         local pkg
         for pkg in "${missing_apt[@]}"; do
             if spin "Installing ${g}$pkg${x} via apt..." apt_install "$pkg"; then
-                print_success "Installed ${g}$pkg${x}"
+                print_success "Installed ${g}$pkg${x}$(fmt_version "$pkg")"
                 track_install "$pkg"
             else
                 print_warning "Failed to install ${g}$pkg${x} (non-critical)"
@@ -699,7 +740,7 @@ install_extra_utils() {
         local pkg
         for pkg in "${missing_brew[@]}"; do
             if spin "Installing ${g}$pkg${x} via brew..." brew install "$pkg"; then
-                print_success "Installed ${g}$pkg${x}"
+                print_success "Installed ${g}$pkg${x}$(fmt_version "$pkg")"
                 track_install "$pkg"
             else
                 print_warning "Failed to install ${g}$pkg${x} (non-critical)"
@@ -715,7 +756,9 @@ install_omp() {
 
     # Check common locations
     if cmd_exists oh-my-posh || [[ -x "$XDG_BIN_HOME/oh-my-posh" ]]; then
-        print_success "${g}oh-my-posh${x} is available"
+        local omp_ver
+        omp_ver=$(oh-my-posh --version 2>/dev/null || "$XDG_BIN_HOME/oh-my-posh" --version 2>/dev/null)
+        print_success "${g}oh-my-posh${x} is available${omp_ver:+ (${c}${omp_ver}${x})}"
         track_skip "oh-my-posh"
         return 0
     fi
@@ -731,7 +774,9 @@ install_omp() {
     }
 
     if spin "Installing oh-my-posh..." bash -c "$omp_script" -- -d "$XDG_BIN_HOME"; then
-        print_success "${g}oh-my-posh${x} installed successfully"
+        local omp_ver
+        omp_ver=$("$XDG_BIN_HOME/oh-my-posh" --version 2>/dev/null)
+        print_success "${g}oh-my-posh${x} installed${omp_ver:+ (${c}${omp_ver}${x})}"
         track_install "oh-my-posh"
         return 0
     else
@@ -747,13 +792,13 @@ install_kitty_terminfo() {
 
     # Check if already installed
     if dpkg -l kitty-terminfo &>/dev/null 2>&1; then
-        print_success "${g}kitty-terminfo${x} already installed"
+        print_success "${g}kitty-terminfo${x} is available$(fmt_apt_version kitty-terminfo)"
         track_skip "kitty-terminfo"
         return 0
     fi
 
     if spin "Installing kitty-terminfo..." apt_install kitty-terminfo; then
-        print_success "${g}kitty-terminfo${x} installed"
+        print_success "${g}kitty-terminfo${x} installed$(fmt_apt_version kitty-terminfo)"
         track_install "kitty-terminfo"
     else
         print_warning "Could not install ${g}kitty-terminfo${x} (non-critical)"
@@ -931,9 +976,9 @@ install_homebrew() {
 
     for brew_path in "${brew_paths[@]}"; do
         if [[ -x "$brew_path" ]]; then
-            print_success "Homebrew found at $c$brew_path$x"
-            track_skip "Homebrew"
             init_brew_shellenv
+            print_success "${g}Homebrew${x} is available$(fmt_version brew)"
+            track_skip "Homebrew"
             brew analytics off &>/dev/null
             return 0
         fi
@@ -955,9 +1000,9 @@ install_homebrew() {
 
     # Download and run Homebrew installer with spinner
     if spin "Installing Homebrew (this may take a while)..." env NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL "$URL_HOMEBREW")"; then
-        print_success "${g}Homebrew${x} installed successfully"
-        track_install "Homebrew"
         init_brew_shellenv
+        print_success "${g}Homebrew${x} installed$(fmt_version brew)"
+        track_install "Homebrew"
         brew analytics off &>/dev/null
         return 0
     else
