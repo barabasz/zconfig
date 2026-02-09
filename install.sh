@@ -443,11 +443,10 @@ track_skip()    { SKIPPED+=("$1"); }
 #   - critical: 1 = fail on error, 0 = warn and continue (default: 0)
 #
 # Examples:
-#   "bat:bat:bat"              # macOS: brew, Linux: apt
-#   "gh:gh:"                   # Both platforms: brew
-#   "unzip::unzip"             # Linux only: apt (skipped on macOS)
-#   "zsh:zsh:zsh:1"            # Critical (fail if can't install)
-#   "kitty-terminfo::kitty-terminfo"  # Linux only, no command (dpkg check)
+#   "bat:bat:bat"       # macOS: brew, Linux: apt
+#   "gh:gh:"            # Both platforms: brew
+#   "unzip::unzip"      # Linux only: apt
+#   "zsh:zsh:zsh:1"     # Critical (fail if can't install)
 # =============================================================================
 install_utils() {
     local header="$1"
