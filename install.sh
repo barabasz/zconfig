@@ -674,7 +674,7 @@ install_core_utils() {
 
     local utils=(
         "unzip::unzip:1"
-        "coreutils::coreutils:1"
+        "realpath::coreutils:1" # realpath is part of coreutils
     )
     install_utils "Installing core utilities" "${utils[@]}"
 }
