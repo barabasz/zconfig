@@ -23,7 +23,7 @@
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.8.0"
+SCRIPT_VERSION="0.8.1"
 SCRIPT_DATE="2026-02-09"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
@@ -430,17 +430,24 @@ track_skip()    { SKIPPED+=("$1"); }
 # =============================================================================
 # Usage: install_utils "Header" tool1 tool2 ...
 # Format: "command:brew_package:apt_package[:critical]"
-#   - command: command name to check if already installed
-#   - brew_package: Homebrew package name (empty = apt-only, skipped on macOS)
-#   - apt_package: apt package name (empty = brew-only)
+#
+# Installation logic:
+#   | brew_pkg | apt_pkg | macOS       | Linux           |
+#   |----------|---------|-------------|-----------------|
+#   | set      | set     | brew        | apt             |
+#   | set      | empty   | brew        | brew            |
+#   | empty    | set     | skip        | apt             |
+#
+# Fields:
+#   - command: check if installed (or package name for dpkg check)
 #   - critical: 1 = fail on error, 0 = warn and continue (default: 0)
 #
 # Examples:
-#   "bat:bat:bat"              # Both brew and apt
-#   "gh:gh:"                   # Brew-only
-#   "unzip::unzip"             # Apt-only (Linux)
+#   "bat:bat:bat"              # macOS: brew, Linux: apt
+#   "gh:gh:"                   # Both platforms: brew
+#   "unzip::unzip"             # Linux only: apt (skipped on macOS)
 #   "zsh:zsh:zsh:1"            # Critical (fail if can't install)
-#   "kitty-terminfo::kitty-terminfo"  # Apt-only, no command (check via dpkg)
+#   "kitty-terminfo::kitty-terminfo"  # Linux only, no command (dpkg check)
 # =============================================================================
 install_utils() {
     local header="$1"
