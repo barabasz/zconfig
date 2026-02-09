@@ -1041,10 +1041,10 @@ main() {
     # Requirement checks
     check_os || return 1
     install_sudo || return 1
-    init_sudo || return 1             # Get sudo password (used for all subsequent operations)
+    init_sudo || return 1 # Get sudo password
     update_system
 
-    # Install utilities
+    # Installation steps
     install_core_utils || return 1
     install_git || return 1
     install_homebrew || return 1
@@ -1066,7 +1066,7 @@ main() {
     # Set default shell to zsh
     set_default_shell
 
-    # Perform any necessary post-installation fixes
+    # Post-installation fixes
     post_install_fixes
 
     # Cleanup sudo password from memory
