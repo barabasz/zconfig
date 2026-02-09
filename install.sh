@@ -688,7 +688,6 @@ install_extra_utils() {
         "ncurses:ncurses:"
         "gh:gh:"
         "fzf:fzf:"
-        "tldr:tldr:"
         "zoxide:zoxide:"
         "yazi:yazi:"
         "kitty-terminfo::kitty-terminfo"
