@@ -26,7 +26,7 @@
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.6.1"
+SCRIPT_VERSION="0.7.0"
 SCRIPT_DATE="2026-02-09"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
@@ -90,6 +90,9 @@ ZCONFIG="${g}zconfig${x}"
 # Installation tracking
 INSTALLED=()
 SKIPPED=()
+
+# Sudo password storage (for sudo -S approach)
+SUDO_PASS=""
 
 # Timing - record start time
 START_TIME=$SECONDS
@@ -267,16 +270,59 @@ abort_missing() {
     return 1
 }
 
+# =============================================================================
+# Sudo wrapper functions - uses stored password via sudo -S
+# This approach ensures only one password prompt for all sudo operations
+# =============================================================================
+
+# Initialize sudo - ask for password once and validate it
+# Called after install_sudo (Debian) or at start (Ubuntu/macOS)
+init_sudo() {
+    [[ "$OS_TYPE" == "macos" ]] && return 0  # macOS doesn't need this
+
+    if [[ -n "$SUDO_PASS" ]]; then
+        return 0  # Already initialized
+    fi
+
+    print_info "Sudo password required (will be asked only once):"
+    read -s -p "[sudo] password for $(whoami): " SUDO_PASS
+    echo ""
+
+    # Validate password
+    if echo "$SUDO_PASS" | sudo -S -v 2>/dev/null; then
+        print_success "Sudo password verified"
+        return 0
+    else
+        print_error "Invalid password"
+        return 1
+    fi
+}
+
+# Run command with sudo using stored password
+do_sudo() {
+    if [[ "$OS_TYPE" == "macos" ]]; then
+        sudo "$@"
+    else
+        echo "$SUDO_PASS" | sudo -S "$@" 2>/dev/null
+    fi
+}
+
 # Silent apt-get wrapper (no warnings, no needrestart prompts)
 # Usage: apt_run update | upgrade -y | install -y <pkg>
 apt_run() {
-    sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a \
-        apt-get -qq "$@" &>/dev/null
+    echo "$SUDO_PASS" | sudo -S DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a \
+        apt-get -qq "$@" 2>/dev/null
 }
 
 # Convenience wrapper for apt install
 apt_install() {
     apt_run install -y "$@"
+}
+
+# Cleanup sudo password from memory
+cleanup_sudo() {
+    SUDO_PASS=""
+    unset SUDO_PASS
 }
 
 # Run command with spinner
@@ -401,7 +447,7 @@ install_header() {
     print_comment "Log file: $LOGFILE"
     print_info "This will install $ZCONFIG to ${c}$ZCONFIG_DIR${x}"
     # Note for Linux users (OS_TYPE not set yet, so check directly)
-    [[ "$(uname -s)" == "Linux" ]] && print_comment "Note: sudo password may be requested several times"
+    [[ "$(uname -s)" == "Linux" ]] && print_comment "Note: sudo password will be asked only once"
 }
 
 # Print installation summary
@@ -516,9 +562,6 @@ update_system() {
     is_debian || return 0
 
     print_header "Updating system packages"
-
-    # Cache sudo credentials (will prompt for password if needed)
-    sudo -v || return 1
 
     spin "Updating package lists..." apt_run update
     spin "Upgrading packages..." apt_run upgrade -y
@@ -750,7 +793,7 @@ minimize_login_info() {
     local script
     for script in "${scripts[@]}"; do
         if [[ -f "$motd_dir/$script" ]]; then
-            sudo chmod -x "$motd_dir/$script" &>/dev/null
+            do_sudo chmod -x "$motd_dir/$script" &>/dev/null
             print_info "Disabled MOTD script: ${c}$script${x}"
         fi
     done
@@ -907,8 +950,8 @@ install_homebrew() {
 
     # Fix for Linux: ensure /home/linuxbrew exists with correct permissions
     if is_debian; then
-        sudo mkdir -p /home/linuxbrew/
-        sudo chmod 755 /home/linuxbrew/
+        do_sudo mkdir -p /home/linuxbrew/
+        do_sudo chmod 755 /home/linuxbrew/
     fi
 
     # Download and run Homebrew installer (no spinner - has internal sudo calls)
@@ -948,11 +991,11 @@ set_default_shell() {
     # Ensure zsh is in /etc/shells
     if ! grep -q "^${zsh_path}$" /etc/shells 2>/dev/null; then
         print_info "Adding ${c}$zsh_path${x} to ${c}/etc/shells${x}"
-        echo "$zsh_path" | sudo tee -a /etc/shells >/dev/null
+        echo "$zsh_path" | do_sudo tee -a /etc/shells >/dev/null
     fi
 
-    # Change default shell (use sudo to avoid extra password prompt)
-    if sudo chsh -s "$zsh_path" "$USER"; then
+    # Change default shell (use do_sudo to avoid extra password prompt)
+    if do_sudo chsh -s "$zsh_path" "$USER"; then
         print_success "Default shell changed to ${g}zsh${x}"
         return 0
     else
@@ -967,13 +1010,13 @@ post_install_fixes() {
 
     # Fix permissions for .config directory (common issue on Linux)
     if [[ -d "$XDG_CONFIG_HOME" ]]; then
-        sudo chown -R "$(whoami)" "$XDG_CONFIG_HOME"
+        do_sudo chown -R "$(whoami)" "$XDG_CONFIG_HOME"
         print_info "Ensured ownership of ${c}$XDG_CONFIG_HOME${x}"
     fi
 
     # Create symlink for bat if batcat exists (common on Debian-based Linux)
     if is_debian && [[ -x /usr/bin/batcat ]]; then
-        sudo ln -s /usr/bin/batcat /usr/local/bin/bat 2>/dev/null
+        do_sudo ln -sf /usr/bin/batcat /usr/local/bin/bat 2>/dev/null
         print_info "Created symlink for bat: ${c}bat${x} -> ${c}batcat${x}"
     fi
 }
@@ -989,6 +1032,7 @@ main() {
     # Requirement checks
     check_os || return 1
     install_sudo || return 1
+    init_sudo || return 1             # Get sudo password (used for all subsequent operations)
     update_system
     install_core_utils || return 1
     install_git || return 1           # git required before Homebrew
@@ -1017,6 +1061,9 @@ main() {
 
     # Perform any necessary post-installation fixes
     post_install_fixes
+
+    # Cleanup sudo password from memory
+    cleanup_sudo
 
     # Success message
     installation_successful
