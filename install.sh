@@ -26,7 +26,7 @@
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.7.1"
+SCRIPT_VERSION="0.7.2"
 SCRIPT_DATE="2026-02-09"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
@@ -1017,6 +1017,12 @@ post_install_fixes() {
     if is_debian && [[ -x /usr/bin/batcat ]]; then
         do_sudo ln -sf /usr/bin/batcat /usr/local/bin/bat 2>/dev/null
         print_info "Created symlink for bat: ${c}bat${x} -> ${c}batcat${x}"
+    fi
+
+    # Set timezone for Linux
+    if is_debian; then
+        do_sudo timedatectl set-timezone Europe/Warsaw 2>/dev/null
+        print_info "Set timezone to ${c}Europe/Warsaw${x}"
     fi
 }
 
