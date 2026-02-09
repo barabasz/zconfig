@@ -73,21 +73,21 @@ if [[ -z "$cmd_type" || "$cmd_type" == "none" ]]; then
     return 1
 fi
 
-# Gather information using helper functions
+# Gather information using helper functions (suppress their output)
 local ver="" path="" desc="" desc_source=""
 
-get_cmd_version "$cmd"
+get_cmd_version "$cmd" >/dev/null
 ver="$REPLY"
-reply[1]="$ver"
 
-get_cmd_path "$cmd"
+get_cmd_path "$cmd" >/dev/null
 path="$REPLY"
-reply[2]="$path"
 
-get_cmd_info "$cmd"
+get_cmd_info "$cmd" >/dev/null
 desc="$REPLY"
 desc_source="${reply[1]}"
-reply[3]="$desc"
+
+# Set reply array for scripting
+reply=("$ver" "$path" "$desc")
 
 # Output based on options
 if (( show_path )); then

@@ -29,6 +29,7 @@ get_cmd_path() {
 
     if [[ -n "$cmd_path" && -x "$cmd_path" ]]; then
         REPLY="$cmd_path"
+        print -r -- "$REPLY"
         return 0
     fi
 
@@ -42,6 +43,7 @@ get_cmd_path() {
             local zsh_dir="${ZDOTDIR:-${XDG_CONFIG_HOME:-$HOME/.config}/zsh}"
             if [[ -f "$zsh_dir/functions/$cmd" ]]; then
                 REPLY="$zsh_dir/functions/$cmd"
+                print -r -- "$REPLY"
                 return 0
             fi
             # Search in fpath
@@ -49,22 +51,27 @@ get_cmd_path() {
             for dir in $fpath; do
                 if [[ -f "$dir/$cmd" ]]; then
                     REPLY="$dir/$cmd"
+                    print -r -- "$REPLY"
                     return 0
                 fi
             done
             REPLY="function"
+            print -r -- "$REPLY"
             return 0
             ;;
         alias)
             REPLY="alias: ${aliases[$cmd]}"
+            print -r -- "$REPLY"
             return 0
             ;;
         builtin)
             REPLY="builtin"
+            print -r -- "$REPLY"
             return 0
             ;;
         reserved)
             REPLY="reserved word"
+            print -r -- "$REPLY"
             return 0
             ;;
         none|"")
@@ -73,6 +80,7 @@ get_cmd_path() {
             ;;
         *)
             REPLY="$cmd_type"
+            print -r -- "$REPLY"
             return 0
             ;;
     esac
@@ -106,10 +114,12 @@ get_cmd_version() {
             local content=$(<"$zsh_dir/functions/$cmd")
             if [[ "$content" =~ '\[version\]="([^"]+)"' ]]; then
                 REPLY="${match[1]}"
+                print -r -- "$REPLY"
                 return 0
             fi
         fi
         REPLY="unknown"
+        print -r -- "$REPLY"
         return 1
     fi
 
@@ -120,6 +130,7 @@ get_cmd_version() {
         output=$("$cmd_path" "$vercmd" 2>&1)
         version=$(get_version "$output")
         REPLY="${version:-unknown}"
+        print -r -- "$REPLY"
         return 0
     fi
 
@@ -132,6 +143,7 @@ get_cmd_version() {
             version=$(get_version "$output")
             if [[ -n "$version" ]]; then
                 REPLY="$version"
+                print -r -- "$REPLY"
                 return 0
             fi
         fi
@@ -143,6 +155,7 @@ get_cmd_version() {
     version=$(get_version "$output")
 
     REPLY="${version:-unknown}"
+    print -r -- "$REPLY"
     [[ -n "$version" ]] && return 0 || return 1
 }
 
@@ -288,10 +301,12 @@ get_cmd_info() {
     if [[ -n "$description" ]]; then
         REPLY="$description"
         reply=("$source_name")
+        print -r -- "$REPLY"
         return 0
     else
         REPLY="No description available"
         reply=("")
+        print -r -- "$REPLY"
         return 1
     fi
 }
