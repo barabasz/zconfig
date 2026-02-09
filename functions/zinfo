@@ -16,7 +16,7 @@ local -A _fn=(
 
             Sets \$REPLY and \$reply array for scripting:
               reply[1]=version, reply[2]=path, reply[3]=description"
-    [version]="3.0.0"
+    [version]="3.1.0"
     [created]="2025"
     [modified]="2026-02-09"
     [license]="MIT"
@@ -73,21 +73,22 @@ if [[ -z "$cmd_type" || "$cmd_type" == "none" ]]; then
     return 1
 fi
 
-# Gather information using helper functions (capture output directly)
-local ver="" path="" desc="" desc_source=""
+# Gather information using helper functions
+# IMPORTANT: Use cmd_loc instead of 'path' to avoid shadowing zsh's special $path variable
+local ver="" cmd_loc="" desc="" desc_source=""
 
 ver=$(get_cmd_version "$cmd" 2>/dev/null)
-path=$(get_cmd_path "$cmd" 2>/dev/null)
+cmd_loc=$(get_cmd_path "$cmd" 2>/dev/null)
 desc=$(get_cmd_info "$cmd" 2>/dev/null)
 desc_source="${reply[1]:-}"
 
 # Set reply array for scripting
-reply=("$ver" "$path" "$desc")
+reply=("$ver" "$cmd_loc" "$desc")
 
 # Output based on options
 if (( show_path )); then
-    REPLY="$path"
-    (( quiet )) || print "$path"
+    REPLY="$cmd_loc"
+    (( quiet )) || print "$cmd_loc"
 elif (( show_ver )); then
     REPLY="$ver"
     (( quiet )) || print "$ver"
@@ -103,18 +104,18 @@ elif (( show_all )); then
     case "$cmd_type" in
         command|alias)
             # For binaries and aliases (resolved to binary)
-            if [[ "$path" == /* ]]; then
-                REPLY="${g}${appname}${x} ${y}${ver}${x} is installed in ${c}${path}${x}"
+            if [[ "$cmd_loc" == /* ]]; then
+                REPLY="${g}${appname}${x} ${y}${ver}${x} is installed in ${c}${cmd_loc}${x}"
             else
-                REPLY="${g}${appname}${x} is ${p}${path}${x}"
+                REPLY="${g}${appname}${x} is ${p}${cmd_loc}${x}"
             fi
             ;;
         function)
-            if [[ "$path" == /* ]]; then
+            if [[ "$cmd_loc" == /* ]]; then
                 if [[ "$ver" != "unknown" ]]; then
-                    REPLY="${g}${appname}${x} ${y}${ver}${x} is a function in ${c}${path}${x}"
+                    REPLY="${g}${appname}${x} ${y}${ver}${x} is a function in ${c}${cmd_loc}${x}"
                 else
-                    REPLY="${g}${appname}${x} is a function in ${c}${path}${x}"
+                    REPLY="${g}${appname}${x} is a function in ${c}${cmd_loc}${x}"
                 fi
             else
                 if [[ "$ver" != "unknown" ]]; then
