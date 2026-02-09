@@ -3,7 +3,7 @@
 # Usage: /bin/bash -c "$(curl -fsSL URL)"
 # NOTE: Do NOT use "curl | bash" - stdin must be free for password prompts!
 
-VERSION="0.2.0"
+VERSION="0.3.0"
 LOGFILE="/tmp/test_install_$$.log"
 
 echo "=== Complete Installation Test (v$VERSION) ==="
@@ -13,6 +13,29 @@ echo ""
 # Get current username
 USERNAME=$(whoami)
 echo "User: $USERNAME"
+
+# =============================================================================
+# Sudo keepalive - refresh credentials every 50 seconds in background
+# This is a common technique used by many installers (e.g., macOS Command Line Tools)
+# =============================================================================
+start_sudo_keepalive() {
+    echo ""
+    echo "Starting sudo keepalive (will refresh every 50s)..."
+    while true; do
+        sudo -n -v 2>/dev/null
+        sleep 50
+    done &
+    SUDO_KEEPALIVE_PID=$!
+    echo "✓ Sudo keepalive started (PID: $SUDO_KEEPALIVE_PID)"
+}
+
+stop_sudo_keepalive() {
+    if [[ -n "$SUDO_KEEPALIVE_PID" ]]; then
+        kill "$SUDO_KEEPALIVE_PID" 2>/dev/null
+        wait "$SUDO_KEEPALIVE_PID" 2>/dev/null
+        echo "✓ Sudo keepalive stopped"
+    fi
+}
 
 # =============================================================================
 # Step 1: Install sudo (if needed) - Debian only
@@ -48,6 +71,8 @@ echo "Step 2: Activating sudo (this will ask for password once)"
 
 if sudo -v; then
     echo "✓ sudo activated"
+    # Start keepalive to prevent timeout during long operations
+    start_sudo_keepalive
 else
     echo "✗ sudo activation failed"
     exit 1
@@ -257,6 +282,10 @@ fi
 # =============================================================================
 # Done
 # =============================================================================
+
+# Stop the sudo keepalive
+stop_sudo_keepalive
+
 echo ""
 echo "=========================================="
 echo "=== SUCCESS ==="
