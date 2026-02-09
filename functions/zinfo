@@ -1,92 +1,217 @@
 # Part of zconfig · https://github.com/barabasz/zconfig · MIT License
 #
-# Display short description of a zconfig function
+# Display short description of any command
 # Use 'zinfo --help' for more information.
 
 local -A _fn=(
-    [info]="Display short description of a zconfig function"
-    [desc]="Shows the one-line description of a function from functions/ or lib/.
-            For functions using fn.zsh framework, extracts the [info] field.
-            For lib helpers, shows the first comment line.
-            Use zwhere for location, --help for full documentation."
-    [version]="1.0.0"
+    [info]="Display short description of any command"
+    [desc]="Shows a one-line description of any command, function, or builtin.
+            Sources (in priority order):
+            1. zconfig functions - extracts [info] field
+            2. tldr - community-maintained command descriptions
+            3. whatis - man page descriptions
+            4. brew info - Homebrew package descriptions
+            5. apt show - APT package descriptions (Linux)
+
+            Sets \$REPLY with the description for scripting use."
+    [version]="2.0.0"
     [created]="2025"
     [modified]="2026-02-09"
     [license]="MIT"
     [author]="Andrzej Barabasz"
-    [notes]="For full help, run the function with --help flag."
+    [notes]="Returns 'No description available' if no source has info."
 )
 
 local -a _fn_args=(
-    "function|Function name to look up|r"
+    "command|Command name to describe|r"
+)
+
+local -a _fn_opts=(
+    "quiet|q|Only set REPLY, don't print"
+    "source|s|Show which source provided the description"
 )
 
 local -a _fn_examples=(
-    "zinfo appinfo|Show: 'Show version and location info for a command'"
-    "zinfo printe|Show: 'Print error message to stderr'"
+    "zinfo git|Show: 'Distributed revision control system'"
+    "zinfo ls|Show: 'List directory contents'"
+    "zinfo appinfo|Show zconfig function description"
+    "zinfo -s curl|Show description with source info"
 )
 
 local -A opts=() args=()
 _fn_init "$@" || return $REPLY
 
-local func_name="${args[function]}"
+local cmd="${args[command]}"
+local quiet=$(( ${+opts[quiet]} ))
+local show_source=$(( ${+opts[source]} ))
 local zsh_dir="${ZDOTDIR:-${XDG_CONFIG_HOME:-$HOME/.config}/zsh}"
-local lib_dir="$zsh_dir/lib"
-local func_dir="$zsh_dir/functions"
+local description="" source_name=""
 
-# Check if it's a function from /functions directory
-if [[ -f "$func_dir/$func_name" ]]; then
-    local content=$(<"$func_dir/$func_name")
-
-    # Try to extract [info] field from _fn array (fn.zsh framework)
-    if [[ "$content" =~ '\[info\]="([^"]+)"' ]]; then
-        print "${match[1]}"
-        return 0
-    fi
-
-    # Fallback: extract description from comments (skip header lines)
-    local line
-    while IFS= read -r line; do
-        [[ "$line" != \#* ]] && break
-        line="${line#\#}"
-        line="${line# }"
-        # Skip empty lines and "Part of zconfig" header
-        [[ -z "$line" || "$line" == "Part of zconfig"* ]] && continue
-        # Skip "Use ... --help" lines
-        [[ "$line" == "Use '"*"' --help"* ]] && continue
-        # Found the description
-        print "$line"
-        return 0
-    done < "$func_dir/$func_name"
-
-    printe "No description found for '$func_name'"
-    return 1
+# Resolve alias to actual command for external lookups
+local real_cmd="$cmd"
+if (( ${+aliases[$cmd]} )); then
+    real_cmd="${aliases[$cmd]%% *}"
 fi
 
-# Search in /lib directory
-local file line
-local -a comment_block=()
+# -----------------------------------------------------------------------------
+# Source 1: zconfig functions (highest priority for our own functions)
+# -----------------------------------------------------------------------------
+_try_zconfig() {
+    local func_dir="$zsh_dir/functions"
+    local lib_dir="$zsh_dir/lib"
 
-for file in "$lib_dir"/*.zsh(.N); do
-    comment_block=()
-
-    while IFS= read -r line; do
-        if [[ "$line" =~ "^${func_name}\\s*\\(\\)" ]]; then
-            # Found the function - print first non-empty comment
-            for cmt in "${comment_block[@]}"; do
-                cmt="${cmt#\#}"
-                cmt="${cmt# }"
-                [[ -n "$cmt" ]] && { print "$cmt"; return 0; }
-            done
-            printe "No description found for '$func_name'"
-            return 1
-        elif [[ "$line" == \#* ]]; then
-            comment_block+=("$line")
-        else
-            comment_block=()
+    # Check functions/ directory
+    if [[ -f "$func_dir/$cmd" ]]; then
+        local content=$(<"$func_dir/$cmd")
+        if [[ "$content" =~ '\[info\]="([^"]+)"' ]]; then
+            description="${match[1]}"
+            source_name="zconfig"
+            return 0
         fi
-    done < "$file"
-done
+    fi
 
-printe "Function '$func_name' not found"
-return 1
+    # Check lib/ directory
+    local file line
+    local -a comment_block=()
+    for file in "$lib_dir"/*.zsh(.N); do
+        comment_block=()
+        while IFS= read -r line; do
+            if [[ "$line" =~ "^${cmd}\\s*\\(\\)" ]]; then
+                for cmt in "${comment_block[@]}"; do
+                    cmt="${cmt#\#}"
+                    cmt="${cmt# }"
+                    if [[ -n "$cmt" ]]; then
+                        description="$cmt"
+                        source_name="zconfig"
+                        return 0
+                    fi
+                done
+            elif [[ "$line" == \#* ]]; then
+                comment_block+=("$line")
+            else
+                comment_block=()
+            fi
+        done < "$file"
+    done
+    return 1
+}
+
+# -----------------------------------------------------------------------------
+# Source 2: tldr (excellent community descriptions)
+# -----------------------------------------------------------------------------
+_try_tldr() {
+    command -v tldr &>/dev/null || return 1
+
+    local output
+    output=$(tldr "$real_cmd" 2>/dev/null) || return 1
+
+    # Extract description (first non-empty line after command name)
+    local line in_desc=0
+    while IFS= read -r line; do
+        line="${line#"${line%%[![:space:]]*}"}"  # trim leading whitespace
+        [[ -z "$line" ]] && continue
+        [[ "$line" == "$real_cmd" ]] && { in_desc=1; continue; }
+        if (( in_desc )); then
+            # Remove trailing period for consistency
+            description="${line%.}"
+            source_name="tldr"
+            return 0
+        fi
+    done <<< "$output"
+    return 1
+}
+
+# -----------------------------------------------------------------------------
+# Source 3: whatis (man page one-liners)
+# -----------------------------------------------------------------------------
+_try_whatis() {
+    command -v whatis &>/dev/null || return 1
+
+    local output
+    output=$(whatis "$real_cmd" 2>/dev/null) || return 1
+
+    # Find exact match: "cmd(section) - description"
+    local line
+    while IFS= read -r line; do
+        # Match: cmd(1) - description  OR  cmd, cmd2(1) - description
+        if [[ "$line" =~ "^${real_cmd}[,(]" || "$line" =~ "^${real_cmd} " ]]; then
+            # Extract after " - "
+            if [[ "$line" == *" - "* ]]; then
+                description="${line#* - }"
+                # Capitalize first letter
+                description="${(U)description[1]}${description[2,-1]}"
+                source_name="whatis"
+                return 0
+            fi
+        fi
+    done <<< "$output"
+    return 1
+}
+
+# -----------------------------------------------------------------------------
+# Source 4: brew info (Homebrew packages)
+# -----------------------------------------------------------------------------
+_try_brew() {
+    command -v brew &>/dev/null || return 1
+
+    local output
+    output=$(brew info "$real_cmd" 2>/dev/null) || return 1
+
+    # Line 2 contains the description
+    local line_num=0
+    while IFS= read -r line; do
+        ((line_num++))
+        if (( line_num == 2 )); then
+            [[ -n "$line" && "$line" != "Not installed" ]] || return 1
+            description="$line"
+            source_name="brew"
+            return 0
+        fi
+    done <<< "$output"
+    return 1
+}
+
+# -----------------------------------------------------------------------------
+# Source 5: apt show (Debian/Ubuntu packages)
+# -----------------------------------------------------------------------------
+_try_apt() {
+    command -v apt &>/dev/null || return 1
+
+    local output
+    output=$(apt show "$real_cmd" 2>/dev/null) || return 1
+
+    # Find "Description:" line
+    local line
+    while IFS= read -r line; do
+        if [[ "$line" == "Description: "* ]]; then
+            description="${line#Description: }"
+            # Capitalize first letter
+            description="${(U)description[1]}${description[2,-1]}"
+            source_name="apt"
+            return 0
+        fi
+    done <<< "$output"
+    return 1
+}
+
+# -----------------------------------------------------------------------------
+# Try sources in priority order
+# -----------------------------------------------------------------------------
+_try_zconfig || _try_tldr || _try_whatis || _try_brew || _try_apt
+
+# -----------------------------------------------------------------------------
+# Output
+# -----------------------------------------------------------------------------
+if [[ -n "$description" ]]; then
+    REPLY="$description"
+    if (( show_source )); then
+        (( quiet )) || print "$description ${d}[$source_name]${x}"
+    else
+        (( quiet )) || print "$description"
+    fi
+    return 0
+else
+    REPLY="No description available"
+    (( quiet )) || print "${d}No description available${x}"
+    return 1
+fi
