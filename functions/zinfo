@@ -73,18 +73,13 @@ if [[ -z "$cmd_type" || "$cmd_type" == "none" ]]; then
     return 1
 fi
 
-# Gather information using helper functions (suppress their output)
+# Gather information using helper functions (capture output directly)
 local ver="" path="" desc="" desc_source=""
 
-get_cmd_version "$cmd" >/dev/null
-ver="$REPLY"
-
-get_cmd_path "$cmd" >/dev/null
-path="$REPLY"
-
-get_cmd_info "$cmd" >/dev/null
-desc="$REPLY"
-desc_source="${reply[1]}"
+ver=$(get_cmd_version "$cmd" 2>/dev/null)
+path=$(get_cmd_path "$cmd" 2>/dev/null)
+desc=$(get_cmd_info "$cmd" 2>/dev/null)
+desc_source="${reply[1]:-}"
 
 # Set reply array for scripting
 reply=("$ver" "$path" "$desc")
