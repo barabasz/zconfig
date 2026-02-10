@@ -17,7 +17,7 @@ local -A _fn=(
 
             Sets \$REPLY and \$reply array for scripting:
               reply[1]=version, reply[2]=path, reply[3]=description"
-    [version]="3.3.0"
+    [version]="3.4.0"
     [created]="2025"
     [modified]="2026-02-10"
     [license]="MIT"
@@ -83,6 +83,7 @@ local ver="" cmd_loc="" desc="" desc_source="" cmd_size="" cmd_size_fmt=""
 
 ver=$(get_cmd_version "$cmd" 2>/dev/null)
 cmd_loc=$(get_cmd_path "$cmd" 2>/dev/null)
+cmd_loc_short="${(D)cmd_loc}"  # Shorten path: $HOME→~, hash dirs→~name
 cmd_size=$(get_cmd_size "$cmd" 2>/dev/null)
 [[ -n "$cmd_size" && "$cmd_size" -gt 0 ]] && cmd_size_fmt=$(format_size "$cmd_size")
 
@@ -114,7 +115,7 @@ elif (( show_short )); then
     case "$cmd_type" in
         command|alias)
             if [[ "$cmd_loc" == /* ]]; then
-                line="${g}${cmd}${x} ${y}${ver}${x} is installed in ${c}${cmd_loc}${x}"
+                line="${g}${cmd}${x} ${y}${ver}${x} is installed in ${c}${cmd_loc_short}${x}"
             else
                 line="${g}${cmd}${x} is ${p}${cmd_loc}${x}"
             fi
@@ -122,9 +123,9 @@ elif (( show_short )); then
         function)
             if [[ "$cmd_loc" == /* ]]; then
                 if [[ "$ver" != "unknown" ]]; then
-                    line="${g}${cmd}${x} ${y}${ver}${x} is a function in ${c}${cmd_loc}${x}"
+                    line="${g}${cmd}${x} ${y}${ver}${x} is a function in ${c}${cmd_loc_short}${x}"
                 else
-                    line="${g}${cmd}${x} is a function in ${c}${cmd_loc}${x}"
+                    line="${g}${cmd}${x} is a function in ${c}${cmd_loc_short}${x}"
                 fi
             else
                 if [[ "$ver" != "unknown" ]]; then
@@ -176,7 +177,7 @@ elif (( show_all )); then
     case "$cmd_type" in
         command|alias)
             if [[ "$cmd_loc" == /* ]]; then
-                line3="${g}${cmd}${x} ${y}${ver}${x} is installed in ${c}${cmd_loc}${x}${size_info}"
+                line3="${g}${cmd}${x} ${y}${ver}${x} is installed in ${c}${cmd_loc_short}${x}${size_info}"
             else
                 line3="${g}${cmd}${x} is ${p}${cmd_loc}${x}"
             fi
@@ -184,9 +185,9 @@ elif (( show_all )); then
         function)
             if [[ "$cmd_loc" == /* ]]; then
                 if [[ "$ver" != "unknown" ]]; then
-                    line3="${g}${cmd}${x} ${y}${ver}${x} is a function in ${c}${cmd_loc}${x}${size_info}"
+                    line3="${g}${cmd}${x} ${y}${ver}${x} is a function in ${c}${cmd_loc_short}${x}${size_info}"
                 else
-                    line3="${g}${cmd}${x} is a function in ${c}${cmd_loc}${x}${size_info}"
+                    line3="${g}${cmd}${x} is a function in ${c}${cmd_loc_short}${x}${size_info}"
                 fi
             else
                 if [[ "$ver" != "unknown" ]]; then
