@@ -9,14 +9,15 @@ local -A _fn=(
             description for any command - binaries, functions, aliases, builtins.
 
             By default shows all info. Use options to get specific fields:
+              -s/--short       Show short info (no description, no size)
               -p/--path        Show only path/location
               -v/--version     Show only version number
               -d/--description Show only one-line description
-              -s/--source      Show description source (with -d)
+              -S/--source      Show description source (with -d)
 
             Sets \$REPLY and \$reply array for scripting:
               reply[1]=version, reply[2]=path, reply[3]=description"
-    [version]="3.2.0"
+    [version]="3.3.0"
     [created]="2025"
     [modified]="2026-02-10"
     [license]="MIT"
@@ -30,19 +31,21 @@ local -a _fn_args=(
 )
 
 local -a _fn_opts=(
+    "short|s|Show short info (no description, no size)"
     "path|p|Show only path/location"
     "ver|v|Show only version number"
     "description|d|Show only description"
-    "source|s|Show description source (with -d)"
+    "source|S|Show description source (with -d)"
     "quiet|q|Only set REPLY, don't print"
 )
 
 local -a _fn_examples=(
-    "zinfo git|Show full info with size: 'git 2.47.0 is installed in /usr/bin/git (3.2 MB)'"
+    "zinfo git|Show full info with size"
+    "zinfo -s git|Show short: 'git 2.47.0 is installed in /usr/bin/git'"
     "zinfo -p git|Show only path: '/usr/bin/git'"
     "zinfo -v git|Show only version: '2.47.0'"
     "zinfo -d git|Show only description: 'Distributed revision control system'"
-    "zinfo -ds curl|Show description with source: 'Transfer a URL [whatis]'"
+    "zinfo -dS curl|Show description with source: 'Transfer a URL [whatis]'"
 )
 
 local -A opts=() args=()
@@ -50,6 +53,7 @@ _fn_init "$@" || return $REPLY
 
 local cmd="${args[command]}"
 local appname="${args[appname]:-$cmd}"
+local show_short=$(( ${+opts[short]} ))
 local show_path=$(( ${+opts[path]} ))
 local show_ver=$(( ${+opts[ver]} ))
 local show_desc=$(( ${+opts[description]} ))
@@ -58,7 +62,7 @@ local quiet=$(( ${+opts[quiet]} ))
 
 # If no specific option, show all
 local show_all=0
-(( show_path + show_ver + show_desc == 0 )) && show_all=1
+(( show_short + show_path + show_ver + show_desc == 0 )) && show_all=1
 
 # Initialize reply array: [1]=version, [2]=path, [3]=description
 reply=("" "" "")
@@ -104,64 +108,115 @@ elif (( show_desc )); then
     else
         (( quiet )) || print "$desc"
     fi
-elif (( show_all )); then
-    # Full output: description + location info
-    local line1="" line2=""
+elif (( show_short )); then
+    # Short output: just name, version, path (no description, no size)
+    local line=""
+    case "$cmd_type" in
+        command|alias)
+            if [[ "$cmd_loc" == /* ]]; then
+                line="${g}${cmd}${x} ${y}${ver}${x} is installed in ${c}${cmd_loc}${x}"
+            else
+                line="${g}${cmd}${x} is ${p}${cmd_loc}${x}"
+            fi
+            ;;
+        function)
+            if [[ "$cmd_loc" == /* ]]; then
+                if [[ "$ver" != "unknown" ]]; then
+                    line="${g}${cmd}${x} ${y}${ver}${x} is a function in ${c}${cmd_loc}${x}"
+                else
+                    line="${g}${cmd}${x} is a function in ${c}${cmd_loc}${x}"
+                fi
+            else
+                if [[ "$ver" != "unknown" ]]; then
+                    line="${g}${cmd}${x} ${y}${ver}${x} is a ${p}function${x}"
+                else
+                    line="${g}${cmd}${x} is a ${p}function${x}"
+                fi
+            fi
+            ;;
+        builtin)
+            line="${g}${cmd}${x} is a ${p}builtin${x}"
+            ;;
+        reserved)
+            line="${g}${cmd}${x} is a ${p}reserved word${x}"
+            ;;
+        *)
+            line="${g}${cmd}${x} is a ${p}${cmd_type}${x}"
+            ;;
+    esac
+    REPLY="$line"
+    (( quiet )) || print "$line"
 
-    # Line 1: appname: description
-    if [[ "$desc" != "No description available" ]]; then
-        line1="${g}${appname}${x}: ${desc}"
+elif (( show_all )); then
+    # Full output: description + help hint + location info
+    local line1="" line2="" line3=""
+    local zsh_dir="${ZDOTDIR:-${XDG_CONFIG_HOME:-$HOME/.config}/zsh}"
+    local is_zconfig_func=0
+
+    # Check if it's a zconfig function (has _fn metadata)
+    if [[ "$cmd_type" == "function" && -f "$zsh_dir/functions/$cmd" ]]; then
+        local content=$(<"$zsh_dir/functions/$cmd")
+        [[ "$content" == *'_fn_init'* ]] && is_zconfig_func=1
     fi
 
-    # Line 2: location/type info (with size if available)
+    # Line 1: description (without command name prefix)
+    if [[ "$desc" != "No description available" ]]; then
+        line1="$desc"
+    fi
+
+    # Line 2: help hint for zconfig functions
+    if (( is_zconfig_func )); then
+        line2="Use: ${g}${cmd}${x} ${p}--help${x} for usage information."
+    fi
+
+    # Line 3: location/type info (with size if available)
     local size_info=""
     [[ -n "$cmd_size_fmt" ]] && size_info=" ${d}(${cmd_size_fmt})${x}"
 
     case "$cmd_type" in
         command|alias)
             if [[ "$cmd_loc" == /* ]]; then
-                line2="${g}${cmd}${x} ${y}${ver}${x} is installed in ${c}${cmd_loc}${x}${size_info}"
+                line3="${g}${cmd}${x} ${y}${ver}${x} is installed in ${c}${cmd_loc}${x}${size_info}"
             else
-                line2="${g}${cmd}${x} is ${p}${cmd_loc}${x}"
+                line3="${g}${cmd}${x} is ${p}${cmd_loc}${x}"
             fi
             ;;
         function)
             if [[ "$cmd_loc" == /* ]]; then
                 if [[ "$ver" != "unknown" ]]; then
-                    line2="${g}${cmd}${x} ${y}${ver}${x} is a function in ${c}${cmd_loc}${x}${size_info}"
+                    line3="${g}${cmd}${x} ${y}${ver}${x} is a function in ${c}${cmd_loc}${x}${size_info}"
                 else
-                    line2="${g}${cmd}${x} is a function in ${c}${cmd_loc}${x}${size_info}"
+                    line3="${g}${cmd}${x} is a function in ${c}${cmd_loc}${x}${size_info}"
                 fi
             else
                 if [[ "$ver" != "unknown" ]]; then
-                    line2="${g}${cmd}${x} ${y}${ver}${x} is a ${p}function${x}${size_info}"
+                    line3="${g}${cmd}${x} ${y}${ver}${x} is a ${p}function${x}${size_info}"
                 else
-                    line2="${g}${cmd}${x} is a ${p}function${x}${size_info}"
+                    line3="${g}${cmd}${x} is a ${p}function${x}${size_info}"
                 fi
             fi
             ;;
         builtin)
-            line2="${g}${cmd}${x} is a ${p}builtin${x}"
+            line3="${g}${cmd}${x} is a ${p}builtin${x}"
             ;;
         reserved)
-            line2="${g}${cmd}${x} is a ${p}reserved word${x}"
+            line3="${g}${cmd}${x} is a ${p}reserved word${x}"
             ;;
         *)
-            line2="${g}${cmd}${x} is a ${p}${cmd_type}${x}"
+            line3="${g}${cmd}${x} is a ${p}${cmd_type}${x}"
             ;;
     esac
 
     # Build REPLY and print
-    if [[ -n "$line1" ]]; then
-        REPLY="${line1}\n${line2}"
-        if (( ! quiet )); then
-            print "$line1"
-            print "$line2"
-        fi
-    else
-        REPLY="$line2"
-        (( quiet )) || print "$line2"
+    REPLY=""
+    if (( ! quiet )); then
+        [[ -n "$line1" ]] && print "$line1"
+        [[ -n "$line2" ]] && print "$line2"
+        print "$line3"
     fi
+    [[ -n "$line1" ]] && REPLY="$line1\n"
+    [[ -n "$line2" ]] && REPLY="${REPLY}$line2\n"
+    REPLY="${REPLY}$line3"
 fi
 
 return 0
