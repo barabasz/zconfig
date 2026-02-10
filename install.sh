@@ -691,7 +691,6 @@ install_extra_utils() {
         "bat:bat:bat"
         "eza:eza:eza"
         "htop:htop:htop"
-        "ncurses:ncurses:"
         "gh:gh:"
         "fzf:fzf:"
         "zoxide:zoxide:"
