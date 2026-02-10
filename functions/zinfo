@@ -16,12 +16,12 @@ local -A _fn=(
 
             Sets \$REPLY and \$reply array for scripting:
               reply[1]=version, reply[2]=path, reply[3]=description"
-    [version]="3.1.0"
+    [version]="3.2.0"
     [created]="2025"
-    [modified]="2026-02-09"
+    [modified]="2026-02-10"
     [license]="MIT"
     [author]="Andrzej Barabasz"
-    [notes]="Uses helper functions: get_cmd_path, get_cmd_version, get_cmd_info"
+    [notes]="Uses helpers: get_cmd_path, get_cmd_version, get_cmd_info, get_cmd_size, format_size"
 )
 
 local -a _fn_args=(
@@ -38,7 +38,7 @@ local -a _fn_opts=(
 )
 
 local -a _fn_examples=(
-    "zinfo git|Show full info: 'git 2.47.0 is installed in /usr/bin/git'"
+    "zinfo git|Show full info with size: 'git 2.47.0 is installed in /usr/bin/git (3.2 MB)'"
     "zinfo -p git|Show only path: '/usr/bin/git'"
     "zinfo -v git|Show only version: '2.47.0'"
     "zinfo -d git|Show only description: 'Distributed revision control system'"
@@ -75,12 +75,14 @@ fi
 
 # Gather information using helper functions
 # IMPORTANT: Use cmd_loc instead of 'path' to avoid shadowing zsh's special $path variable
-local ver="" cmd_loc="" desc="" desc_source=""
+local ver="" cmd_loc="" desc="" desc_source="" cmd_size="" cmd_size_fmt=""
 
 ver=$(get_cmd_version "$cmd" 2>/dev/null)
 cmd_loc=$(get_cmd_path "$cmd" 2>/dev/null)
 desc=$(get_cmd_info "$cmd" 2>/dev/null)
 desc_source="${reply[1]:-}"
+cmd_size=$(get_cmd_size "$cmd" 2>/dev/null)
+[[ -n "$cmd_size" && "$cmd_size" -gt 0 ]] && cmd_size_fmt=$(format_size "$cmd_size")
 
 # Set reply array for scripting
 reply=("$ver" "$cmd_loc" "$desc")
@@ -108,11 +110,14 @@ elif (( show_all )); then
         line1="${g}${appname}${x}: ${desc}"
     fi
 
-    # Line 2: location/type info
+    # Line 2: location/type info (with size if available)
+    local size_info=""
+    [[ -n "$cmd_size_fmt" ]] && size_info=" ${d}(${cmd_size_fmt})${x}"
+
     case "$cmd_type" in
         command|alias)
             if [[ "$cmd_loc" == /* ]]; then
-                line2="${g}${cmd}${x} ${y}${ver}${x} is installed in ${c}${cmd_loc}${x}"
+                line2="${g}${cmd}${x} ${y}${ver}${x} is installed in ${c}${cmd_loc}${x}${size_info}"
             else
                 line2="${g}${cmd}${x} is ${p}${cmd_loc}${x}"
             fi
@@ -120,15 +125,15 @@ elif (( show_all )); then
         function)
             if [[ "$cmd_loc" == /* ]]; then
                 if [[ "$ver" != "unknown" ]]; then
-                    line2="${g}${cmd}${x} ${y}${ver}${x} is a function in ${c}${cmd_loc}${x}"
+                    line2="${g}${cmd}${x} ${y}${ver}${x} is a function in ${c}${cmd_loc}${x}${size_info}"
                 else
-                    line2="${g}${cmd}${x} is a function in ${c}${cmd_loc}${x}"
+                    line2="${g}${cmd}${x} is a function in ${c}${cmd_loc}${x}${size_info}"
                 fi
             else
                 if [[ "$ver" != "unknown" ]]; then
-                    line2="${g}${cmd}${x} ${y}${ver}${x} is a ${p}function${x}"
+                    line2="${g}${cmd}${x} ${y}${ver}${x} is a ${p}function${x}${size_info}"
                 else
-                    line2="${g}${cmd}${x} is a ${p}function${x}"
+                    line2="${g}${cmd}${x} is a ${p}function${x}${size_info}"
                 fi
             fi
             ;;
