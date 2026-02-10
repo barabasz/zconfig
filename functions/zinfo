@@ -79,10 +79,13 @@ local ver="" cmd_loc="" desc="" desc_source="" cmd_size="" cmd_size_fmt=""
 
 ver=$(get_cmd_version "$cmd" 2>/dev/null)
 cmd_loc=$(get_cmd_path "$cmd" 2>/dev/null)
-desc=$(get_cmd_info "$cmd" 2>/dev/null)
-desc_source="${reply[1]:-}"
 cmd_size=$(get_cmd_size "$cmd" 2>/dev/null)
 [[ -n "$cmd_size" && "$cmd_size" -gt 0 ]] && cmd_size_fmt=$(format_size "$cmd_size")
+
+# get_cmd_info sets reply[1] with source name, so call without subshell
+get_cmd_info "$cmd" >/dev/null 2>&1
+desc="$REPLY"
+desc_source="${reply[1]:-}"
 
 # Set reply array for scripting
 reply=("$ver" "$cmd_loc" "$desc")
