@@ -939,7 +939,7 @@ _fn_init() {
     (( ${+_fn_examples} && ${#_fn_examples} > 0 )) && _orig_has_examples=1
 
     # Check for conflicts with user-defined options
-    local _has_v=0 _has_version=0 _has_h=0 _has_help=0
+    local _has_v=0 _has_V=0 _has_version=0 _has_h=0 _has_help=0
     if (( _orig_has_opts )); then
         local _chk_spec
         local -a _chk_fld=()
@@ -948,6 +948,7 @@ _fn_init() {
             _chk_fld=( "${(@s:|:)_chk_spec}" )
             [[ "${_chk_fld[1]}" == "version" ]] && _has_version=1
             [[ "${_chk_fld[2]}" == "v" ]] && _has_v=1
+            [[ "${_chk_fld[2]}" == "V" ]] && _has_V=1
             [[ "${_chk_fld[1]}" == "help" ]] && _has_help=1
             [[ "${_chk_fld[2]}" == "h" ]] && _has_h=1
         done
@@ -957,13 +958,26 @@ _fn_init() {
     (( ${+_fn_opts} )) || typeset -ga _fn_opts=()
 
     # Auto-add version option if version is set and no conflict
-    local _version_has_short=0
+    # Priority: _fn[version_short] override > -v > -V > no short form
+    local _version_has_short=0 _version_short=""
     if (( _has_version_val && !_has_version )); then
-        if (( !_has_v )); then
+        if [[ -n "${_fn[version_short]}" ]]; then
+            # Manual override specified
+            _version_short="${_fn[version_short]}"
+            _fn_opts=( "version|${_version_short}|Show version" "${_fn_opts[@]}" )
+            _version_has_short=1
+        elif (( !_has_v )); then
+            # Default: use -v
+            _version_short="v"
             _fn_opts=( "version|v|Show version" "${_fn_opts[@]}" )
             _version_has_short=1
+        elif (( !_has_V )); then
+            # Fallback: use -V
+            _version_short="V"
+            _fn_opts=( "version|V|Show version" "${_fn_opts[@]}" )
+            _version_has_short=1
         else
-            # -v is taken, add --version only (no short form)
+            # Both -v and -V taken, no short form
             _fn_opts=( "version||Show version" "${_fn_opts[@]}" )
         fi
     fi
@@ -990,7 +1004,7 @@ _fn_init() {
                 _fn_usage >&2
                 REPLY=0; return 1
             fi
-        elif [[ "$_prescan_arg" == "--version" ]] || { [[ "$_prescan_arg" == "-v" ]] && (( _version_has_short )); }; then
+        elif [[ "$_prescan_arg" == "--version" ]] || { [[ "$_prescan_arg" == "-${_version_short}" ]] && (( _version_has_short )); }; then
             if (( _has_version_val )); then
                 _fn_version >&2
                 REPLY=0; return 1
