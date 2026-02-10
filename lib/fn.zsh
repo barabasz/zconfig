@@ -939,7 +939,7 @@ _fn_init() {
     (( ${+_fn_examples} && ${#_fn_examples} > 0 )) && _orig_has_examples=1
 
     # Check for conflicts with user-defined options
-    local _has_v=0 _has_V=0 _has_version=0 _has_h=0 _has_help=0
+    local _has_v=0 _has_V=0 _has_version=0 _has_h=0 _has_H=0 _has_help=0
     if (( _orig_has_opts )); then
         local _chk_spec
         local -a _chk_fld=()
@@ -951,6 +951,7 @@ _fn_init() {
             [[ "${_chk_fld[2]}" == "V" ]] && _has_V=1
             [[ "${_chk_fld[1]}" == "help" ]] && _has_help=1
             [[ "${_chk_fld[2]}" == "h" ]] && _has_h=1
+            [[ "${_chk_fld[2]}" == "H" ]] && _has_H=1
         done
     fi
 
@@ -983,14 +984,27 @@ _fn_init() {
     fi
 
     # Auto-add help option if there's reason to show help and no conflict
-    local _help_has_short=0
+    # Priority: _fn[help_short] override > -h > -H > no short form
+    local _help_has_short=0 _help_short=""
     local _needs_help=$(( _has_version_val || _has_info || _has_desc || _has_notes || _orig_has_opts || _orig_has_args || _orig_has_examples ))
     if (( _needs_help && !_has_help )); then
-        if (( !_has_h )); then
+        if [[ -n "${_fn[help_short]}" ]]; then
+            # Manual override specified
+            _help_short="${_fn[help_short]}"
+            _fn_opts=( "help|${_help_short}|Show this help message" "${_fn_opts[@]}" )
+            _help_has_short=1
+        elif (( !_has_h )); then
+            # Default: use -h
+            _help_short="h"
             _fn_opts=( "help|h|Show this help message" "${_fn_opts[@]}" )
             _help_has_short=1
+        elif (( !_has_H )); then
+            # Fallback: use -H
+            _help_short="H"
+            _fn_opts=( "help|H|Show this help message" "${_fn_opts[@]}" )
+            _help_has_short=1
         else
-            # -h is taken, add --help only (no short form)
+            # Both -h and -H taken, no short form
             _fn_opts=( "help||Show this help message" "${_fn_opts[@]}" )
         fi
     fi
@@ -999,7 +1013,7 @@ _fn_init() {
     # This ensures help/version work even if placed after options that expect values
     local _prescan_arg
     for _prescan_arg in "$@"; do
-        if [[ "$_prescan_arg" == "--help" ]] || { [[ "$_prescan_arg" == "-h" ]] && (( _help_has_short )); }; then
+        if [[ "$_prescan_arg" == "--help" ]] || { [[ "$_prescan_arg" == "-${_help_short}" ]] && (( _help_has_short )); }; then
             if _fn_has_help; then
                 _fn_usage >&2
                 REPLY=0; return 1
