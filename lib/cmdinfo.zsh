@@ -41,16 +41,26 @@ get_cmd_path() {
         function)
             # Try to find function source
             local zsh_dir="${ZDOTDIR:-${XDG_CONFIG_HOME:-$HOME/.config}/zsh}"
+            # 1. Check functions/ directory (autoloaded functions)
             if [[ -f "$zsh_dir/functions/$cmd" ]]; then
                 REPLY="$zsh_dir/functions/$cmd"
                 print -r -- "$REPLY"
                 return 0
             fi
-            # Search in fpath
+            # 2. Search in fpath
             local dir
             for dir in $fpath; do
                 if [[ -f "$dir/$cmd" ]]; then
                     REPLY="$dir/$cmd"
+                    print -r -- "$REPLY"
+                    return 0
+                fi
+            done
+            # 3. Search in lib/*.zsh files for function definition
+            local lib_file
+            for lib_file in "$zsh_dir"/lib/*.zsh(N); do
+                if grep -q "^${cmd}[[:space:]]*(" "$lib_file" 2>/dev/null; then
+                    REPLY="$lib_file"
                     print -r -- "$REPLY"
                     return 0
                 fi
