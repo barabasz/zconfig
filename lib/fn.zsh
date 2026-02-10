@@ -938,18 +938,25 @@ _fn_init() {
     (( ${+_fn_args} && ${#_fn_args} > 0 )) && _orig_has_args=1
     (( ${+_fn_examples} && ${#_fn_examples} > 0 )) && _orig_has_examples=1
 
-    # Check for conflicts with user-defined options
+    # Check for conflicts and extract user-defined version/help options
     local _has_v=0 _has_V=0 _has_version=0 _has_h=0 _has_H=0 _has_help=0
+    local _user_version_short="" _user_help_short=""
     if (( _orig_has_opts )); then
         local _chk_spec
         local -a _chk_fld=()
         for _chk_spec in "${_fn_opts[@]}"; do
             [[ -z "$_chk_spec" ]] && continue
             _chk_fld=( "${(@s:|:)_chk_spec}" )
-            [[ "${_chk_fld[1]}" == "version" ]] && _has_version=1
+            if [[ "${_chk_fld[1]}" == "version" ]]; then
+                _has_version=1
+                _user_version_short="${_chk_fld[2]}"
+            fi
+            if [[ "${_chk_fld[1]}" == "help" ]]; then
+                _has_help=1
+                _user_help_short="${_chk_fld[2]}"
+            fi
             [[ "${_chk_fld[2]}" == "v" ]] && _has_v=1
             [[ "${_chk_fld[2]}" == "V" ]] && _has_V=1
-            [[ "${_chk_fld[1]}" == "help" ]] && _has_help=1
             [[ "${_chk_fld[2]}" == "h" ]] && _has_h=1
             [[ "${_chk_fld[2]}" == "H" ]] && _has_H=1
         done
@@ -958,53 +965,47 @@ _fn_init() {
     # Ensure _fn_opts exists
     (( ${+_fn_opts} )) || typeset -ga _fn_opts=()
 
-    # Auto-add version option if version is set and no conflict
-    # Priority: _fn[version_short] override > -v > -V > no short form
+    # Determine version short option
+    # If user defined "version" in _fn_opts, use their short; otherwise auto-add
     local _version_has_short=0 _version_short=""
-    if (( _has_version_val && !_has_version )); then
-        if [[ -n "${_fn[version_short]}" ]]; then
-            # Manual override specified
-            _version_short="${_fn[version_short]}"
-            _fn_opts=( "version|${_version_short}|Show version" "${_fn_opts[@]}" )
-            _version_has_short=1
-        elif (( !_has_v )); then
-            # Default: use -v
+    if (( _has_version )); then
+        # User defined version option - use their short
+        _version_short="$_user_version_short"
+        [[ -n "$_version_short" ]] && _version_has_short=1
+    elif (( _has_version_val )); then
+        # Auto-add version with fallback: -v > -V > no short
+        if (( !_has_v )); then
             _version_short="v"
             _fn_opts=( "version|v|Show version" "${_fn_opts[@]}" )
             _version_has_short=1
         elif (( !_has_V )); then
-            # Fallback: use -V
             _version_short="V"
             _fn_opts=( "version|V|Show version" "${_fn_opts[@]}" )
             _version_has_short=1
         else
-            # Both -v and -V taken, no short form
             _fn_opts=( "version||Show version" "${_fn_opts[@]}" )
         fi
     fi
 
-    # Auto-add help option if there's reason to show help and no conflict
-    # Priority: _fn[help_short] override > -h > -H > no short form
+    # Determine help short option
+    # If user defined "help" in _fn_opts, use their short; otherwise auto-add
     local _help_has_short=0 _help_short=""
     local _needs_help=$(( _has_version_val || _has_info || _has_desc || _has_notes || _orig_has_opts || _orig_has_args || _orig_has_examples ))
-    if (( _needs_help && !_has_help )); then
-        if [[ -n "${_fn[help_short]}" ]]; then
-            # Manual override specified
-            _help_short="${_fn[help_short]}"
-            _fn_opts=( "help|${_help_short}|Show this help message" "${_fn_opts[@]}" )
-            _help_has_short=1
-        elif (( !_has_h )); then
-            # Default: use -h
+    if (( _has_help )); then
+        # User defined help option - use their short
+        _help_short="$_user_help_short"
+        [[ -n "$_help_short" ]] && _help_has_short=1
+    elif (( _needs_help )); then
+        # Auto-add help with fallback: -h > -H > no short
+        if (( !_has_h )); then
             _help_short="h"
             _fn_opts=( "help|h|Show this help message" "${_fn_opts[@]}" )
             _help_has_short=1
         elif (( !_has_H )); then
-            # Fallback: use -H
             _help_short="H"
             _fn_opts=( "help|H|Show this help message" "${_fn_opts[@]}" )
             _help_has_short=1
         else
-            # Both -h and -H taken, no short form
             _fn_opts=( "help||Show this help message" "${_fn_opts[@]}" )
         fi
     fi
