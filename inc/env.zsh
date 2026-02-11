@@ -9,7 +9,7 @@ zfile_track_start ${0:A}
 ##
 
 # Configuration version 
-export ZSH_CONFIG_VERSION="20260206v1"
+export ZSH_CONFIG_VERSION="20260211v1"
 
 # zconfig directories
 export CONFDIR=$HOME/.config
