@@ -6,6 +6,8 @@
 # Shell files tracking infrastructure
 ##
 
+zmodload zsh/datetime
+
 [[ -o interactive ]] && {
     typeset -A ZFILES
     typeset -A ZFILES_TIME

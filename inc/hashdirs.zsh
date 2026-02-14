@@ -17,6 +17,7 @@ hash -d lib=$LIBDIR
 hash -d tmp=$TMP
 hash -d venv=$VENVDIR
 hash -d zsh=$ZDOTDIR
+hash -d cellar=$HOMEBREW_CELLAR
 
 # shell files tracking - keep at the end
 zfile_track_end ${0:A}

@@ -696,6 +696,7 @@ install_extra_utils() {
         "zoxide:zoxide:"
         "yazi:yazi:"
         "kitty-terminfo::kitty-terminfo"
+        "tlrc:tlrc:"
         "tmux:tmux:tmux"
     )
     install_utils "Installing utilities" "${utils[@]}"

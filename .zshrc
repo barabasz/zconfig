@@ -40,11 +40,11 @@ fi
 # Key bindings
 (( ZSH_LOAD_KEYS )) && source "$ZSH_INC_DIR/keys.zsh"
 
-# Directory hashes
-(( ZSH_LOAD_HASHDIRS )) && source "$ZSH_INC_DIR/hashdirs.zsh"
-
 # App configurations
 (( ZSH_LOAD_APPS )) && source_zsh_dir "$ZSH_APPS_DIR"
+
+# Directory hashes
+(( ZSH_LOAD_HASHDIRS )) && source "$ZSH_INC_DIR/hashdirs.zsh"
 
 # Plugin configurations
 (( ZSH_LOAD_PLUGINS )) && source "$ZSH_INC_DIR/plugins.zsh"

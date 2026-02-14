@@ -8,18 +8,11 @@ local -A _fn=(
     [desc]="Universal command information tool. Shows version, location, and
             description for any command - binaries, functions, aliases, builtins.
 
-            By default shows all info. Use options to get specific fields:
-              -s/--short       Show short info (no description, no size)
-              -p/--path        Show only path/location
-              -v/--version     Show only version number
-              -d/--description Show only one-line description
-              -S/--source      Show description source (with -d)
-
             Sets \$REPLY and \$reply array for scripting:
               reply[1]=version, reply[2]=path, reply[3]=description"
-    [version]="3.4.0"
+    [version]="0.9.5"
     [created]="2025"
-    [modified]="2026-02-10"
+    [modified]="2026-02-14"
     [license]="MIT"
     [author]="Andrzej Barabasz"
     [notes]="Uses helpers: get_cmd_path, get_cmd_version, get_cmd_info, get_cmd_size, format_size"
@@ -27,10 +20,10 @@ local -A _fn=(
 
 local -a _fn_args=(
     "command|Command name to inspect|r"
-    "appname|Display name (defaults to command)|o"
 )
 
 local -a _fn_opts=(
+    "info|i|Show full info with description"
     "short|s|Show short info (no description, no size)"
     "path|p|Show only path/location"
     "ver|v|Show only version number"
@@ -52,7 +45,7 @@ local -A opts=() args=()
 _fn_init "$@" || return $REPLY
 
 local cmd="${args[command]}"
-local appname="${args[appname]:-$cmd}"
+local show_info=$(( ${+opts[info]} ))
 local show_short=$(( ${+opts[short]} ))
 local show_path=$(( ${+opts[path]} ))
 local show_ver=$(( ${+opts[ver]} ))
@@ -60,9 +53,9 @@ local show_desc=$(( ${+opts[description]} ))
 local show_source=$(( ${+opts[source]} ))
 local quiet=$(( ${+opts[quiet]} ))
 
-# If no specific option, show all
+# If no specific option, show default (no description)
 local show_all=0
-(( show_short + show_path + show_ver + show_desc == 0 )) && show_all=1
+(( show_info + show_short + show_path + show_ver + show_desc == 0 )) && show_all=1
 
 # Initialize reply array: [1]=version, [2]=path, [3]=description
 reply=("" "" "")
@@ -77,20 +70,41 @@ if [[ -z "$cmd_type" || "$cmd_type" == "none" ]]; then
     return 1
 fi
 
-# Gather information using helper functions
+# Resolve alias to real command name
+local real_cmd="$cmd"
+if [[ "$cmd_type" == "alias" ]]; then
+    real_cmd="${aliases[$cmd]%% *}"
+fi
+
+# Gather only what's needed for the requested output mode
 # IMPORTANT: Use cmd_loc instead of 'path' to avoid shadowing zsh's special $path variable
-local ver="" cmd_loc="" desc="" desc_source="" cmd_size="" cmd_size_fmt=""
+local ver="" cmd_loc="" cmd_loc_short="" desc="" desc_source="" cmd_size="" cmd_size_fmt=""
 
-ver=$(get_cmd_version "$cmd" 2>/dev/null)
-cmd_loc=$(get_cmd_path "$cmd" 2>/dev/null)
-cmd_loc_short="${(D)cmd_loc}"  # Shorten path: $HOME→~, hash dirs→~name
-cmd_size=$(get_cmd_size "$cmd" 2>/dev/null)
-[[ -n "$cmd_size" && "$cmd_size" -gt 0 ]] && cmd_size_fmt=$(format_size "$cmd_size")
+if (( show_ver || show_short || show_all || show_info )); then
+    ver=$(get_cmd_version "$cmd" 2>/dev/null)
+fi
 
-# get_cmd_info sets reply[1] with source name, so call without subshell
-get_cmd_info "$cmd" >/dev/null 2>&1
-desc="$REPLY"
-desc_source="${reply[1]:-}"
+if (( show_path || show_short || show_all || show_info )); then
+    cmd_loc=$(get_cmd_path "$cmd" 2>/dev/null)
+    cmd_loc_short="${(D)cmd_loc}"  # Shorten path: $HOME→~, hash dirs→~name
+fi
+
+if (( show_desc || show_info )); then
+    # Full lookup including external sources
+    get_cmd_info "$cmd" >/dev/null 2>&1
+    desc="$REPLY"
+    desc_source="${reply[1]:-}"
+elif (( show_all )); then
+    # Default mode: only fast zconfig lookup (no external commands)
+    get_cmd_info "$cmd" "local" >/dev/null 2>&1
+    desc="$REPLY"
+    desc_source="${reply[1]:-}"
+fi
+
+if (( show_all || show_info )); then
+    cmd_size=$(get_cmd_size "$cmd" 2>/dev/null)
+    [[ -n "$cmd_size" && "$cmd_size" -gt 0 ]] && cmd_size_fmt=$(format_size "$cmd_size")
+fi
 
 # Set reply array for scripting
 reply=("$ver" "$cmd_loc" "$desc")
@@ -115,9 +129,13 @@ elif (( show_short )); then
     case "$cmd_type" in
         command|alias)
             if [[ "$cmd_loc" == /* ]]; then
-                line="${g}${cmd}${x} ${y}${ver}${x} is installed in ${c}${cmd_loc_short}${x}"
+                if [[ "$ver" != "unknown" ]]; then
+                    line="${g}${real_cmd}${x} ${y}${ver}${x} is installed in ${c}${cmd_loc_short}${x}"
+                else
+                    line="${g}${real_cmd}${x} is installed in ${c}${cmd_loc_short}${x}"
+                fi
             else
-                line="${g}${cmd}${x} is ${p}${cmd_loc}${x}"
+                line="${g}${real_cmd}${x} is ${p}${cmd_loc}${x}"
             fi
             ;;
         function)
@@ -148,26 +166,30 @@ elif (( show_short )); then
     REPLY="$line"
     (( quiet )) || print "$line"
 
-elif (( show_all )); then
-    # Full output: description + help hint + location info
-    local line1="" line2="" line3=""
+elif (( show_all || show_info )); then
+    # Default: alias + location info (with size)
+    # With -i/--info: also description + help hint
+    local line0="" line1="" line2="" line3=""
     local zsh_dir="${ZDOTDIR:-${XDG_CONFIG_HOME:-$HOME/.config}/zsh}"
-    local is_zconfig_func=0
 
-    # Check if it's a zconfig function (has _fn metadata)
-    if [[ "$cmd_type" == "function" && -f "$zsh_dir/functions/$cmd" ]]; then
-        local content=$(<"$zsh_dir/functions/$cmd")
-        [[ "$content" == *'_fn_init'* ]] && is_zconfig_func=1
+    # Line 0: alias info
+    if [[ "$cmd_type" == "alias" ]]; then
+        line0="${g}${cmd}${x} is an alias for ${g}'${aliases[$cmd]}'${x}"
     fi
 
-    # Line 1: description (without command name prefix)
-    if [[ "$desc" != "No description available" ]]; then
-        line1="$desc"
-    fi
+    # Line 1 & 2: always for zconfig, or with -i/--info for external commands
+    if (( show_info )) || [[ "$desc_source" == "zconfig" ]]; then
+        # Line 1: description
+        if [[ -n "$desc" && "$desc" != "No description available" ]]; then
+            line1="$desc"
+        fi
 
-    # Line 2: help hint for zconfig functions
-    if (( is_zconfig_func )); then
-        line2="Use: ${g}${cmd}${x} ${p}--help${x} for usage information."
+        # Line 2: help hint for zconfig functions
+        if [[ "$cmd_type" == "function" && -f "$zsh_dir/functions/$cmd" ]]; then
+            local content=$(<"$zsh_dir/functions/$cmd")
+            [[ "$content" == *'_fn_init'* ]] && \
+                line2="Use: ${g}${cmd}${x} ${p}--help${x} for usage information."
+        fi
     fi
 
     # Line 3: location/type info (with size if available)
@@ -177,9 +199,13 @@ elif (( show_all )); then
     case "$cmd_type" in
         command|alias)
             if [[ "$cmd_loc" == /* ]]; then
-                line3="${g}${cmd}${x} ${y}${ver}${x} is installed in ${c}${cmd_loc_short}${x}${size_info}"
+                if [[ "$ver" != "unknown" ]]; then
+                    line3="${g}${real_cmd}${x} ${y}${ver}${x} is installed in ${c}${cmd_loc_short}${x}${size_info}"
+                else
+                    line3="${g}${real_cmd}${x} is installed in ${c}${cmd_loc_short}${x}${size_info}"
+                fi
             else
-                line3="${g}${cmd}${x} is ${p}${cmd_loc}${x}"
+                line3="${g}${real_cmd}${x} is ${p}${cmd_loc}${x}"
             fi
             ;;
         function)
@@ -211,11 +237,13 @@ elif (( show_all )); then
     # Build REPLY and print
     REPLY=""
     if (( ! quiet )); then
+        [[ -n "$line0" ]] && print "$line0"
         [[ -n "$line1" ]] && print "$line1"
         [[ -n "$line2" ]] && print "$line2"
         print "$line3"
     fi
-    [[ -n "$line1" ]] && REPLY="$line1\n"
+    [[ -n "$line0" ]] && REPLY="$line0\n"
+    [[ -n "$line1" ]] && REPLY="${REPLY}$line1\n"
     [[ -n "$line2" ]] && REPLY="${REPLY}$line2\n"
     REPLY="${REPLY}$line3"
 fi

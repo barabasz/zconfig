@@ -28,6 +28,15 @@ get_cmd_path() {
     cmd_path=$(whence -p "$real_cmd" 2>/dev/null)
 
     if [[ -n "$cmd_path" && -x "$cmd_path" ]]; then
+        cmd_path="${cmd_path:A}"
+        # Follow small wrapper scripts (e.g. Homebrew bin/ → libexec/ pattern)
+        if [[ -f "$cmd_path" ]] && (( $(wc -c < "$cmd_path") < 1024 )); then
+            local _exec_target
+            _exec_target=$(grep -o 'exec "[^"]*"' "$cmd_path" 2>/dev/null)
+            _exec_target="${_exec_target#exec \"}"
+            _exec_target="${_exec_target%\"}"
+            [[ -x "$_exec_target" ]] && cmd_path="$_exec_target"
+        fi
         REPLY="$cmd_path"
         print -r -- "$REPLY"
         return 0
@@ -58,13 +67,12 @@ get_cmd_path() {
             done
             # 3. Search in lib/*.zsh files for function definition
             local lib_file
-            for lib_file in "$zsh_dir"/lib/*.zsh(N); do
-                if grep -q "^${cmd}[[:space:]]*(" "$lib_file" 2>/dev/null; then
-                    REPLY="$lib_file"
-                    print -r -- "$REPLY"
-                    return 0
-                fi
-            done
+            lib_file=$(grep -l "^${cmd}[[:space:]]*(" "$zsh_dir"/lib/*.zsh 2>/dev/null)
+            if [[ -n "$lib_file" ]]; then
+                REPLY="$lib_file"
+                print -r -- "$REPLY"
+                return 0
+            fi
             REPLY="function"
             print -r -- "$REPLY"
             return 0
@@ -149,7 +157,14 @@ get_cmd_size() {
     # Case 1: Target is a file (binary, script, or function source file)
     # get_cmd_path returns the absolute path if found.
     if [[ -n "$target" && -f "$target" ]]; then
-        # Use the external/global get_file_size function
+        # Follow small wrapper scripts (e.g. Homebrew bin/ → libexec/ pattern)
+        if (( $(get_file_size "$target") < 1024 )); then
+            local _exec_target
+            _exec_target=$(grep -o 'exec "[^"]*"' "$target" 2>/dev/null)
+            _exec_target="${_exec_target#exec \"}"
+            _exec_target="${_exec_target%\"}"
+            [[ -x "$_exec_target" ]] && target="$_exec_target"
+        fi
         get_file_size "$target"
         return $?
     fi
@@ -277,11 +292,14 @@ get_cmd_manpath() {
 # =============================================================================
 # get_cmd_info - Get one-line description of a command
 # =============================================================================
-# Usage: get_cmd_info <command>
+# Usage: get_cmd_info <command> [mode]
+#   mode: "all" (default) - try all sources
+#         "local" - only fast zconfig lookup (no external commands)
 # Returns: description string or "No description available"
 # Sets: $REPLY with description, $reply[1] with source name
 get_cmd_info() {
     local cmd="$1"
+    local mode="${2:-all}"
     [[ -z "$cmd" ]] && { REPLY="No description available"; reply=(""); return 1; }
 
     local zsh_dir="${ZDOTDIR:-${XDG_CONFIG_HOME:-$HOME/.config}/zsh}"
@@ -293,11 +311,16 @@ get_cmd_info() {
         real_cmd="${aliases[$cmd]%% *}"
     fi
 
-    # Source 1: zconfig functions
+    # Resolve command path (with symlink resolution) for brew/apt checks
+    local cmd_path=$(whence -p "$real_cmd" 2>/dev/null)
+    [[ -n "$cmd_path" ]] && cmd_path="${cmd_path:A}"
+
+    # Source 1: zconfig functions (functions/ with _fn metadata, lib/ with comments)
     _info_try_zconfig() {
         local func_dir="$zsh_dir/functions"
         local lib_dir="$zsh_dir/lib"
 
+        # Check functions/ directory (autoloaded functions with _fn metadata)
         if [[ -f "$func_dir/$cmd" ]]; then
             local content=$(<"$func_dir/$cmd")
             if [[ "$content" =~ '\[info\]="([^"]+)"' ]]; then
@@ -307,76 +330,47 @@ get_cmd_info() {
             fi
         fi
 
-        local file line
-        local -a comment_block=()
-        for file in "$lib_dir"/*.zsh(.N); do
-            comment_block=()
-            while IFS= read -r line; do
-                if [[ "$line" =~ "^${cmd}\\s*\\(\\)" ]]; then
-                    for cmt in "${comment_block[@]}"; do
-                        cmt="${cmt#\#}"
-                        cmt="${cmt# }"
-                        if [[ -n "$cmt" ]]; then
-                            description="$cmt"
-                            source_name="zconfig"
-                            return 0
+        # Check lib/*.zsh files (first comment line above function definition)
+        # Only if command is a loaded function (skip for binaries/aliases)
+        if (( ${+functions[$cmd]} )); then
+            local _lib_file
+            _lib_file=$(grep -l "^${cmd}[[:space:]]*(" "$lib_dir"/*.zsh 2>/dev/null)
+            if [[ -n "$_lib_file" ]]; then
+                local _line
+                local -a _cblock=()
+                while IFS= read -r _line; do
+                    if [[ "$_line" =~ "^${cmd}\\s*\\(\\)" ]]; then
+                        if (( ${#_cblock} > 0 )); then
+                            local _desc="${_cblock[1]#\#}"
+                            _desc="${_desc# }"
+                            if [[ -n "$_desc" ]]; then
+                                description="$_desc"
+                                source_name="zconfig"
+                                return 0
+                            fi
                         fi
-                    done
-                elif [[ "$line" == \#* ]]; then
-                    comment_block+=("$line")
-                else
-                    comment_block=()
-                fi
-            done < "$file"
-        done
-        return 1
-    }
-
-    # Source 2: tldr
-    _info_try_tldr() {
-        command -v tldr &>/dev/null || return 1
-        local output
-        output=$(tldr "$real_cmd" 2>/dev/null) || return 1
-
-        local line in_desc=0
-        while IFS= read -r line; do
-            line="${line#"${line%%[![:space:]]*}"}"
-            [[ -z "$line" ]] && continue
-            [[ "$line" == "$real_cmd" ]] && { in_desc=1; continue; }
-            if (( in_desc )); then
-                description="${line%.}"
-                source_name="tldr"
-                return 0
+                        break
+                    elif [[ "$_line" == \#* ]]; then
+                        _cblock+=("$_line")
+                    else
+                        _cblock=()
+                    fi
+                done < "$_lib_file"
             fi
-        done <<< "$output"
+        fi
         return 1
     }
 
-    # Source 3: whatis
-    _info_try_whatis() {
-        command -v whatis &>/dev/null || return 1
-        local output
-        output=$(whatis "$real_cmd" 2>/dev/null) || return 1
-
-        local line
-        while IFS= read -r line; do
-            if [[ "$line" =~ "^${real_cmd}[,(]" || "$line" =~ "^${real_cmd} " ]]; then
-                if [[ "$line" == *" - "* ]]; then
-                    description="${line#* - }"
-                    description="${(U)description[1]}${description[2,-1]}"
-                    source_name="whatis"
-                    return 0
-                fi
-            fi
-        done <<< "$output"
-        return 1
-    }
-
-    # Source 4: brew info
+    # Source 2: brew info (only for Homebrew-installed commands)
     _info_try_brew() {
-        command -v brew &>/dev/null || return 1
+        [[ -n "$HOMEBREW_PREFIX" && "$cmd_path" == ${HOMEBREW_PREFIX}/Cellar/* ]] || return 1
+        # Extract formula name from Cellar path
+        local formula="${cmd_path#${HOMEBREW_PREFIX}/Cellar/}"
+        formula="${formula%%/*}"
+        [[ -n "$formula" ]] || return 1
+
         local output
-        output=$(brew info "$real_cmd" 2>/dev/null) || return 1
+        output=$(brew info "$formula" 2>/dev/null) || return 1
 
         local line_num=0
         local line
@@ -392,9 +386,11 @@ get_cmd_info() {
         return 1
     }
 
-    # Source 5: apt show
+    # Source 3: apt show (only on Debian-based systems)
     _info_try_apt() {
+        is_debian_based || return 1
         command -v apt &>/dev/null || return 1
+
         local output
         output=$(apt show "$real_cmd" 2>/dev/null) || return 1
 
@@ -410,8 +406,34 @@ get_cmd_info() {
         return 1
     }
 
-    # Try sources in order
-    _info_try_zconfig || _info_try_tldr || _info_try_whatis || _info_try_brew || _info_try_apt
+    # Source 4: tldr (fallback)
+    _info_try_tldr() {
+        command -v tldr &>/dev/null || return 1
+        local output
+        output=$(tldr "$real_cmd" 2>/dev/null) || return 1
+
+        local line in_desc=0
+        while IFS= read -r line; do
+            line="${line#"${line%%[![:space:]]*}"}"
+            [[ -z "$line" ]] && continue
+            [[ "$line" == "$real_cmd" ]] && { in_desc=1; continue; }
+            if (( in_desc )); then
+                # Skip tldr disambiguation pages
+                [[ "$line" == *"can refer to"* ]] && return 1
+                description="${line%.}"
+                source_name="tldr"
+                return 0
+            fi
+        done <<< "$output"
+        return 1
+    }
+
+    # Try sources in order: zconfig (local) → tldr (fast) → brew/apt (slow, fallback)
+    if [[ "$mode" == "local" ]]; then
+        _info_try_zconfig
+    else
+        _info_try_zconfig || _info_try_tldr || _info_try_brew || _info_try_apt
+    fi
 
     if [[ -n "$description" ]]; then
         REPLY="$description"
