@@ -1,10 +1,20 @@
 # zconfig
 
-**zconfig** is a modern, modular, performance-optimized zsh configuration focused on maintainability and fast startup times. The configuration is split across specialized files and directories with clear separation of concerns.
+**zconfig** is a modern, modular, and performance-optimized Zsh framework architected for maintainability and near-instant startup. It eschews the overhead of bloated frameworks in favor of a lightweight, custom-tailored architecture that prioritizes speed without sacrificing power.
 
 👉 For installation instructions, see [INSTALL.md](docs/INSTALL.md).
 
 ![zconfig](zconfig.png)
+
+## Key Technical Pillars
+
+- **Modular Architecture:** The configuration is organized into specialized files and directories with a strict **separation of concerns**, making it easy to navigate, debug, and extend.
+- **Automatic Bytecode Compilation:** To ensure maximum responsiveness, **zconfig** automatically handles `zcompile` for all configuration scripts, leveraging `.zwc` files for faster execution.
+- **Modern Prompt Engine:** Leverages [oh-my-posh](https://ohmyposh.dev/) as its primary prompt engine for a highly customizable, themeable, and cross-shell experience.
+- **Advanced Syntax Highlighting:** Integrates [F-Sy-H](https://github.com/z-shell/F-Sy-H) (Fast-Syntax-Highlighting), providing a more feature-rich and performant alternative to standard highlighting plugins.
+- **Lightweight Plugin System:** Built with **zero Oh-My-Zsh dependencies**, it features a streamlined management system to add and update plugins without sacrificing performance.
+- **Intelligent Completions:** Combines [zsh-autosuggestions](https://github.com/zsh-users/zsh-autosuggestions) for fluid, fish-like command suggestions with [fzf-tab](https://github.com/Aloxaf/fzf-tab) to replace the standard completion menu with a high-performance fuzzy-search interface.
+- **File Tracking System:** Includes the **`zfiles`** command to track all sourced files with their respective load times and status, making it easy to identify bottlenecks and optimize startup performance.
 
 ## Documentation
 
@@ -19,16 +29,6 @@
 | [STRUCTURE.md](docs/STRUCTURE.md) | Directory structure |
 | [ZFILES.md](docs/ZFILES.md) | File tracking system |
 | [ZSH.md](docs/ZSH.md) | Zsh coding style |
-
-## Key Features
-
-- File tracking system with performance monitoring (`zfiles` command)
-- Modular library of helper functions (`lib/`)
-- Lightweight plugin system (no Oh-My-Zsh dependency)
-- Automatic bytecode compilation (`.zwc`) for faster loading
-- Lazy loading for heavy applications
-- Dynamic loading of all library and app files
-- Autoloaded user functions (`functions/`)
 
 ## Philosophy
 

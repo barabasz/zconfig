@@ -19,20 +19,20 @@ Run this single command:
 ```
 
 The installer will:
-- Check system requirements (macOS or Debian-based Linux)
-- Update system packages (Linux: `apt update && apt upgrade`)
-- Install core utilities (Linux: `curl`, `unzip`, `coreutils`)
-- Install Homebrew (if not present)
-- Install extra utilities: `bat`, `eza`, `htop`, `ncurses`, `gh`, `fzf`, `zoxide`, `yazi`
-- Install `git` and `zsh`
-- Install `oh-my-posh` prompt theme engine
-- Install `kitty-terminfo` (Linux only)
-- Check for uncommitted local changes (prompts before overwriting)
-- Back up or remove existing zsh configuration
-- Clone the repository to `~/.config/zsh`
-- Create symlink `~/.zshenv` → `~/.config/zsh/.zshenv`
-- Minimize login info (Linux: `.hushlogin`, disable MOTD scripts)
-- Set zsh as your default shell
+1. Check system requirements (macOS or Debian-based Linux)
+2. Install `sudo` (Linux, if missing)
+3. Sync timezone/clock and update system packages (Linux: `apt update && apt upgrade`)
+4. Install core utilities (Linux: `unzip`, `coreutils`)
+5. Install `git`
+6. Install Homebrew (if not present)
+7. Install utilities: `bat`, `curl`, `dig`, `eza`, `fzf`, `gh`, `glow`, `grep`, `htop`, `kitty-terminfo`, `lsof`, `man`, `sed`, `tldr`, `tmux`, `tput`, `yazi`, `yq`, `zoxide`, `zsh`
+8. Install `oh-my-posh` prompt theme engine
+9. Handle existing installation (backup/remove)
+10. Clone the repository to `~/.config/zsh`
+11. Create symlink `~/.zshenv` → `~/.config/zsh/.zshenv`
+12. Minimize login info (Linux: `.hushlogin`, disable MOTD scripts)
+13. Set zsh as your default shell
+14. Start zsh with new configuration
 
 ## Manual Installation
 

@@ -31,10 +31,12 @@ load_plugin_directly fzf-tab Aloxaf/fzf-tab
 
 # zsh-autosuggestions
 # Fish-like fast/unobtrusive autosuggestions for Zsh
+# https://github.com/zsh-users/zsh-autosuggestions
 load_plugin_wrapper zsh-autosuggestions
 
 # zsh-history-substring-search
 # Type in any part of any command from history
+# https://github.com/zsh-users/zsh-history-substring-search
 load_plugin_wrapper zsh-history
 
 # F-Sy-H - Feature-rich Syntax Highlighting for Zsh
