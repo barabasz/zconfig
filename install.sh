@@ -24,7 +24,7 @@
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.8.6"
+SCRIPT_VERSION="0.8.7"
 SCRIPT_DATE="2026-02-15"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
@@ -681,6 +681,13 @@ update_system() {
 
     print_header "Updating system packages"
 
+    # Sync timezone and clock before apt update (avoids SSL cert failures)
+    do_sudo timedatectl set-timezone Europe/Warsaw 2>/dev/null
+    do_sudo systemctl restart systemd-timesyncd 2>/dev/null
+    sleep 1  # give timesyncd a moment to sync
+    print_info "Set timezone to ${c}Europe/Warsaw${x} and synced clock"
+    print_info "Current time: ${c}$(date '+%Y-%m-%d %H:%M:%S %Z')${x}"
+
     spin "Updating package lists..." apt_run update
     spin "Upgrading packages..." apt_run upgrade -y
 
@@ -1043,12 +1050,6 @@ post_install_fixes() {
     if is_debian && [[ -x /usr/bin/batcat ]]; then
         do_sudo ln -sf /usr/bin/batcat /usr/local/bin/bat 2>/dev/null
         print_info "Created symlink for bat: ${c}bat${x} -> ${c}batcat${x}"
-    fi
-
-    # Set timezone for Linux
-    if is_debian; then
-        do_sudo timedatectl set-timezone Europe/Warsaw 2>/dev/null
-        print_info "Set timezone to ${c}Europe/Warsaw${x}"
     fi
 }
 
