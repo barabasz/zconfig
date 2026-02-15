@@ -5,25 +5,26 @@
 # Usage: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/barabasz/zconfig/HEAD/install.sh)"
 #
 # This script installs zconfig by:
-# 1. Checking system requirements (macOS or Debian-based Linux)
-# 2. Installing sudo and updating system packages (Linux only)
-# 3. Installing core utilities (Linux only)
-# 4. Installing git (xcode-select on macOS, apt on Linux)
-# 5. Installing Homebrew (if not present)
-# 6. Installing utilities: zsh, bat, eza, htop, gh, fzf, zoxide, yazi, kitty-terminfo
-# 7. Installing oh-my-posh prompt theme engine
-# 8. Handling existing installation (backup/remove)
-# 9. Cloning the zconfig repository to ~/.config/zsh
-# 10. Creating symlink ~/.zshenv -> ~/.config/zsh/.zshenv
-# 11. Minimizing login info: .hushlogin, MOTD scripts (Linux only)
-# 12. Setting zsh as default shell
-# 13. Starting zsh with new configuration
+#  1. Checking system requirements (macOS or Debian-based Linux)
+#  2. Installing sudo and updating system packages (Linux only)
+#  3. Installing core utilities (Linux only)
+#  4. Installing git (xcode-select on macOS, apt on Linux)
+#  5. Installing Homebrew (if not present)
+#  6. Installing extra utilities like at, eza, fzf, etc.
+#  7. Installing the Z shell itself
+#  8. Installing oh-my-posh prompt theme engine
+#  9. Handling existing installation (backup/remove)
+# 10. Cloning the zconfig repository to ~/.config/zsh
+# 11. Creating symlink ~/.zshenv -> ~/.config/zsh/.zshenv
+# 12. Minimizing login info: .hushlogin, MOTD scripts (Linux only)
+# 13. Setting zsh as default shell
+# 14. Starting zsh with new configuration
 
 # =============================================================================
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.8.3"
+SCRIPT_VERSION="0.8.4"
 SCRIPT_DATE="2026-02-15"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
@@ -688,15 +689,23 @@ install_core_utils() {
 install_extra_utils() {
     local utils=(
         "bat:bat:bat"    # cat replacement with syntax highlighting
+        "curl::curl"     # URL transfers - used by network.zsh, wanip
+        "dig::dnsutils"  # DNS lookup - used by network.zsh, mdig, wanip
         "eza:eza:eza"    # ls replacement with git status and icons
         "fzf:fzf:"       # fuzzy finder
         "glow:glow:"     # markdown viewer
         "gh:gh:"         # GitHub CLI
+        "grep::grep"     # pattern matching - used by cmdinfo, fn.zsh, etc.
         "htop:htop:htop" # interactive process viewer
-        "kitty-terminfo::kitty-terminfo"
+        "kitty-terminfo::kitty-terminfo" # terminal info for Kitty
+        "lsof::lsof"    # list open files - used by network.zsh
+        "man::man-db"    # manual pages - used by cmdinfo.zsh
+        "sed:gsed:sed"   # stream editor - used by fn.zsh, strings.zsh
         "tlrc:tlrc:"     # tldr client written in Rust
         "tmux:tmux:tmux" # terminal multiplexer
+        "tput::ncurses-bin" # terminal capabilities - used by print.zsh
         "yazi:yazi:"     # blazing fast terminal file manager written in Rust
+        "yq:yq:"         # YAML processor written in Go
         "zoxide:zoxide:" # smarter cd replacement with fuzzy search and frecency
         "zsh:zsh:zsh:1"  # Z shell itself - critical for zconfig
     )
