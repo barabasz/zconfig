@@ -10,9 +10,9 @@ local -A _fn=(
 
             Sets \$REPLY and \$reply array for scripting:
               reply[1]=version, reply[2]=path, reply[3]=description"
-    [version]="0.9.5"
+    [version]="0.9.6"
     [created]="2025"
-    [modified]="2026-02-14"
+    [modified]="2026-02-15"
     [license]="MIT"
     [author]="Andrzej Barabasz"
     [notes]="Uses helpers: get_cmd_path, get_cmd_version, get_cmd_info, get_cmd_size, format_size"
