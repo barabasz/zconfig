@@ -24,7 +24,7 @@
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.8.5"
+SCRIPT_VERSION="0.8.6"
 SCRIPT_DATE="2026-02-15"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
@@ -42,8 +42,9 @@ TEMP=${TEMP:-$XDG_TMP_HOME}
 # Ensure directories exist
 mkdir -p $XDG_CONFIG_HOME $XDG_CACHE_HOME $XDG_BIN_HOME $XDG_LIB_HOME $XDG_TMP_HOME $XDG_DATA_HOME $XDG_STATE_HOME
 
-# Logging - all output is logged to this file
+# Logging - clean log + verbose debug log
 LOGFILE="$XDG_TMP_HOME/zconfig_$(date +%Y%m%d_%H%M%S).log"
+DEBUGLOG="${LOGFILE%.log}.debug.log"
 
 # Step counter - UPDATE THIS when adding/removing installation steps!
 # macOS: 10 steps, Linux: 14 steps (set dynamically after OS detection)
@@ -112,9 +113,15 @@ get_elapsed_time() {
 }
 
 # Log message to file only (not displayed to user)
+# Strips ANSI color codes before writing
 # Usage: print_log "message"
 print_log() {
-    echo "█ $1" >> "$LOGFILE"
+    local clean="${1//$'\033['[0-9]m/}"
+    clean="${clean//$'\033['[0-9][0-9]m/}"
+    clean="${clean//$'\033['[0-9];[0-9]m/}"
+    clean="${clean//$'\033['[0-9];[0-9][0-9]m/}"
+    clean="${clean//$'\033['[0-9];[0-9];[0-9]*m/}"
+    echo "█ $clean" >> "$LOGFILE"
 }
 
 # Print title in a box (used at script start)
@@ -374,8 +381,9 @@ spin() {
     local delay=0.15
     local i=0
 
-    # Log the command being executed
-    print_log "Executing: $*"
+    # Log the command being executed (short form to clean log, full to debug)
+    print_log "Executing: ${*%% *}"
+    echo "█ Executing: $*" >> "$DEBUGLOG"
 
     # Disable job control messages (shell-agnostic)
     if [[ -n "$ZSH_VERSION" ]]; then
@@ -384,8 +392,8 @@ spin() {
         set +m
     fi
 
-    # Run command in background, log output to file
-    "$@" >> "$LOGFILE" 2>&1 &
+    # Run command in background, verbose output to debug log only
+    "$@" >> "$DEBUGLOG" 2>&1 &
     local pid=$!
 
     # Hide cursor
@@ -412,11 +420,13 @@ spin() {
     # Re-enable job control (only needed for bash, zsh uses LOCAL_OPTIONS)
     [[ -z "$ZSH_VERSION" ]] && set -m
 
-    # Log result
+    # Log result to both files
     if [[ $exit_code -eq 0 ]]; then
         print_log "Command completed successfully"
+        echo "█ Command completed successfully" >> "$DEBUGLOG"
     else
-        print_log "Command failed with exit code: $exit_code"
+        print_log "Command FAILED with exit code: $exit_code"
+        echo "█ Command FAILED with exit code: $exit_code" >> "$DEBUGLOG"
     fi
 
     return $exit_code
@@ -551,6 +561,7 @@ install_header() {
     print_title "zconfig installer v${SCRIPT_VERSION}"
     print_comment "Date: $(date '+%Y-%m-%d %H:%M:%S')"
     print_comment "Log file: $LOGFILE"
+    print_comment "Debug log: $DEBUGLOG"
     print_info "This will install $ZCONFIG to ${c}$ZCONFIG_DIR${x}"
     # Note for Linux users (OS_TYPE not set yet, so check directly)
     [[ "$(uname -s)" == "Linux" ]] && print_comment "Note: sudo password will be asked only once"
@@ -583,6 +594,7 @@ installation_successful() {
     print_info "$ZCONFIG installed to: ${c}$ZCONFIG_DIR${x}"
     print_info "Entry point for zsh:  ${c}$ZSHENV_LINK${x}"
     print_info "Installation log:     ${c}$LOGFILE${x}"
+    print_info "Debug log:            ${c}$DEBUGLOG${x}"
     printf "\n"
     print_info "On first run, $ZCONFIG will automatically:"
     print_info "  - Download and install required plugins"
