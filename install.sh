@@ -23,8 +23,8 @@
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.8.2"
-SCRIPT_DATE="2026-02-09"
+SCRIPT_VERSION="0.8.3"
+SCRIPT_DATE="2026-02-15"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
 ZSHENV_LINK="$HOME/.zshenv"
@@ -687,17 +687,18 @@ install_core_utils() {
 
 install_extra_utils() {
     local utils=(
-        "zsh:zsh:zsh:1"
-        "bat:bat:bat"
-        "eza:eza:eza"
-        "htop:htop:htop"
-        "gh:gh:"
-        "fzf:fzf:"
-        "zoxide:zoxide:"
-        "yazi:yazi:"
+        "bat:bat:bat"    # cat replacement with syntax highlighting
+        "eza:eza:eza"    # ls replacement with git status and icons
+        "fzf:fzf:"       # fuzzy finder
+        "glow:glow:"     # markdown viewer
+        "gh:gh:"         # GitHub CLI
+        "htop:htop:htop" # interactive process viewer
         "kitty-terminfo::kitty-terminfo"
-        "tlrc:tlrc:"
-        "tmux:tmux:tmux"
+        "tlrc:tlrc:"     # tldr client written in Rust
+        "tmux:tmux:tmux" # terminal multiplexer
+        "yazi:yazi:"     # blazing fast terminal file manager written in Rust
+        "zoxide:zoxide:" # smarter cd replacement with fuzzy search and frecency
+        "zsh:zsh:zsh:1"  # Z shell itself - critical for zconfig
     )
     install_utils "Installing utilities" "${utils[@]}"
 }
