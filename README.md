@@ -2,19 +2,22 @@
 
 **zconfig** is a modern, modular, and performance-optimized Zsh framework architected for maintainability and near-instant startup. It eschews the overhead of bloated frameworks in favor of a lightweight, custom-tailored architecture that prioritizes speed without sacrificing power.
 
+Whether you are a Zsh power user or just taking your first steps in the terminal, zconfig is built for you. It provides beginners with a stable, "batteries-included" environment out of the box, while offering veterans the modular flexibility needed to deeply customize and refine their workflow.
+
 👉 For installation instructions, see [INSTALL.md](docs/INSTALL.md).
 
 ![zconfig](zconfig.png)
 
 ## Key Technical Pillars
 
-- **Modular Architecture:** The configuration is organized into specialized files and directories with a strict **separation of concerns**, making it easy to navigate, debug, and extend.
-- **Automatic Bytecode Compilation:** To ensure maximum responsiveness, **zconfig** automatically handles `zcompile` for all configuration scripts, leveraging `.zwc` files for faster execution.
+- **Modular Architecture:** The configuration is organized into specialized files and directories with a strict separation of concerns, making it easy to navigate, debug, and extend.
+- **Robust Function Framework**: Includes `fn.zsh`, a dedicated library for building professional Zsh functions. It provides standardized metadata handling, automated help generation, robust option parsing, and strict argument validation/type checking.
+- **Automatic Bytecode Compilation:** To ensure maximum responsiveness, `zconfig` automatically handles `zcompile` for all configuration scripts, leveraging `.zwc` files for faster execution.
 - **Modern Prompt Engine:** Leverages [oh-my-posh](https://ohmyposh.dev/) as its primary prompt engine for a highly customizable, themeable, and cross-shell experience.
 - **Advanced Syntax Highlighting:** Integrates [F-Sy-H](https://github.com/z-shell/F-Sy-H) (Fast-Syntax-Highlighting), providing a more feature-rich and performant alternative to standard highlighting plugins.
-- **Lightweight Plugin System:** Built with **zero Oh-My-Zsh dependencies**, it features a streamlined management system to add and update plugins without sacrificing performance.
+- **Lightweight Plugin System:** Built with zero Oh-My-Zsh dependencies, it features a streamlined management system to add and update plugins without sacrificing performance.
 - **Intelligent Completions:** Combines [zsh-autosuggestions](https://github.com/zsh-users/zsh-autosuggestions) for fluid, fish-like command suggestions with [fzf-tab](https://github.com/Aloxaf/fzf-tab) to replace the standard completion menu with a high-performance fuzzy-search interface.
-- **File Tracking System:** Includes the **`zfiles`** command to track all sourced files with their respective load times and status, making it easy to identify bottlenecks and optimize startup performance.
+- **File Tracking System:** Includes the `zfiles` command to track all sourced files with their respective load times and status, making it easy to identify bottlenecks and optimize startup performance.
 
 ## Documentation
 
@@ -158,7 +161,7 @@ Autoloaded functions available on-demand. No function declaration needed in file
 | `zhelp` | Display helpful commands and documentation |
 | `zdoc` | Browse and view documentation files |
 | `zman` | List all zconfig functions with filtering |
-| `zinfo` | Display help information for a specific function |
+| `zinfo` | Display version, path, and description of any command |
 | `zconfig` | Edit zsh config files using the default editor |
 | `zfiles` | Show loaded shell files with status and load time |
 | `zupdate` | Update zconfig and all plugins |
