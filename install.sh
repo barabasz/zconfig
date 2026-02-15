@@ -121,7 +121,7 @@ print_log() {
     clean="${clean//$'\033['[0-9];[0-9]m/}"
     clean="${clean//$'\033['[0-9];[0-9][0-9]m/}"
     clean="${clean//$'\033['[0-9];[0-9];[0-9]*m/}"
-    echo "█ $clean" >> "$LOGFILE"
+    echo "$clean" >> "$LOGFILE"
 }
 
 # Print title in a box (used at script start)
