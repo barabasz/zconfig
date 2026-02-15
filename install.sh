@@ -24,7 +24,7 @@
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.8.4"
+SCRIPT_VERSION="0.8.5"
 SCRIPT_DATE="2026-02-15"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
@@ -688,7 +688,7 @@ install_core_utils() {
 
 install_extra_utils() {
     local utils=(
-        "bat:bat:bat"    # cat replacement with syntax highlighting
+        "bat:bat:"       # cat replacement with syntax highlighting
         "curl::curl"     # URL transfers - used by network.zsh, wanip
         "dig::dnsutils"  # DNS lookup - used by network.zsh, mdig, wanip
         "eza:eza:eza"    # ls replacement with git status and icons
@@ -701,7 +701,7 @@ install_extra_utils() {
         "lsof::lsof"    # list open files - used by network.zsh
         "man::man-db"    # manual pages - used by cmdinfo.zsh
         "sed:gsed:sed"   # stream editor - used by fn.zsh, strings.zsh
-        "tlrc:tlrc:"     # tldr client written in Rust
+        "tldr:tlrc:"     # tldr client written in Rust
         "tmux:tmux:tmux" # terminal multiplexer
         "tput::ncurses-bin" # terminal capabilities - used by print.zsh
         "yazi:yazi:"     # blazing fast terminal file manager written in Rust
@@ -791,29 +791,26 @@ minimize_login_info() {
         print_info "Created ${c}$hushlogin${x}"
     fi
 
-    # Check MOTD directory
+    # Disable MOTD scripts (Ubuntu/Debian only)
     local motd_dir="/etc/update-motd.d"
-    [[ -d "$motd_dir" ]] || return 0
+    if [[ -d "$motd_dir" ]]; then
+        local distro=""
+        [[ -f /etc/os-release ]] && . /etc/os-release && distro="$ID"
 
-    # Detect distro and define scripts to disable
-    local distro=""
-    [[ -f /etc/os-release ]] && . /etc/os-release && distro="$ID"
+        local scripts=()
+        case "$distro" in
+            ubuntu) scripts=("00-header" "10-help-text" "50-motd-news") ;;
+            debian) scripts=("10-uname") ;;
+        esac
 
-    local scripts=()
-    case "$distro" in
-        ubuntu) scripts=("00-header" "10-help-text" "50-motd-news") ;;
-        debian) scripts=("10-uname") ;;
-        *) return 0 ;;
-    esac
-
-    # Disable MOTD scripts
-    local script
-    for script in "${scripts[@]}"; do
-        if [[ -f "$motd_dir/$script" ]]; then
-            do_sudo chmod -x "$motd_dir/$script" &>/dev/null
-            print_info "Disabled MOTD script: ${c}$script${x}"
-        fi
-    done
+        local script
+        for script in "${scripts[@]}"; do
+            if [[ -f "$motd_dir/$script" ]]; then
+                do_sudo chmod -x "$motd_dir/$script" &>/dev/null
+                print_info "Disabled MOTD script: ${c}$script${x}"
+            fi
+        done
+    fi
 
     print_success "Login information minimized"
 }
