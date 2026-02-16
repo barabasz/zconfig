@@ -23,11 +23,11 @@ Whether you are a Zsh power user or just taking your first steps in the terminal
 
 | File | Description |
 |------|-------------|
-| [BEST_PRACTICES.md](docs/BEST_PRACTICES.md) | Best practices, do's and don'ts |
 | [EXAMPLES.md](docs/EXAMPLES.md) | Examples and use cases |
 | [FN.md](docs/FN.md) | Function library for building standardized functions |
 | [FUNCTIONS.md](docs/FUNCTIONS.md) | List of all available functions |
 | [GUIDELINES.md](docs/GUIDELINES.md) | Development guidelines |
+| [INSTALL.md](docs/INSTALL.md) | Installation instructions |
 | [NAMING.md](docs/NAMING.md) | Naming conventions |
 | [STRUCTURE.md](docs/STRUCTURE.md) | Directory structure |
 | [ZFILES.md](docs/ZFILES.md) | File tracking system |
@@ -246,47 +246,54 @@ See `lib/compile.zsh` for all compilation functions.
 
 ## Best Practices
 
-### Do's
-
-- Always use tracking in sourced files (`zfile_track_start`/`zfile_track_end`)
-- Check installation before configuring (`is_installed`)
-- Follow zsh coding style (see [ZSH.md](docs/ZSH.md))
-- Use `zparseopts` for parsing command-line options (not `case`/`getopts`)
-- Use lazy loading for slow tools
-- Use `load_plugin` for plugins (handles compilation)
-- Keep plugin directories in `.gitignore`
-
-### Don'ts
-
-- Never skip tracking in sourced files
-- Never assume tools are installed
-- Don't use `case $1` or `getopts` for option parsing (use `zparseopts`)
-- Don't put heavy operations in `.zshenv`
-- Don't use subshells when not needed
-- Don't commit plugin directories (only wrappers)
+See [GUIDELINES.md](docs/GUIDELINES.md) for do's, don'ts, file type rules, common patterns, and performance tips.
 
 ## Troubleshooting
 
 ### Shell Starts Slowly
 
-1. Run `zfiles` to identify slow files (> 10ms)
-2. Consider lazy loading heavy apps
-3. Check for unnecessary external commands
+1. Run `zspeed` to benchmark startup time across shell modes
+2. Run `zfiles` to identify slow files (> 10ms is suspicious)
+3. Use `zinfo -i <command>` to inspect specific tools and their load cost
+4. Consider lazy loading heavy apps (see [GUIDELINES.md](docs/GUIDELINES.md#lazy-loading))
+5. Check for unnecessary external commands — prefer zsh builtins
 
 ### Function Not Found
 
-1. Check if in `lib/` or `functions/`
-2. For `functions/`: verify `$fpath` and file permissions
-3. Start new shell: `exec zsh`
+1. Run `zman` to list all available functions
+2. Run `zinfo <name>` to check if the command exists and where it's defined
+3. For `functions/`: verify the file exists and has correct permissions
+4. Reload the shell: `reload` or `exec zsh`
 
 ### Changes Not Applied
 
-1. For `lib/` or `inc/`: `source ~/.zshenv`
-2. For `apps/`: `source ~/.zshrc`
-3. Or start new shell: `exec zsh`
+1. Run `reload` to restart the shell with the new configuration
+2. Or manually: `source ~/.zshenv` (for `lib/`, `inc/`) or `source ~/.zshrc` (for `apps/`)
+3. After editing `functions/`: `unfunction <name>` then call it again (autoload will reload)
+
+### Check Installation
+
+Run `zcheck` to verify zconfig installation, directory structure, and loaded components.
 
 ## References
 
-- Zsh manual: `man zshall`
-- Parameter expansion: `man zshexpn`
-- Builtin commands: `man zshbuiltins`
+### zconfig Tools
+
+| Command | Description |
+|---------|-------------|
+| `zhelp` | Display helpful commands and documentation |
+| `zdoc` | Browse and view documentation files |
+| `zman` | List all functions from `lib/` and `functions/` |
+| `zinfo` | Display version, path, and description of any command |
+| `zfiles` | Show loaded shell files with status and load time |
+| `zspeed` | Measure zsh startup performance |
+| `zcheck` | Check zconfig installation and configuration |
+| `zconfig` | Edit zconfig files using the default editor |
+| `zupdate` | Update zconfig, plugins, and system packages |
+
+### Zsh Documentation
+
+- `man zshall` — complete zsh manual
+- `man zshexpn` — parameter expansion
+- `man zshbuiltins` — builtin commands
+- `man zshcompsys` — completion system

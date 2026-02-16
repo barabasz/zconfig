@@ -1,22 +1,376 @@
 # Part of zconfig · https://github.com/barabasz/zconfig · MIT License
 #
-# Check if zconfig is properly installed and configured.
+# Comprehensive diagnostic tool for verifying zconfig health
 # Use 'zcheck --help' for more information.
 
 local -A _fn=(
-    [info]="Check zconfig installation and configuration"
-    [desc]="Checks if zconfig is properly installed and configured. It verifies the presence
-            of necessary directories, files, and environment variables. It also checks for common
-            issues and provides suggestions for fixing them."
+    [info]="Verify zconfig installation, configuration, and health"
+    [desc]="Comprehensive diagnostic tool that checks all aspects of zconfig health:
+            core file structure, syntax validation, environment variables, compilation
+            status, git repository state, and plugin status. Reports pass/fail/warn
+            counts with a final summary.
+
+            By default shows section summaries with errors and warnings.
+            Use -v/--verbose for detailed per-item output."
     [version]="0.1.0"
     [created]="2026-02-08"
-    [modified]="2026-02-08"
+    [modified]="2026-02-16"
     [license]="MIT"
     [author]="Andrzej Barabasz"
 )
 
-# Ensure all *DIR directories exist
-local _var                                                                                                                                                                     
-for _var in ${(Mk)parameters:#*DIR}; do                                                                                                                                        
-    [[ -d ${(P)_var} ]] || mkdir -p "${(P)_var}"                                                                                                                               
+local -a _fn_opts=(
+    "verbose|v|Show detailed per-item output"
+)
+
+local -a _fn_examples=(
+    "zcheck|Run diagnostics with summary output"
+    "zcheck -v|Run diagnostics with detailed output"
+)
+
+local -A opts=() args=()
+_fn_init "$@" || return $REPLY
+
+# --- Setup ---
+integer pass=0 fail=0 warn=0
+integer verbose=$(( ${+opts[verbose]} ))
+
+_ok()   { (( pass++ )); (( verbose )) && prints "$1"; }
+_fail() { (( fail++ )); printe "$1"; }
+_warn() { (( warn++ )); printw "$1"; }
+
+# =========================================================================
+# 1. Core Structure
+# =========================================================================
+print
+printh "Core Structure"
+
+# Essential directories
+integer _dir_issues=0
+local _dir _dname
+local -A _dirs=(
+    [ZSH_INC_DIR]="$ZSH_INC_DIR"
+    [ZSH_LIB_DIR]="$ZSH_LIB_DIR"
+    [ZSH_APPS_DIR]="$ZSH_APPS_DIR"
+    [ZSH_FUNCS_DIR]="$ZSH_FUNCS_DIR"
+    [ZSH_PLUGINS_DIR]="$ZSH_PLUGINS_DIR"
+    [ZSH_CACHE_DIR]="$ZSH_CACHE_DIR"
+)
+for _dname in ${(ko)_dirs}; do
+    _dir="${_dirs[$_dname]}"
+    if [[ -d "$_dir" ]]; then
+        _ok "$_dname exists"
+    else
+        _fail "$_dname missing: $_dir"
+        (( _dir_issues++ ))
+    fi
 done
+
+# Entry point: ~/.zshenv must be symlink to $ZDOTDIR/.zshenv
+if [[ -L "$HOME/.zshenv" ]]; then
+    local _target="${$( readlink "$HOME/.zshenv" ):A}"
+    local _expected="${ZDOTDIR}/.zshenv"
+    if [[ "$_target" == "${_expected:A}" ]]; then
+        _ok "~/.zshenv symlink is correct"
+    else
+        _fail "~/.zshenv points to $_target (expected $_expected)"
+        (( _dir_issues++ ))
+    fi
+else
+    _fail "~/.zshenv is not a symlink"
+    (( _dir_issues++ ))
+fi
+
+(( !verbose && !_dir_issues )) && prints "All zconfig directories are present"
+
+# Startup files, inc/ modules, lib/ files
+integer _file_issues=0
+local _sf
+for _sf in .zshenv .zshrc .zprofile .zlogin .zlogout; do
+    if [[ -f "$ZDOTDIR/$_sf" ]]; then
+        _ok "$_sf exists"
+    else
+        _warn "$_sf not found in ZDOTDIR"
+        (( _file_issues++ ))
+    fi
+done
+
+local _mod
+local -a _req_modules=(
+    zfiles env modules xdg path locales options colors
+    completion icons prompt aliases keys hashdirs plugins
+)
+for _mod in $_req_modules; do
+    if [[ -f "$ZSH_INC_DIR/${_mod}.zsh" ]]; then
+        _ok "inc/${_mod}.zsh"
+    else
+        _fail "inc/${_mod}.zsh missing"
+        (( _file_issues++ ))
+    fi
+done
+
+local _lf
+for _lf in $ZSH_LIB_DIR/*.zsh(N.); do
+    if [[ -s "$_lf" ]]; then
+        _ok "lib/${_lf:t}"
+    else
+        _fail "lib/${_lf:t} is empty"
+        (( _file_issues++ ))
+    fi
+done
+
+(( !verbose && !_file_issues )) && prints "All zconfig files are present"
+
+# =========================================================================
+# 2. Syntax Check
+# =========================================================================
+print
+printh "Syntax Check"
+
+local _file _err _sdir
+integer _syntax_ok=0 _syntax_fail=0
+
+# .zsh files in inc/, lib/, apps/
+for _sdir in "$ZSH_INC_DIR" "$ZSH_LIB_DIR" "$ZSH_APPS_DIR"; do
+    for _file in $_sdir/*.zsh(N.); do
+        _err=$(zsh -n "$_file" 2>&1)
+        if (( $? == 0 )); then
+            (( _syntax_ok++ ))
+        else
+            (( _syntax_fail++ ))
+            _fail "Syntax error in ${_file:t}: ${_err##*$'\n'}"
+        fi
+    done
+done
+
+# Plugin .zsh wrappers
+for _file in $ZSH_PLUGINS_DIR/*.zsh(N.); do
+    _err=$(zsh -n "$_file" 2>&1)
+    if (( $? == 0 )); then
+        (( _syntax_ok++ ))
+    else
+        (( _syntax_fail++ ))
+        _fail "Syntax error in plugins/${_file:t}: ${_err##*$'\n'}"
+    fi
+done
+
+# Function files (wrap in function context)
+for _file in $ZSH_FUNCS_DIR/*(N.); do
+    [[ "$_file" == *.zwc ]] && continue
+    _err=$(zsh -n -c "function _test { $(<$_file) }" 2>&1)
+    if (( $? == 0 )); then
+        (( _syntax_ok++ ))
+    else
+        (( _syntax_fail++ ))
+        _fail "Syntax error in functions/${_file:t}: ${_err##*$'\n'}"
+    fi
+done
+
+integer _syntax_total=$(( _syntax_ok + _syntax_fail ))
+(( pass += _syntax_ok ))
+if (( _syntax_fail == 0 )); then
+    prints "All $_syntax_total files passed syntax check"
+else
+    _warn "$_syntax_fail file(s) with syntax errors (of $_syntax_total checked)"
+fi
+
+# =========================================================================
+# 3. Environment
+# =========================================================================
+print
+printh "Environment"
+
+integer _env_issues=0
+local _vname _vval
+
+# Key variables must be set
+for _vname in ZDOTDIR ZSH_CONFIG_VERSION CONFDIR; do
+    if [[ -n "${(P)_vname}" ]]; then
+        _ok "$_vname is set"
+    else
+        _fail "$_vname is not set"
+        (( _env_issues++ ))
+    fi
+done
+
+# All ZSH_*_DIR vars must point to existing directories
+for _vname in ${(Mk)parameters:#ZSH_*_DIR}; do
+    _vval="${(P)_vname}"
+    if [[ -d "$_vval" ]]; then
+        _ok "$_vname → ${(D)_vval}"
+    else
+        _fail "$_vname points to non-existent directory: $_vval"
+        (( _env_issues++ ))
+    fi
+done
+
+# Cache dir must be writable
+if [[ -w "$ZSH_CACHE_DIR" ]]; then
+    _ok "ZSH_CACHE_DIR is writable"
+else
+    _fail "ZSH_CACHE_DIR is not writable: $ZSH_CACHE_DIR"
+    (( _env_issues++ ))
+fi
+
+# Functions dir must be in fpath
+if (( ${fpath[(Ie)$ZSH_FUNCS_DIR]} )); then
+    _ok "ZSH_FUNCS_DIR is in \$fpath"
+else
+    _fail "ZSH_FUNCS_DIR is not in \$fpath"
+    (( _env_issues++ ))
+fi
+
+(( !verbose && !_env_issues )) && prints "All required environment variables are set"
+
+# =========================================================================
+# 4. Compilation Status
+# =========================================================================
+print
+printh "Compilation Status"
+
+integer _needs_compile=0 _compile_total=0
+
+for _sdir in "$ZSH_INC_DIR" "$ZSH_LIB_DIR" "$ZSH_APPS_DIR"; do
+    for _file in $_sdir/*.zsh(N.); do
+        (( _compile_total++ ))
+        if needs_compile "$_file"; then
+            (( _needs_compile++ ))
+            (( verbose )) && printw "Needs recompilation: ${_file:h:t}/${_file:t}"
+        fi
+    done
+done
+
+(( pass += _compile_total - _needs_compile ))
+if (( _needs_compile == 0 )); then
+    prints "All $_compile_total files are up to date"
+else
+    _warn "$_needs_compile of $_compile_total file(s) need recompilation"
+    printi "Run ${g}compile_zsh_config${x} to recompile"
+fi
+
+# =========================================================================
+# 5. Git Status
+# =========================================================================
+print
+printh "Git Status"
+
+integer _git_issues=0
+
+if [[ -d "$ZDOTDIR/.git" ]]; then
+    _ok "ZDOTDIR is a git repository"
+
+    # Uncommitted changes
+    local _porcelain
+    _porcelain=$(git -C "$ZDOTDIR" status --porcelain 2>/dev/null)
+    if [[ -n "$_porcelain" ]]; then
+        integer _changes=${#${(f)_porcelain}}
+        local _s_chg="s"; (( _changes == 1 )) && _s_chg=""
+        _warn "$_changes uncommitted change${_s_chg}"
+        if (( verbose )); then
+            local _line
+            for _line in ${(f)_porcelain}; do
+                print "   - ${_line[4,-1]}"
+            done
+        fi
+        (( _git_issues++ ))
+    else
+        _ok "Working tree is clean"
+    fi
+
+    # Remote comparison
+    git -C "$ZDOTDIR" fetch --quiet 2>/dev/null
+    local _local_rev _remote_rev
+    _local_rev=$(git -C "$ZDOTDIR" rev-parse HEAD 2>/dev/null)
+    _remote_rev=$(git -C "$ZDOTDIR" rev-parse @{u} 2>/dev/null)
+
+    if [[ -n "$_remote_rev" ]]; then
+        if [[ "$_local_rev" == "$_remote_rev" ]]; then
+            _ok "Up to date with remote"
+        else
+            integer _behind
+            _behind=$(git -C "$ZDOTDIR" rev-list HEAD..@{u} --count 2>/dev/null)
+            if (( _behind > 0 )); then
+                local _s_cmt="s"; (( _behind == 1 )) && _s_cmt=""
+                _warn "$_behind commit${_s_cmt} behind remote"
+                (( _git_issues++ ))
+            else
+                _ok "Ahead of remote"
+            fi
+        fi
+    else
+        _warn "No upstream tracking branch configured"
+        (( _git_issues++ ))
+    fi
+else
+    _fail "ZDOTDIR is not a git repository"
+    (( _git_issues++ ))
+fi
+
+(( !verbose && !_git_issues )) && prints "Repository is clean and up to date"
+
+# =========================================================================
+# 6. Plugin Status
+# =========================================================================
+print
+printh "Plugin Status"
+
+local -a _plugin_dirs=($ZSH_PLUGINS_DIR/*(N/))
+integer _plugin_issues=0
+
+if (( ${#_plugin_dirs} == 0 )); then
+    printi "No plugins installed"
+else
+    local _pdir _pname _loaded_str _p_local _p_remote _s_pcmt
+    integer _p_behind
+    for _pdir in $_plugin_dirs; do
+        _pname="${_pdir:t}"
+
+        # Loaded status
+        if is_plugin_loaded "$_pname"; then
+            _loaded_str="loaded"
+        else
+            _loaded_str="not loaded"
+            _warn "Plugin '$_pname' is not loaded"
+            (( _plugin_issues++ ))
+        fi
+
+        # Git update status
+        if [[ -d "$_pdir/.git" ]]; then
+            git -C "$_pdir" fetch --quiet 2>/dev/null
+            _p_local=$(git -C "$_pdir" rev-parse HEAD 2>/dev/null)
+            _p_remote=$(git -C "$_pdir" rev-parse @{u} 2>/dev/null)
+
+            if [[ -n "$_p_remote" && "$_p_local" != "$_p_remote" ]]; then
+                _p_behind=$(git -C "$_pdir" rev-list HEAD..@{u} --count 2>/dev/null)
+                if (( _p_behind > 0 )); then
+                    _s_pcmt="s"; (( _p_behind == 1 )) && _s_pcmt=""
+                    _warn "Plugin '$_pname': $_loaded_str, $_p_behind commit${_s_pcmt} behind"
+                    (( _plugin_issues++ ))
+                else
+                    _ok "Plugin '$_pname': $_loaded_str, up to date"
+                fi
+            else
+                _ok "Plugin '$_pname': $_loaded_str, up to date"
+            fi
+        else
+            _ok "Plugin '$_pname': $_loaded_str (no git repo)"
+        fi
+    done
+
+    (( !verbose && !_plugin_issues )) && prints "All ${#_plugin_dirs} plugins are up to date"
+fi
+
+# =========================================================================
+# Summary
+# =========================================================================
+print
+printl "$x" "─" 40
+local _s_err="" _s_warn=""
+(( fail != 1 )) && _s_err="s"
+(( warn != 1 )) && _s_warn="s"
+print "${g}${pass} passed${x}, ${r}${fail} error${_s_err}${x}, ${y}${warn} warning${_s_warn}${x}"
+
+# Cleanup helper functions
+unfunction _ok _fail _warn 2>/dev/null
+
+(( fail == 0 ))

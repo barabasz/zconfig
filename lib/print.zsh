@@ -10,6 +10,32 @@ zfile_track_start ${0:A}
 
 export PRINT_ICON_SPACE="  "  # Space between icon and text
 
+# Print demo of available print functions (for testing and demonstration)
+# Usage: printdemo
+# Returns: 0 on success, 2 on invalid usage
+printdemo() {
+    (( ARGC == 0 )) || {
+        printe "${g}printdemo$x does not take any arguments."
+        return 2
+    }
+    typeset -A print_funcs=(
+        printe Error
+        printw Warning
+        printi Info
+        prints Success
+        printd Debug
+        printb Bell
+    )
+    printh "print* demo" $y $r
+    local func desc
+    for func desc in ${(kv)print_funcs}; do
+        if (( ${+functions[$func]} )); then
+            $func "This is a demo of $c$func$x function ($desc)."
+        fi
+    done
+}
+
+
 # --- Standard Logging ---
 
 # Print error message to stderr

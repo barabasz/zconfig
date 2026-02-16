@@ -41,6 +41,7 @@ _zhelp_header "Useful Commands"
 commands=(
     "zdoc"       "View zconfig documentation"
     "zconfig"    "Edit zsh config files"
+    "zcheck"     "Check zconfig for errors"
     "zinfo"      "Display help for zconfig functions"
     "zfiles"     "Show loaded shell files with status and load time"
     "zman"       "List all zconfig functions"
