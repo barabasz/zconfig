@@ -12,7 +12,7 @@ local -A _fn=(
 
             By default shows section summaries with errors and warnings.
             Use -v/--verbose for detailed per-item output."
-    [version]="0.1.0"
+    [version]="0.1.1"
     [created]="2026-02-08"
     [modified]="2026-02-16"
     [license]="MIT"
@@ -21,11 +21,15 @@ local -A _fn=(
 
 local -a _fn_opts=(
     "verbose|v|Show detailed per-item output"
+    "git|g|Show only git and plugin status"
+    "env|e|Show only environment info"
 )
 
 local -a _fn_examples=(
     "zcheck|Run diagnostics with summary output"
     "zcheck -v|Run diagnostics with detailed output"
+    "zcheck -g|Show only git and plugin status"
+    "zcheck -e|Show only environment info"
 )
 
 local -A opts=() args=()
@@ -35,6 +39,12 @@ _fn_init "$@" || return $REPLY
 integer pass=0 fail=0 warn=0
 integer verbose=$(( ${+opts[verbose]} ))
 
+# Section filtering
+integer show_all=1
+integer show_git=$(( ${+opts[git]} ))
+integer show_env=$(( ${+opts[env]} ))
+(( show_git || show_env )) && show_all=0
+
 _ok()   { (( pass++ )); (( verbose )) && prints "$1"; }
 _fail() { (( fail++ )); printe "$1"; }
 _warn() { (( warn++ )); printw "$1"; }
@@ -42,6 +52,7 @@ _warn() { (( warn++ )); printw "$1"; }
 # =========================================================================
 # 1. Core Structure
 # =========================================================================
+if (( show_all )); then
 print
 printh "Core Structure"
 
@@ -120,10 +131,12 @@ for _lf in $ZSH_LIB_DIR/*.zsh(N.); do
 done
 
 (( !verbose && !_file_issues )) && prints "All zconfig files are present"
+fi
 
 # =========================================================================
 # 2. Syntax Check
 # =========================================================================
+if (( show_all )); then
 print
 printh "Syntax Check"
 
@@ -173,22 +186,30 @@ if (( _syntax_fail == 0 )); then
 else
     _warn "$_syntax_fail file(s) with syntax errors (of $_syntax_total checked)"
 fi
+fi
 
 # =========================================================================
 # 3. Environment
 # =========================================================================
+if (( show_all || show_env )); then
 print
 printh "Environment"
 
 integer _env_issues=0
 local _vname _vval
 
-# Key variables must be set
-for _vname in ZDOTDIR ZSH_CONFIG_VERSION CONFDIR; do
-    if [[ -n "${(P)_vname}" ]]; then
-        _ok "$_vname is set"
+# Runtime info
+_ok "ZSH_VERSION $y→$x $c${ZSH_VERSION}$x"
+_ok "ZSH_CONFIG_VERSION $y→$x $c${ZSH_CONFIG_VERSION}$x"
+_ok "ZSH_DEBUG $y→$x $c${ZSH_DEBUG:-0}$x"
+
+# Critical directories must exist
+for _vname in ZDOTDIR CONFDIR; do
+    _vval="${(P)_vname}"
+    if [[ -d "$_vval" ]]; then
+        _ok "$_vname $y→$x $c${(D)_vval}$x"
     else
-        _fail "$_vname is not set"
+        _fail "$_vname points to non-existent directory: $_vval"
         (( _env_issues++ ))
     fi
 done
@@ -197,7 +218,7 @@ done
 for _vname in ${(Mk)parameters:#ZSH_*_DIR}; do
     _vval="${(P)_vname}"
     if [[ -d "$_vval" ]]; then
-        _ok "$_vname → ${(D)_vval}"
+        _ok "$_vname $y→$x $c${(D)_vval}$x"
     else
         _fail "$_vname points to non-existent directory: $_vval"
         (( _env_issues++ ))
@@ -221,10 +242,12 @@ else
 fi
 
 (( !verbose && !_env_issues )) && prints "All required environment variables are set"
+fi
 
 # =========================================================================
 # 4. Compilation Status
 # =========================================================================
+if (( show_all )); then
 print
 printh "Compilation Status"
 
@@ -247,10 +270,12 @@ else
     _warn "$_needs_compile of $_compile_total file(s) need recompilation"
     printi "Run ${g}compile_zsh_config${x} to recompile"
 fi
+fi
 
 # =========================================================================
 # 5. Git Status
 # =========================================================================
+if (( show_all || show_git )); then
 print
 printh "Git Status"
 
@@ -263,13 +288,14 @@ if [[ -d "$ZDOTDIR/.git" ]]; then
     local _porcelain
     _porcelain=$(git -C "$ZDOTDIR" status --porcelain 2>/dev/null)
     if [[ -n "$_porcelain" ]]; then
-        integer _changes=${#${(f)_porcelain}}
+        local -a _changed_files=( ${(f)_porcelain} )
+        integer _changes=${#_changed_files}
         local _s_chg="s"; (( _changes == 1 )) && _s_chg=""
         _warn "$_changes uncommitted change${_s_chg}"
         if (( verbose )); then
-            local _line
-            for _line in ${(f)_porcelain}; do
-                print "   - ${_line[4,-1]}"
+            local _cf
+            for _cf in $_changed_files; do
+                print "   - ${_cf[4,-1]}"
             done
         fi
         (( _git_issues++ ))
@@ -307,10 +333,12 @@ else
 fi
 
 (( !verbose && !_git_issues )) && prints "Repository is clean and up to date"
+fi
 
 # =========================================================================
 # 6. Plugin Status
 # =========================================================================
+if (( show_all || show_git )); then
 print
 printh "Plugin Status"
 
@@ -358,6 +386,7 @@ else
     done
 
     (( !verbose && !_plugin_issues )) && prints "All ${#_plugin_dirs} plugins are up to date"
+fi
 fi
 
 # =========================================================================
