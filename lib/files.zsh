@@ -222,6 +222,14 @@ count_dirs() {
     print -- ${#dirs}
 }
 
+# Create directory and change into it
+# Usage: mkcd "new/directory/path"
+# Returns: 0 on success, 1 on mkdir failure
+mkcd() {
+    (( ARGC == 1 )) || return 2
+    mkdir -p -- "$1" && cd -- "$1"
+}
+
 # Create a file and its parent directories if they don't exist
 # Usage: mkfile "path/to/deep/file.txt"
 # Returns: 0 on success, 1 on failure, 2 on invalid usage

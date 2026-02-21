@@ -7,9 +7,7 @@
 # Shell files tracking
 zfile_track_start ${0:A}
 
-# =============================================================================
-# get_cmd_path - Get command path (resolves aliases)
-# =============================================================================
+# Get command path (resolves aliases)
 # Usage: get_cmd_path <command>
 # Returns: path to binary, or type info for non-binaries
 # Sets: $REPLY with the result
@@ -104,9 +102,7 @@ get_cmd_path() {
     esac
 }
 
-# =============================================================================
-# get_func_size - Get size of function definition in bytes
-# =============================================================================
+# Get size of function definition in bytes
 # Usage: get_func_size <function_name>
 # Returns: size in bytes (calculated from function body)
 # Sets: $REPLY with the result
@@ -131,9 +127,7 @@ get_func_size() {
     return 1
 }
 
-# =============================================================================
-# get_cmd_size - Get size of the command target in bytes
-# =============================================================================
+# Get size of the command target in bytes
 # Usage: get_cmd_size <command>
 # Returns: size in bytes (file size for binaries, code size for functions)
 # Sets: $REPLY with the result
@@ -183,9 +177,7 @@ get_cmd_size() {
     return 1
 }
 
-# =============================================================================
-# get_cmd_version - Get command version number
-# =============================================================================
+# Get command version number
 # Usage: get_cmd_version <command> [version_flag]
 # Returns: version string or "unknown"
 # Sets: $REPLY with the result
@@ -256,9 +248,7 @@ get_cmd_version() {
     [[ -n "$version" ]] && return 0 || return 1
 }
 
-# =============================================================================
-# get_cmd_manpath - Get path to the manual page file
-# =============================================================================
+# Get path to the manual page file
 # Usage: get_cmd_manpath <command>
 # Returns: path to the man page file (e.g., /usr/share/man/man1/ls.1.gz)
 # Sets: $REPLY with the result
@@ -289,9 +279,7 @@ get_cmd_manpath() {
     return 1
 }
 
-# =============================================================================
-# get_cmd_info - Get one-line description of a command
-# =============================================================================
+# Get one-line description of a command
 # Usage: get_cmd_info <command> [mode]
 #   mode: "all" (default) - try all sources
 #         "local" - only fast zconfig lookup (no external commands)
