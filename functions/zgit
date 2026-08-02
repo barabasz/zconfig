@@ -21,18 +21,20 @@ local -a _fn_args=(
 )
 
 local -a _fn_commands=(
+    "list|List all repositories"
     "pull|Pull --rebase all repos"
     "push|Commit and push all repos"
     "push-force|Force push current directory to origin/main"
-    "list|List all repositories"
     "reset|Hard reset all repos to origin/main"
     "status|Show status for all repos"
+    "sync|Merge remote changes and push all repos"
 )
 
 local -a _fn_examples=(
     "zgit pull|Pull all repos"
     "zgit push|Commit and push all repos"
     "zgit status|Show status for all repos"
+    "zgit sync|Synchronize: merge remote changes and push all repos"
 )
 
 local -A opts=() args=()
@@ -146,6 +148,52 @@ case "$cmd" in
             git -C "$repo" status -s
             ((i++))
         done
+        ;;
+    
+    sync)
+        local -a repos=($~repo_glob)
+        local count=${#repos}
+        (( count == 0 )) && {
+            printe "No repositories found in $GHDIR."
+            return 1
+        }
+
+        printc "Synchronizing $count repositories with the remote." $y
+        print "Working directory: $c$GHDIR$x"
+
+        local -a failed=()
+        local i=1 repo
+
+        for repo in $repos; do
+            printc "\n$i/$count ${repo:t}" $g
+            printc "$(git -C "$repo" remote get-url origin)" $c
+
+            if ! git -C "$repo" pull --no-rebase --no-edit; then
+                printe "Pull/merge failed for ${repo:t}."
+                failed+=("$repo")
+                ((i++))
+                continue
+            fi
+
+            if ! git -C "$repo" push; then
+                printe "Push failed for ${repo:t}."
+                failed+=("$repo")
+            fi
+
+            ((i++))
+        done
+
+        if (( ${#failed} > 0 )); then
+            printe "\nSynchronization failed for ${#failed} repositories:"
+
+            for repo in $failed; do
+                print "  - ${repo:t}"
+            done
+
+            return 1
+        fi
+
+        printc "\nAll repositories synchronized successfully." $g
         ;;
 
     help)
