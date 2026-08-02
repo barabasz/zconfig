@@ -11,20 +11,22 @@ The `fn.zsh` library provides a declarative way to define function metadata, arg
 
 ## Quick Start
 
+For brevity, this Quick Start example defines only the `_fn_args` array that it actually uses; in production functions, it is recommended to declare `_fn_opts`, `_fn_commands`, and `_fn_examples` locally as empty arrays when they are unused, to prevent accidental reuse of values from another function or the global scope. The local associative arrays `opts=()` and `args=()` must always be defined because `_fn_init` populates them with the parsed options and positional arguments. The `-h/--help` and `-v/--version` options are added automatically from the function metadata.
+
+
 ```zsh
 # Minimal function using fn.zsh
 local -A _fn=(
     [version]="1.0.0"
-    [info]="Brief description of what this function does"
+    [info]="Print 'Hello, NAME!'"
 )
-
+local -a _fn_args=("name|A name to call|r")
 local -A opts=() args=()
 _fn_init "$@" || return $REPLY
-
-# Your code here - opts and args are now populated
+print "Hello, ${args[name]}!"
 ```
 
-For a complete example with arguments, options, commands, and examples, see the [Complete Examples](#complete-examples) section below.
+For more information see the [Complete Examples](#complete-examples) and [Commands](#commands) sections below.
 
 ## Function Metadata (_fn)
 
@@ -79,8 +81,8 @@ Positional arguments are defined in `_fn_args` array:
 ```zsh
 local -a _fn_args=(
     "input|Input file path"                 # name|description (required, string)
-    "output|Output file|o"                  # name|description|o (optional)
     "count|Number of items|r|integer"       # name|description|r|type (required, typed)
+    "output|Output file|o"                  # name|description|o (optional)
 )
 ```
 
@@ -184,6 +186,17 @@ Format: `command_name|description`
 
 Commands are displayed in help between the Arguments and Options sections. Useful when your function accepts a command/action as its first argument.
 
+When `_fn_commands` is non-empty and `_fn_args` defines exactly one required argument named command, `_fn_init` automatically validates the provided command against the first field of every `_fn_commands` entry. Optional command arguments are not validated automatically and must handle unknown commands explicitly.
+
+### Unknown Command Errors
+
+Use `_fn_cmd_error` when command validation must be handled explicitly:
+
+```zsh
+_fn_cmd_error "$cmd"
+return $REPLY
+```
+
 ### Example: Function with one required subcommand
 
 ```zsh
@@ -275,7 +288,7 @@ case "$cmd" in
     # so unknown commands must be handled explicitly
     *)
         _fn_cmd_error "$cmd"
-        return 2
+        return $REPLY
         ;;
 esac
 ```
@@ -340,7 +353,7 @@ Use interval notation to constrain numeric values or string lengths:
 "name|n|User name|name|string[1;255]"
 
 # Non-empty string up to 100 chars
-"title|t|Title|title|string(;100]"
+"title|t|Title|title|string(0;100]"
 ```
 
 For `string` type, the range applies to string **length**, not the value itself.
@@ -371,14 +384,14 @@ _fn_init "$@" || return $REPLY
 
 ### Return Values
 
-| Code | Meaning                                              |
-|------|------------------------------------------------------|
-| 0    | Success - opts and args are populated                |
-| 1    | Help or version shown (REPLY=0) or parsing error (REPLY=1) |
-| 2    | Validation error (REPLY=2)                           |
-| 3    | Definition error in _fn_args or _fn_opts (REPLY=3)   |
+| Code | Meaning |
+|------|---------|
+| `0` | Success, or help/version displayed successfully |
+| `1` | Runtime or dependency error |
+| `2` | Usage or input validation error |
+| `3` | Function definition error |
 
-**Important:** Always use `return $REPLY` after `_fn_init` fails to propagate the correct exit code.
+`_fn_init` may internally return a non-zero status to stop further execution after displaying help or version. Always use `_fn_init "$@" || return $REPLY` to propagate the intended final exit code.
 
 ## Complete Examples
 
