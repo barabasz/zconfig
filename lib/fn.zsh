@@ -256,6 +256,17 @@ _fn_type_error() {
     printe "$REPLY" >&2
 }
 
+# _fn_cmd_error - Print unknown command error
+# Usage: _fn_cmd_error "command"
+_fn_cmd_error() {
+    local cmd="$1"
+
+    printe "Unknown command: ${c}${cmd}${x}"
+    _fn_usage_short >&2
+    
+    REPLY=2; return 2
+}
+
 # _fn_check_required - Check if required commands are available
 # Reads: _fn[required] - space-separated list of required commands
 # Returns: 0 if all available, 1 if any missing (with error message)
@@ -310,12 +321,41 @@ _fn_has_commands() {
     (( ${+_fn_commands} && ${#_fn_commands} > 0 ))
 }
 
+# _fn_is_command - Check if command is defined in _fn_commands
+# Usage: _fn_is_command "command"
+_fn_is_command() {
+    local command="$1" spec
+
+    _fn_has_commands || return 1
+
+    for spec in "${_fn_commands[@]}"; do
+        [[ -z "$spec" ]] && continue
+        [[ "${spec%%|*}" == "$command" ]] && return 0
+    done
+
+    return 1
+}
+
 # _fn_is_arg_optional - Check if argument spec is optional
 # Usage: _fn_is_arg_optional "spec"
 # Returns: 0 if optional, 1 if required
 _fn_is_arg_optional() {
     local -a fld=( "${(@s:|:)1}" )
     [[ "${fld[3]:-r}" == "o" ]]
+}
+
+# _fn_has_required_command - Check for a single required command argument
+# Returns: 0 if exactly one required argument named "command" is defined, 1 otherwise
+_fn_has_required_command() {
+    _fn_has_commands || return 1
+    (( ${+_fn_args} && ${#_fn_args} == 1 )) || return 1
+
+    local spec="${_fn_args[1]}"
+
+    [[ "${spec%%|*}" == "command" ]] || return 1
+    _fn_is_arg_optional "$spec" && return 1
+
+    return 0
 }
 
 # _fn_def_error - Print definition error message
@@ -1266,6 +1306,16 @@ _fn_init() {
         printe "Too many arguments. Expected ${range_str}, got ${got_args}." >&2
         _fn_usage_short >&2
         REPLY=2; return 2
+    fi
+
+    # Check: required command is defined in _fn_commands
+    if _fn_has_required_command; then
+        local command="${remaining_args[1]}"
+
+        if ! _fn_is_command "$command"; then
+            _fn_cmd_error "$command"
+            return $REPLY
+        fi
     fi
 
     # Validate argument types and build args associative array (collect errors)

@@ -17,7 +17,7 @@ local -A _fn=(
 )
 
 local -a _fn_args=(
-    "command|Command to execute|o"
+    "command|Command to execute|r"
 )
 
 local -a _fn_commands=(
@@ -196,13 +196,4 @@ case "$cmd" in
         printc "\nAll repositories synchronized successfully." $g
         ;;
 
-    help)
-        _fn_usage >&2
-        ;;
-
-    *)
-        printe "Unknown command: $cmd"
-        printi "Use 'zgit --help' to see available commands."
-        return 1
-        ;;
 esac

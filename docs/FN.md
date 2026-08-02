@@ -24,6 +24,8 @@ _fn_init "$@" || return $REPLY
 # Your code here - opts and args are now populated
 ```
 
+For a complete example with arguments, options, commands, and examples, see the [Complete Examples](#complete-examples) section below.
+
 ## Function Metadata (_fn)
 
 The `_fn` associative array defines function metadata:
@@ -182,33 +184,99 @@ Format: `command_name|description`
 
 Commands are displayed in help between the Arguments and Options sections. Useful when your function accepts a command/action as its first argument.
 
-### Example: Function with Subcommands
+### Example: Function with one required subcommand
 
 ```zsh
 local -A _fn=(
-    [info]="Git wrapper for bulk operations"
+    [info]="Example function skeleton"
+    [version]="1.0.0"
+)
+
+local -a _fn_args=(
+    "command|Command to execute|r"
+)
+# This must be called with one required argument: the command name.
+
+local -a _fn_opts=() # No options defined
+
+local -a _fn_commands=(
+    "stop|Stops something"
+    "start|Starts something"
+    "pause|Pauses something"
+)
+
+local -a _fn_examples=() # No examples defined
+
+local -A opts=() args=()
+_fn_init "$@" || return $REPLY
+
+local cmd="${args[command]}"
+
+case "$cmd" in
+    stop)
+        # Handle stop command
+        ;;
+    start)
+        # Handle start command
+        ;;
+    pause)
+        # Handle pause command
+        ;;
+    # No default case is needed because _fn_init already validates
+    # the specified command against _fn_commands
+esac
+```
+
+### Example: Function with optional subcommand and `help` fallback
+
+```zsh
+local -A _fn=(
+    [info]="Example function skeleton"
     [version]="1.0.0"
 )
 
 local -a _fn_args=(
     "command|Command to execute|o"
 )
+# The command is optional
+
+local -a _fn_opts=() # No options defined
 
 local -a _fn_commands=(
-    "pull|Pull all repositories"
-    "push|Push all repositories"
-    "status|Show status"
+    "stop|Stops something"
+    "start|Starts something"
+    "pause|Pauses something"
 )
+
+local -a _fn_examples=() # No examples defined
 
 local -A opts=() args=()
 _fn_init "$@" || return $REPLY
 
-case "${args[command]:-help}" in
-    pull)   # handle pull ;;
-    push)   # handle push ;;
-    status) # handle status ;;
-    help)   _fn_usage >&2 ;;
-    *)      printe "Unknown command: ${args[command]}" ;;
+# If no command is provided, default to 'help'
+local cmd="${args[command]:-help}"
+
+case "$cmd" in
+    stop)
+        # Handle stop command
+        ;;
+    start)
+        # Handle start command
+        ;;
+    pause)
+        # Handle pause command
+        ;;
+    help)
+        # Handle 'hidden' help command
+        _fn_usage # Same as using `-h/--help`
+        return 0
+        ;;
+    # Optional commands are not automatically validated,
+    # so unknown commands must be handled explicitly
+    *)
+        _fn_cmd_error "$cmd"
+        return 2
+        ;;
 esac
 ```
 
@@ -312,7 +380,34 @@ _fn_init "$@" || return $REPLY
 
 **Important:** Always use `return $REPLY` after `_fn_init` fails to propagate the correct exit code.
 
-## Complete Example
+## Complete Examples
+
+### Smallest functional example (recommended minimum)
+
+This function accepts no arguments and defines no custom options. The `--help` and `--version` options are added automatically from the function metadata. Even though no arguments, options, commands, or examples are defined, declaring the corresponding arrays explicitly keeps them local to the function and prevents values from other functions or the global scope from being reused accidentally.
+
+
+```zsh
+local -A _fn=(
+    [info]="Print a friendly greeting"
+    [version]="1.0.0"
+)
+
+local -a _fn_args=()     # No arguments defined
+local -a _fn_opts=()     # No options defined
+local -a _fn_commands=() # No commands defined
+local -a _fn_examples=() # No examples defined
+
+local -A opts=() args=()
+_fn_init "$@" || return $REPLY
+
+print "Hello, world!"
+```
+
+### Extended example with arguments, options, and examples
+
+For demonstration purposes, `gzip` is declared as a required command even though it is only used when the `--compress` option is enabled. The function accepts positional arguments rather than subcommands, but explicitly declaring an empty local `_fn_commands=()` array prevents command definitions from another function or the global scope from being reused accidentally.
+
 
 ```zsh
 # backup - Create timestamped backup of a file
@@ -321,28 +416,31 @@ _fn_init "$@" || return $REPLY
 local -A _fn=(
     [info]="Create timestamped backup of a file"
     [desc]="Creates a backup copy of the specified file with a timestamp suffix.
-            If no destination is provided, the backup is created in the same directory."
+            If no destination is provided, the backup is created in the source file's directory."
     [version]="1.0.0"
     [author]="Your Name"
-    [notes]="Timestamps use ISO 8601 format (YYYY-MM-DD_HH-MM-SS).
+    [required]="gzip"
+    [notes]="Timestamps use the filename-safe format YYYY-MM-DD_HH-MM-SS.
              Existing backups are not overwritten."
 )
 
 local -a _fn_args=(
-    "source|Source file to backup|r"
+    "source|Source file to back up|r"
     "destination|Destination directory|o"
 )
 
 local -a _fn_opts=(
     "compress|c|Compress backup with gzip"
-    "keep|k|Number of backups to keep|n|integer[1;100]"
+    "label|l|Optional label added to the backup name|text|string[1;30]"
     "quiet|q|Suppress output messages"
 )
 
+local -a _fn_commands=() # No commands defined
+
 local -a _fn_examples=(
-    "backup important.txt|Backup to same directory"
-    "backup -c data.db /backups|Compressed backup to /backups"
-    "backup --keep 5 config.yml|Keep only 5 most recent backups"
+    "backup important.txt|Back up to the source directory"
+    "backup -c data.db /backups|Create a compressed backup"
+    "backup --label manual config.yml|Add a label to the backup name"
 )
 
 local -A opts=() args=()
@@ -350,18 +448,52 @@ _fn_init "$@" || return $REPLY
 
 # Main logic
 local src="${args[source]}"
-local dst="${args[destination]:-.}"
-local timestamp=$(date +%Y-%m-%d_%H-%M-%S)
+local dst="${args[destination]:-${src:h}}"
+
+if [[ ! -f "$src" ]]; then
+    printe "Source file not found: ${c}${src}${x}"
+    return 1
+fi
+
+if [[ ! -d "$dst" ]]; then
+    printe "Destination directory not found: ${c}${dst}${x}"
+    return 1
+fi
+
+local timestamp
+timestamp=$(date +%Y-%m-%d_%H-%M-%S)
+
 local backup_name="${src:t}_${timestamp}"
+
+if (( ${+opts[label]} )); then
+    backup_name+="_${opts[label]}"
+fi
 
 if (( ${+opts[compress]} )); then
     backup_name+=".gz"
-    gzip -c "$src" > "${dst}/${backup_name}"
-else
-    cp "$src" "${dst}/${backup_name}"
 fi
 
-(( ${+opts[quiet]} )) || print "Backup created: ${dst}/${backup_name}"
+local target="${dst}/${backup_name}"
+
+if [[ -e "$target" ]]; then
+    printe "Backup already exists: ${c}${target}${x}"
+    return 1
+fi
+
+if (( ${+opts[compress]} )); then
+    if ! gzip -c "$src" > "$target"; then
+        rm -f "$target"
+        printe "Failed to create backup: ${c}${target}${x}"
+        return 1
+    fi
+else
+    if ! cp "$src" "$target"; then
+        printe "Failed to create backup: ${c}${target}${x}"
+        return 1
+    fi
+fi
+
+(( ${+opts[quiet]} )) || print "Backup created: ${c}${target}${x}"
 ```
 
 ## Required Commands
@@ -461,3 +593,5 @@ For more information use `myfunc --help`
 4. **Add examples** - helps users understand common usage patterns
 5. **Use `[notes]`** - for important caveats or additional information
 6. **Check flag presence with `${+opts[flag]}`** - not `${opts[flag]}`
+7. **Always declare `_fn_args`, `_fn_opts`, `_fn_commands`, and `_fn_examples` locally** - define unused arrays as empty, for example `local -a _fn_opts=()`, to prevent values from another function or the global scope from being reused accidentally
+
