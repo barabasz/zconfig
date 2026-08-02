@@ -7,9 +7,9 @@ local -A _fn=(
     [info]="Git wrapper for bulk operations on repositories"
     [desc]="Performs git operations (pull, push, status, reset) on all repositories
             located in the ${c}\$GHDIR${x} directory."
-    [version]="0.5.1"
+    [version]="0.5.2"
     [created]="2025"
-    [modified]="2026-02-08"
+    [modified]="2026-08-02"
     [license]="MIT"
     [author]="Andrzej Barabasz"
     [required]="git"
