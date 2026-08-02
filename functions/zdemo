@@ -5,9 +5,9 @@
 
 local -A _fn=(
     [info]="Zsh demo function showcasing shell features"
-    [version]="0.2.0"
+    [version]="0.2.1"
     [created]="2025"
-    [modified]="2026-02-08"
+    [modified]="2026-08-02"
     [license]="MIT"
     [author]="Andrzej Barabasz"
 )
@@ -30,6 +30,7 @@ print -P $s
 # Create a colorful sine wave pattern
 zmodload zsh/mathfunc
 typeset -A pos
+local x l w h r
 integer w=${COLUMNS:-80} h=25
 for ((x=0; x<w; x++)) pos[$x]=$((int(h/2+(h/2-2)*sin(x*0.18))))
 for ((l=0; l<h; l++)) {
