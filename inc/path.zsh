@@ -5,51 +5,57 @@
 zfile_track_start ${0:A}
 
 ##
-# Path configuration
+# Path configuration (Core / .zshenv stage)
 ##
 
-# Initialize path components array
+# Ensure path arrays maintain unique elements natively in Zsh
+typeset -U path fpath manpath cdpath
+
+# Initialize path components array in strict priority order
 local -a path_components
 
-# === COMMON PATHS (all platforms) ===
+# === HIGHEST PRIORITY (Venvs & Language Runtimes) ===
 path_components+=(
-    $BINDIR
-    $BINDIR/{common,install,test,thisos}
-    $HOME/.local/bin
-    /usr/local/bin
+    $VENVDIR/python/bin(N)                     # 1. Główny venv Pythona
+    $HOME/.cargo/bin(N)                        # 2. Rust / Cargo
 )
 
 # === PLATFORM-SPECIFIC PATHS ===
 if [[ $OSTYPE == darwin* ]]; then
     path_components+=(
-        /opt/homebrew/bin
-        /opt/homebrew/sbin
-        /opt/homebrew/opt/python@3.14/libexec/bin
-        /Applications/Visual\ Studio\ Code.app/Contents/Resources/app/bin
-        $HOME/Library/Python/*/bin(N)  # Python user packages
+        /opt/homebrew/opt/python@3.14/libexec/bin(N) # 3. Fallback dla Pythona z Homebrew (przed /usr/bin)
+        /opt/homebrew/bin(N)
+        /opt/homebrew/sbin(N)
+        $BINDIR(N)
+        $HOME/.local/bin(N)
+        $HOME/Library/Python/*/bin(N)
+        /Applications/Visual\ Studio\ Code.app/Contents/Resources/app/bin(N)
+        /Applications/kitty.app/Contents/MacOS(N)
     )
 elif [[ $OSTYPE == linux* ]]; then
     path_components+=(
-        /home/linuxbrew/.linuxbrew/bin
-        /home/linuxbrew/.linuxbrew/sbin
-        /snap/bin
-        /usr/sbin
-        /sbin
+        /home/linuxbrew/.linuxbrew/bin(N)
+        /home/linuxbrew/.linuxbrew/sbin(N)
+        $BINDIR(N)
+        $HOME/.local/bin(N)
+        /snap/bin(N)
     )
 fi
 
-# === BUILD FINAL PATH ===
-# Prepend our paths to existing PATH
+# === RE-ORDER PATH STRICTLY ===
+# 1. Filter existing $path to remove any occurrences of our target components
+for entry in $path_components; do
+    path=(${path:#$entry})
+done
+
+# 2. Prepend target components cleanly at the very front
 path=(
     $path_components
-    $path  # existing PATH entries
+    $path
 )
 
-# Remove duplicates and non-existent directories
-typeset -U path              # unique values only
-path=($^path(N-/))           # keep only existing directories
+# Native Zsh cleaning: keep only existing directories without external functions
+path=($^path(N-/))
 
-export PATH
-
-# shell files tracking - keep at the end
+# Shell files tracking - keep at the end
 zfile_track_end ${0:A}

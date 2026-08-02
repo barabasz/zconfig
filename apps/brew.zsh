@@ -14,18 +14,19 @@ is_file "$brew_mac_path" || is_file "$brew_linux_path" || return
 
 # homebrew shellenv integration
 if [[ -f $brew_mac_path ]]; then
-    # Hardcoded variables for macOS (Apple Silicon default)
-    # eval "$($brew_mac_path shellenv)" <- this was very slow
+    # Hardcoded variables for macOS (Apple Silicon default - fast startup)
     export HOMEBREW_PREFIX="/opt/homebrew"
     export HOMEBREW_CELLAR="/opt/homebrew/Cellar"
     export HOMEBREW_REPOSITORY="/opt/homebrew"
     
     # Prepend site-functions to fpath
-    fpath[1,0]="/opt/homebrew/share/zsh/site-functions"
+    fpath_prepend "/opt/homebrew/share/zsh/site-functions"
     
-    # Manually prepend PATH instead of using path_helper
-    # This matches the logic you used in the Linux block below
-    export PATH="/opt/homebrew/bin:/opt/homebrew/sbin${PATH+:$PATH}"
+    # Safe path prepending using zconfig library
+    path_remove "/opt/homebrew/sbin"
+    path_prepend "/opt/homebrew/sbin"
+    path_remove "/opt/homebrew/bin"
+    path_prepend "/opt/homebrew/bin"
     
     # Manpages and Info setup
     [ -z "${MANPATH-}" ] || export MANPATH=":${MANPATH#:}"
@@ -33,13 +34,16 @@ if [[ -f $brew_mac_path ]]; then
 
 elif [[ -f $brew_linux_path ]]; then
     # Hardcoded variables for Linux
-    # eval "$($brew_linux_path shellenv)" <- this was very slow
     export HOMEBREW_PREFIX="/home/linuxbrew/.linuxbrew"
     export HOMEBREW_CELLAR="/home/linuxbrew/.linuxbrew/Cellar"
     export HOMEBREW_REPOSITORY="/home/linuxbrew/.linuxbrew/Homebrew"
     
-    fpath[1,0]="/home/linuxbrew/.linuxbrew/share/zsh/site-functions"
-    export PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin${PATH+:$PATH}"
+    fpath_prepend "/home/linuxbrew/.linuxbrew/share/zsh/site-functions"
+
+    path_remove "/home/linuxbrew/.linuxbrew/sbin"
+    path_prepend "/home/linuxbrew/.linuxbrew/sbin"
+    path_remove "/home/linuxbrew/.linuxbrew/bin"
+    path_prepend "/home/linuxbrew/.linuxbrew/bin"
     
     [ -z "${MANPATH-}" ] || export MANPATH=":${MANPATH#:}"
     export INFOPATH="/home/linuxbrew/.linuxbrew/share/info:${INFOPATH:-}"
