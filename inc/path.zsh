@@ -24,7 +24,7 @@ if [[ $OSTYPE == darwin* ]]; then
     path_components+=(
         /opt/homebrew/bin
         /opt/homebrew/sbin
-        /usr/local/opt/python/libexec/bin
+        /opt/homebrew/opt/python@3.14/libexec/bin
         /Applications/Visual\ Studio\ Code.app/Contents/Resources/app/bin
         $HOME/Library/Python/*/bin(N)  # Python user packages
     )
