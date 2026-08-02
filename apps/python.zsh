@@ -19,13 +19,18 @@ if [[ -f "$venv_path/bin/activate" ]]; then
     # 1. Set VIRTUAL_ENV (Critical for tools like pip, starship, oh-my-posh)
     export VIRTUAL_ENV="$venv_path"
 
-    # 2. Prepend to PATH (Only once!)
-    export PATH="$VIRTUAL_ENV/bin:$PATH"
+    # 2. Prepend venv bin to PATH safely using zconfig library
+    path_remove "$venv_path/bin"
+    path_prepend "$venv_path/bin"
 
-    # 3. Unset PYTHONHOME (Safety measure)
+    # 3. Prepend Homebrew Python libexec as second fallback (if exists)
+    local brew_python_bin="/opt/homebrew/opt/python@3.14/libexec/bin"
+    [[ -d "$brew_python_bin" ]] && path_prepend "$brew_python_bin"
+
+    # 4. Unset PYTHONHOME (Safety measure)
     unset PYTHONHOME
 
-    # 4. Optional: Set Prompt hint
+    # 5. Set Prompt hint
     export VIRTUAL_ENV_PROMPT="python"
 fi
 
