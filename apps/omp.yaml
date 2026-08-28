@@ -150,7 +150,7 @@ blocks:
         background_templates:
           - "{{ if or (.Working.Changed) (.Staging.Changed) }}p:orange{{ end }}"
           - "{{ if and (gt .Ahead 0) (gt .Behind 0) }}p:red{{ end }}"
-          - "{{ if gt .Ahead 0 }}p:pink{{{ end }}"
+          - "{{ if gt .Ahead 0 }}p:pink{{ end }}"
           - "{{ if gt .Behind 0 }}p:pink{{ end }}"
         foreground: p:black
         foreground_templates:
