@@ -38,6 +38,11 @@ export STATEDIR=$LOCALDIR/state
 export DLDIR=$HOME/Downloads
 export DOCDIR=$HOME/Documents
 
+# Java
+if [[ $OSTYPE == darwin* ]]; then
+    export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
+fi
+
 # Don't consider certain characters part of the word
 WORDCHARS='_-'
 
