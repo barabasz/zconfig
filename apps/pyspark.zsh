@@ -4,15 +4,15 @@
 # Shell files tracking - keep at the top
 zfile_track_start ${0:A}
 
-# PySpark integration
+# PySpark configuration
 
-# Guard
-is_installed pyspark || return
+# Guard: Fast check if pyspark is installed
+(( ${+commands[pyspark]} )) || return
 
 pyspark() {
     local startup_file="$CONFDIR/pyspark/startup.py"
 
-    if [[ -f "$startup_file" ]]; then
+    if [[ -r "$startup_file" ]]; then
         local -x PYTHONSTARTUP="$startup_file"
     fi
 
