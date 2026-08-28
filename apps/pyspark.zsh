@@ -11,12 +11,24 @@ zfile_track_start ${0:A}
 
 pyspark() {
     local startup_file="$CONFDIR/pyspark/startup.py"
+    local log4j_file="$CONFDIR/pyspark/log4j2.properties"
 
+    # Custom Python startup
     if [[ -r "$startup_file" ]]; then
         local -x PYTHONSTARTUP="$startup_file"
     fi
 
-    command pyspark "$@"
+    # Suppress standard Python REPL banner
+    local -x PYSPARK_DRIVER_PYTHON_OPTS="-q"
+
+    # Custom Spark logging
+    if [[ -r "$log4j_file" ]]; then
+        command pyspark \
+            --driver-java-options "-Dlog4j.configurationFile=file:$log4j_file" \
+            "$@"
+    else
+        command pyspark "$@"
+    fi
 }
 
 # shell files tracking - keep at the end
