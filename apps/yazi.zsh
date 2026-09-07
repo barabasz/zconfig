@@ -11,16 +11,11 @@ zfile_track_start ${0:A}
 is_installed yazi || return
 
 y() {
-    local tmp="$(mktemp -t "yazi-cwd.XXXXXX")"
-    yazi $@ --cwd-file=$tmp
-    # Check if the file exists and has content
-    if [[ -f "$tmp" ]]; then
-        local cwd="$(<"$tmp")"
-        if [[ -n "$cwd" && "$cwd" != "$PWD" ]]; then
-            builtin cd -- "$cwd"
-        fi
-        rm -f -- "$tmp"
-    fi
+	local tmp cwd; tmp="$(mktemp -t "yazi-cwd.XXXXXX")"
+	command yazi "$@" --cwd-file="$tmp"
+	IFS= read -r -d '' cwd < "$tmp"
+	[ "$cwd" != "$PWD" ] && [ -d "$cwd" ] && builtin cd -- "$cwd" || builtin true
+	command rm -f -- "$tmp"
 }
 
 # shell files tracking - keep at the end
