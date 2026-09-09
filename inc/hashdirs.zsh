@@ -10,11 +10,13 @@ zfile_track_start ${0:A}
 
 hash -d bin=$BINDIR
 hash -d conf=$CONFDIR
+hash -d cfg=$CONFDIR
 hash -d dl=$DLDIR
 hash -d doc=$DOCDIR
 is_folder "$HOME/GitHub" && hash -d gh=$GHDIR
 hash -d lib=$LIBDIR
 hash -d tmp=$TMP
+hash -d temp=$TMP
 hash -d venv=$VENVDIR
 hash -d zsh=$ZDOTDIR
 hash -d cellar=$HOMEBREW_CELLAR
