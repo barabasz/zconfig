@@ -1024,9 +1024,20 @@ install_homebrew() {
         sudo_keepalive_start
     fi
 
-    # Download and run Homebrew installer with spinner
-    local brew_status=0
-    spin "Installing Homebrew (this may take a while)..." env NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL "$URL_HOMEBREW")" || brew_status=$?
+    # Download Homebrew installer to a temp file (keeps the debug log short
+    # and catches download errors instead of running an empty script)
+    local brew_installer brew_status=0
+    brew_installer=$(mktemp "${TMPDIR:-/tmp}/brew-install.XXXXXX")
+    if ! curl -fsSL "$URL_HOMEBREW" -o "$brew_installer"; then
+        rm -f "$brew_installer"
+        sudo_keepalive_stop
+        print_error "Failed to download ${g}Homebrew${x} installer"
+        return 1
+    fi
+
+    # Run Homebrew installer with spinner
+    spin "Installing Homebrew (this may take a while)..." env NONINTERACTIVE=1 /bin/bash "$brew_installer" || brew_status=$?
+    rm -f "$brew_installer"
     sudo_keepalive_stop
 
     if [[ $brew_status -eq 0 ]]; then
