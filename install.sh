@@ -748,7 +748,7 @@ install_git() {
         print_info "Run: ${g}xcode-select --install${x}"
         if confirm "Install Xcode Command Line Tools now?"; then
             xcode-select --install 2>/dev/null
-            print_info "Follow the dialog to complete installation, then re-run this script"
+            print_info "Follow the macOS GUI dialog to complete installation, then re-run this script"
         fi
         return 1
     else
