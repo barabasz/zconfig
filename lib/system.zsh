@@ -118,6 +118,7 @@ _macos_codename() {
 
     # Based on your previous context about Tahoe 26.2
     case $major in
+        27) print "Golden Gate" ;;
         26) print "Tahoe" ;;
         15) print "Sequoia" ;;
         14) print "Sonoma" ;;
