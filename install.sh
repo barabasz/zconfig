@@ -24,8 +24,8 @@
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.8.7"
-SCRIPT_DATE="2026-02-15"
+SCRIPT_VERSION="0.8.8"
+SCRIPT_DATE="2026-10-02"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
 ZSHENV_LINK="$HOME/.zshenv"
@@ -92,6 +92,9 @@ SKIPPED=()
 
 # Sudo password storage (for sudo -S approach)
 SUDO_PASS=""
+
+# PID of background sudo keep-alive loop (macOS)
+SUDO_KEEPALIVE_PID=""
 
 # Timing - record start time
 START_TIME=$SECONDS
@@ -368,8 +371,29 @@ apt_install() {
 
 # Cleanup sudo password from memory
 cleanup_sudo() {
+    sudo_keepalive_stop
     SUDO_PASS=""
     unset SUDO_PASS
+}
+
+# Keep sudo credentials cached while a long non-interactive command runs
+# (e.g. Homebrew installer with NONINTERACTIVE=1 only uses `sudo -n`)
+sudo_keepalive_start() {
+    [[ -n "$SUDO_KEEPALIVE_PID" ]] && return 0
+    (
+        while kill -0 "$$" 2>/dev/null; do
+            sudo -n -v 2>/dev/null
+            sleep 30
+        done
+    ) &>/dev/null &
+    SUDO_KEEPALIVE_PID=$!
+    disown "$SUDO_KEEPALIVE_PID" 2>/dev/null
+}
+
+sudo_keepalive_stop() {
+    [[ -z "$SUDO_KEEPALIVE_PID" ]] && return 0
+    kill "$SUDO_KEEPALIVE_PID" 2>/dev/null
+    SUDO_KEEPALIVE_PID=""
 }
 
 # Run command with spinner
@@ -987,15 +1011,32 @@ install_homebrew() {
         do_sudo chmod 755 /home/linuxbrew/
     fi
 
+    # macOS: Homebrew installer in NONINTERACTIVE mode never prompts for
+    # a password, it only checks `sudo -n` and aborts without cached
+    # credentials. Ask for the password here (in the foreground) and keep
+    # the credentials alive while the installer runs in the background.
+    if [[ "$OS_TYPE" == "macos" ]]; then
+        print_info "Homebrew requires administrator privileges (sudo)"
+        if ! sudo -v; then
+            print_error "Cannot obtain sudo access (is ${c}$(whoami)${x} an Administrator?)"
+            return 1
+        fi
+        sudo_keepalive_start
+    fi
+
     # Download and run Homebrew installer with spinner
-    if spin "Installing Homebrew (this may take a while)..." env NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL "$URL_HOMEBREW")"; then
+    local brew_status=0
+    spin "Installing Homebrew (this may take a while)..." env NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL "$URL_HOMEBREW")" || brew_status=$?
+    sudo_keepalive_stop
+
+    if [[ $brew_status -eq 0 ]]; then
         init_brew_shellenv
         print_success "${g}Homebrew${x} installed$(fmt_version brew)"
         track_install "Homebrew"
         brew analytics off &>/dev/null
         return 0
     else
-        print_error "${g}Homebrew${x} installation failed"
+        print_error "${g}Homebrew${x} installation failed (see ${c}$DEBUGLOG${x})"
         return 1
     fi
 }
