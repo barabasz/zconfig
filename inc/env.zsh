@@ -40,7 +40,10 @@ export DOCDIR=$HOME/Documents
 
 # Java
 if [[ $OSTYPE == darwin* ]]; then
-    export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
+    TARGET_JAVA_HOME="/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home"
+    if [[ -d "$TARGET_JAVA_HOME" ]]; then
+        export JAVA_HOME="$TARGET_JAVA_HOME"
+    fi
 fi
 
 # Don't consider certain characters part of the word
