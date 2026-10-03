@@ -1,0 +1,225 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
+# Remove application via brew or apt with auto-discovery
+# Use 'appremove --help' for more information.
+
+local -A _fn=(
+    [info]="Remove application via brew or apt with auto-discovery"
+    [desc]="Removes an installed package using the appropriate package manager.
+            In automatic mode, detects whether the package is installed via brew or apt.
+            Does not remove or modify application configuration files."
+    [version]="0.1.0"
+    [created]="2026-10-04"
+    [modified]="2026-10-04"
+    [license]="MIT"
+    [author]="Andrzej Barabasz"
+    [notes]="Package names may differ between brew and apt (e.g., fd vs fd-find).
+            Use --brew-name or --apt-name to specify alternate names.
+            This function only removes packages. It never removes configuration files,
+            symlinks, or anything from GHCONFDIR."
+)
+
+local -a _fn_args=(
+    "package|Package name to remove|r"
+)
+
+local -a _fn_opts=(
+    "brew|b|Force removal via Homebrew"
+    "apt|a|Force removal via apt (ignored on macOS)"
+    "cask|c|Remove as brew cask (macOS GUI applications)"
+    "brew-name|B|Alternate package name for brew|name"
+    "apt-name|A|Alternate package name for apt|name"
+    "quiet|q|Quieter output"
+    "yes|y|Assume yes to package manager confirmation prompts"
+    "dry-run|n|Show what would be done without removing"
+)
+
+local -a _fn_commands=()
+
+local -a _fn_examples=(
+    "appremove mc|Remove Midnight Commander (auto-detect)"
+    "appremove fd -A fd-find|Remove fd with different apt name"
+    "appremove -b node|Force brew removal"
+    "appremove -c visual-studio-code|Remove VS Code cask"
+    "appremove -n mc|Dry run - show what would happen"
+    "appremove -y mc|Remove without confirmation prompts"
+)
+
+local -A opts=() args=()
+_fn_init "$@" || return $REPLY
+
+local package="${args[package]}"
+local brew_pkg="${opts[brew-name]:-$package}"
+local apt_pkg="${opts[apt-name]:-$package}"
+local quiet=$(( ${+opts[quiet]} ))
+local assume_yes=$(( ${+opts[yes]} ))
+local dry_run=$(( ${+opts[dry-run]} ))
+local use_cask=$(( ${+opts[cask]} ))
+
+local force_brew=$(( ${+opts[brew]} ))
+local force_apt=$(( ${+opts[apt]} ))
+
+local has_brew=$(( ${+commands[brew]} ))
+local has_apt=$(( ${+commands[apt-get]} ))
+local is_macos=0 is_linux=0
+[[ $OSTYPE == darwin* ]] && is_macos=1
+[[ $OSTYPE == linux* ]] && is_linux=1
+
+## Helper: Get installed brew package info
+_appremove_brew_installed() {
+    local pkg=$1 cask=$2
+    local output
+
+    if (( cask )); then
+        output=$(brew list --cask --versions "$pkg" 2>/dev/null) || return 1
+    else
+        output=$(brew list --formula --versions "$pkg" 2>/dev/null) || return 1
+    fi
+
+    [[ -n "$output" ]] || return 1
+
+    local first_line="${${(f)output}[1]}"
+    local name="${first_line%% *}"
+    local version="${first_line#* }"
+
+    REPLY="$name|$version"
+}
+
+## Helper: Get installed apt package info
+_appremove_apt_installed() {
+    local pkg=$1
+    local output
+
+    output=$(dpkg-query -W -f='${Status}|${Package}|${Version}\n' "$pkg" 2>/dev/null) || return 1
+    [[ "$output" == "install ok installed|"* ]] || return 1
+
+    local rest="${output#*|}"
+    local name="${rest%%|*}"
+    local version="${rest#*|}"
+    version="${version%%-*}"
+
+    REPLY="$name|$version"
+}
+
+## Helper: Execute or dry-run
+_appremove_run() {
+    if (( dry_run )); then
+        print "  ${c}[dry-run]${x} $*"
+        return 0
+    fi
+
+    "$@"
+}
+
+## Determine package manager and verify that the package is installed
+local use_manager=""
+local installed_name=""
+local installed_version=""
+
+if (( force_brew && force_apt )); then
+    printe "Cannot use both --brew and --apt at the same time."
+    return 2
+fi
+
+if (( force_brew )); then
+    if (( ! has_brew )); then
+        printe "Homebrew is not installed."
+        return 1
+    fi
+
+    use_manager="brew"
+    if _appremove_brew_installed "$brew_pkg" "$use_cask"; then
+        installed_name="${REPLY%%|*}"
+        installed_version="${REPLY#*|}"
+    else
+        prints "${g}${package}${x} is already not installed via brew."
+        return 0
+    fi
+
+elif (( force_apt )); then
+    if (( is_macos )); then
+        printw "apt is not available on macOS. Skipping."
+        return 0
+    fi
+    if (( ! has_apt )); then
+        printe "apt-get is not available."
+        return 1
+    fi
+
+    use_manager="apt"
+    if _appremove_apt_installed "$apt_pkg"; then
+        installed_name="${REPLY%%|*}"
+        installed_version="${REPLY#*|}"
+    else
+        prints "${g}${package}${x} is already not installed via apt."
+        return 0
+    fi
+
+else
+    # Removal auto-discovery differs from installation:
+    # detect where the package is actually installed instead of blindly preferring brew.
+    if (( has_brew )) && _appremove_brew_installed "$brew_pkg" "$use_cask"; then
+        use_manager="brew"
+        installed_name="${REPLY%%|*}"
+        installed_version="${REPLY#*|}"
+    elif (( is_linux && has_apt )) && _appremove_apt_installed "$apt_pkg"; then
+        use_manager="apt"
+        installed_name="${REPLY%%|*}"
+        installed_version="${REPLY#*|}"
+    else
+        prints "${g}${package}${x} is already not installed."
+        return 0
+    fi
+fi
+
+## Display removal info
+local display_name="${installed_name:-$package}"
+local display_version=""
+[[ -n "$installed_version" ]] && display_version=" ${y}${installed_version}${x}"
+
+print
+printi "Removing ${g}${display_name}${x}${display_version}..."
+print
+
+## Remove
+local remove_status=0
+
+case "$use_manager" in
+    brew)
+        local -a brew_cmd=(brew uninstall -q)
+        (( use_cask )) && brew_cmd+=(--cask)
+        brew_cmd+=("$brew_pkg")
+
+        (( quiet )) || printi "Using: ${brew_cmd[*]}"
+
+        local -a brew_env=()
+        (( assume_yes )) && brew_env+=(HOMEBREW_NO_ASK=1)
+        (( quiet )) && brew_env+=(HOMEBREW_AUTO_UPDATE_QUIET=1)
+
+        if (( ${#brew_env[@]} )); then
+            _appremove_run env "${brew_env[@]}" "${brew_cmd[@]}"
+        else
+            _appremove_run "${brew_cmd[@]}"
+        fi
+        remove_status=$?
+        ;;
+
+    apt)
+        (( quiet )) || printi "Using: apt-get remove ${apt_pkg}"
+        _appremove_run sudo apt-get remove -y -qq "$apt_pkg"
+        remove_status=$?
+        ;;
+esac
+
+## Result
+print
+if (( dry_run )); then
+    prints "Dry run complete. No changes were made."
+elif (( remove_status == 0 )); then
+    # Refresh Zsh command hash after removing an executable.
+    rehash
+    prints "${g}${display_name}${x} removed successfully."
+else
+    printe "Failed to remove ${r}${display_name}${x}."
+    return 1
+fi
