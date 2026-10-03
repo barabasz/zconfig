@@ -1,16 +1,13 @@
 #!/bin/zsh
 # Part of zconfig · https://github.com/barabasz/zconfig · MIT License
-#
-# Shell files tracking - keep at the top
+
+# PySpark integration
+
+# Guard: exit immediately using hash table if pyspark is not installed
+(( ${+commands[pyspark]} )) || return
+
+# Shell files tracking - keep at the top (after guards)
 zfile_track_start ${0:A}
-
-# PySpark configuration
-
-# Guard: Fast check if pyspark is installed
-if (( ! ${+commands[pyspark]} )); then
-    zfile_track_end ${0:A}
-    return
-fi
 
 pyspark() {
     local startup_file="$CONFDIR/pyspark/startup.py"
@@ -34,5 +31,5 @@ pyspark() {
     fi
 }
 
-# shell files tracking - keep at the end
+# Shell files tracking - keep at the end
 zfile_track_end ${0:A}

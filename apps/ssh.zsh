@@ -1,19 +1,16 @@
 #!/bin/zsh
 # Part of zconfig · https://github.com/barabasz/zconfig · MIT License
-#
-# Shell files tracking - keep at the top
+
+# SSH integration
+
+# Guard: exit immediately if ssh is not installed
+is_installed ssh || return
+
+# Shell files tracking - keep at the top (after guards)
 zfile_track_start ${0:A}
-
-## SSH configuration
-
-# Guard: check if ssh is installed
-if ! is_installed ssh; then
-    zfile_track_end ${0:A}
-    return
-fi
 
 export SSH_HOME="$CONFDIR/ssh"
 export SSH_AUTH_SOCK="$SSH_HOME/ssh_auth.sock"
 
-# shell files tracking - keep at the end
+# Shell files tracking - keep at the end
 zfile_track_end ${0:A}

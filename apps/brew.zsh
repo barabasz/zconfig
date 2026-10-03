@@ -1,19 +1,16 @@
 #!/bin/zsh
 # Part of zconfig · https://github.com/barabasz/zconfig · MIT License
-#
-# Shell files tracking - keep at the top
-zfile_track_start ${0:A}
 
 # Homebrew configuration
 
-brew_mac_path="/opt/homebrew/bin/brew"
-brew_linux_path="/home/linuxbrew/.linuxbrew/bin/brew"
+local brew_mac_path="/opt/homebrew/bin/brew"
+local brew_linux_path="/home/linuxbrew/.linuxbrew/bin/brew"
 
-# Guard: check if Homebrew executable exists for either macOS or Linux
-if ! is_file "$brew_mac_path" && ! is_file "$brew_linux_path"; then
-    zfile_track_end ${0:A}
-    return
-fi
+# Guard: exit immediately if Homebrew is not installed on macOS or Linux
+is_file "$brew_mac_path" || is_file "$brew_linux_path" || return
+
+# Shell files tracking - keep at the top (after guards)
+zfile_track_start ${0:A}
 
 # homebrew shellenv integration
 if [[ -f $brew_mac_path ]]; then
@@ -57,5 +54,5 @@ export HOMEBREW_NO_ENV_HINTS=1
 export HOMEBREW_NO_EMOJI=1
 export HOMEBREW_LOADED=1
 
-# shell files tracking - keep at the end
+# Shell files tracking - keep at the end
 zfile_track_end ${0:A}

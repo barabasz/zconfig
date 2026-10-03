@@ -1,16 +1,13 @@
 #!/bin/zsh
 # Part of zconfig · https://github.com/barabasz/zconfig · MIT License
-#
-# Shell files tracking - keep at the top
+
+# Python virtual environment integration
+
+# Guard: exit immediately using hash table if python3 is not installed
+(( ${+commands[python3]} )) || return
+
+# Shell files tracking - keep at the top (after guards)
 zfile_track_start ${0:A}
-
-# Python virtual environment configuration
-
-# Guard: Fast check if python is even installed
-if (( ! ${+commands[python3]} )); then
-    zfile_track_end ${0:A}
-    return
-fi
 
 # 1. Ensure Homebrew Python libexec is prepended as base fallback (before /usr/bin)
 local brew_python_bin="/opt/homebrew/opt/python@3.14/libexec/bin"
@@ -40,5 +37,5 @@ if [[ -f "$venv_path/bin/activate" ]]; then
     export VIRTUAL_ENV_PROMPT="python"
 fi
 
-# shell files tracking - keep at the end
+# Shell files tracking - keep at the end
 zfile_track_end ${0:A}

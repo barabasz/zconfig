@@ -1,16 +1,13 @@
 #!/bin/zsh
 # Part of zconfig · https://github.com/barabasz/zconfig · MIT License
-#
-# Shell files tracking - keep at the top
+
+# Oh My Posh integration
+
+# Guard: exit immediately using hash table if oh-my-posh is not installed
+(( ${+commands[oh-my-posh]} )) || return
+
+# Shell files tracking - keep at the top (after guards)
 zfile_track_start ${0:A}
-
-# Oh My Posh configuration
-
-# Guard: Fast check using hash table if oh-my-posh is installed
-if (( ! ${+commands[oh-my-posh]} )); then
-    zfile_track_end ${0:A}
-    return
-fi
 
 # Define paths 
 # matches your current config path:
@@ -29,7 +26,7 @@ export OMP_THEME="$omp_config"
 # Rebuild if:
 # 1. Cache file missing
 # 2. OMP binary is newer than cache
-# 3. Config file (my.omp.json) is newer than cache (so edits apply immediately)
+# 3. Config file (omp.yaml) is newer than cache (so edits apply immediately)
 local rebuild=0
 if [[ ! -f "$cache_file" || "${commands[oh-my-posh]}" -nt "$cache_file" ]]; then
     rebuild=1
@@ -58,5 +55,5 @@ fi
 # Source the cached file (Zsh will implicitly use .zwc if present)
 source "$cache_file"
 
-# shell files tracking - keep at the end
+# Shell files tracking - keep at the end
 zfile_track_end ${0:A}

@@ -1,16 +1,13 @@
 #!/bin/zsh
 # Part of zconfig · https://github.com/barabasz/zconfig · MIT License
-#
-# Shell files tracking - keep at the top
-zfile_track_start ${0:A}
 
 # The Fuck integration
 
-# Guard: check if thefuck is installed
-if ! is_installed thefuck; then
-    zfile_track_end ${0:A}
-    return
-fi
+# Guard: exit immediately if thefuck is not installed
+is_installed thefuck || return
+
+# Shell files tracking - keep at the top (after guards)
+zfile_track_start ${0:A}
 
 fuck() {
     unfunction fuck
@@ -18,5 +15,5 @@ fuck() {
     fuck $@
 }
 
-# shell files tracking - keep at the end
+# Shell files tracking - keep at the end
 zfile_track_end ${0:A}

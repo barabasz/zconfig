@@ -1,16 +1,13 @@
 #!/bin/zsh
 # Part of zconfig · https://github.com/barabasz/zconfig · MIT License
-#
-# Shell files tracking - keep at the top
-zfile_track_start ${0:A}
 
 # fzf (fuzzy finder) integration
 
-# Guard: check if fzf is installed
-if ! is_installed fzf; then
-    zfile_track_end ${0:A}
-    return
-fi
+# Guard: exit immediately if fzf is not installed
+is_installed fzf || return
+
+# Shell files tracking - keep at the top (after guards)
+zfile_track_start ${0:A}
 
 # Cache paths
 local cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/zsh"
@@ -41,5 +38,5 @@ fi
 # Source the cached file (Zsh will implicitly use .zwc if present)
 source "$cache_file"
 
-# shell files tracking - keep at the end
+# Shell files tracking - keep at the end
 zfile_track_end ${0:A}

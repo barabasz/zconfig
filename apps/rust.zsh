@@ -1,23 +1,20 @@
 #!/bin/zsh
 # Part of zconfig · https://github.com/barabasz/zconfig · MIT License
-#
-# Shell files tracking - keep at the top
-zfile_track_start ${0:A}
 
-# rust (programming language)
+# Rust (programming language) integration
 
 # Assign path to a local variable (without exporting to the environment)
-local _cargo_dir=${CARGO_HOME:-$HOME/.cargo}
+local _cargo_dir="${CARGO_HOME:-$HOME/.cargo}"
 
-# Guard: check if cargo bin directory actually exists
-if [[ ! -d "$_cargo_dir/bin" ]]; then
-    zfile_track_end ${0:A}
-    return
-fi
+# Guard: exit immediately if cargo bin directory does not exist
+[[ -d "$_cargo_dir/bin" ]] || return
+
+# Shell files tracking - keep at the top (after guards)
+zfile_track_start ${0:A}
 
 # Rust environment detected. Safe to export global variables.
-export CARGO_HOME=$_cargo_dir
-export RUSTUP_HOME=${RUSTUP_HOME:-$HOME/.rustup}
+export CARGO_HOME="$_cargo_dir"
+export RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}"
 
 # Safely add Cargo bin to PATH
 path_remove "$CARGO_HOME/bin"
@@ -30,5 +27,5 @@ if [[ -d "$venv_bin" ]]; then
     path_prepend "$venv_bin"
 fi
 
-# shell files tracking - keep at the end
+# Shell files tracking - keep at the end
 zfile_track_end ${0:A}
