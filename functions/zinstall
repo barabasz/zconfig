@@ -9,8 +9,9 @@ local -A _fn=(
             Recipes describe one application; bundles group recipes or other bundles.
 
             Use --test for a dry run, --recipe to display the parsed entry,
-            --verify to validate syntax and schema, or --quiet for concise output."
-    [version]="0.6.0"
+            --verify to validate syntax and schema, --quiet to suppress routine output,
+            or --brew/--apt to override the recipe installation method."
+    [version]="0.7.1"
     [created]="2026-10-03"
     [modified]="2026-10-03"
     [license]="MIT"
@@ -26,7 +27,9 @@ local -a _fn_opts=(
     "test|t|Test recipe without making any changes"
     "recipe|r|Display the parsed recipe and exit"
     "verify|V|Verify recipe syntax and schema"
-    "quiet|q|Show only essential information"
+    "quiet|q|Suppress routine output; show errors only"
+    "brew|b|Force Homebrew for all recipe installations"
+    "apt|a|Force apt for all recipe installations"
 )
 
 local -a _fn_commands=()
@@ -37,20 +40,41 @@ local -a _fn_examples=(
     "zinstall -r mc|Display the parsed Midnight Commander recipe"
     "zinstall -V mc|Verify Midnight Commander recipe"
     "zinstall -t terminal|Test a bundle and all included entries"
-    "zinstall -q mc|Install with concise output"
+    "zinstall -q mc|Install quietly"
+    "zinstall --brew terminal|Force Homebrew for all recipes in a bundle"
+    "zinstall --apt terminal|Force apt for all recipes in a bundle"
 )
 
 local -A opts=() args=()
 _fn_init "$@" || return $REPLY
+
+# Keep recursive local/typeset declarations silent. Zsh uses dynamic scoping,
+# so nested zinstall calls can otherwise print inherited local values.
+setopt localoptions typesetsilent
 
 local recipe_id="${args[recipe]}"
 local test_mode=$(( ${+opts[test]} ))
 local recipe_mode=$(( ${+opts[recipe]} ))
 local verify_mode=$(( ${+opts[verify]} ))
 local quiet_mode=$(( ${+opts[quiet]} ))
+local force_brew=$(( ${+opts[brew]} ))
+local force_apt=$(( ${+opts[apt]} ))
+local force_method=""
+
+if (( force_brew && force_apt )); then
+    printe "Cannot use both ${c}--brew${x} and ${c}--apt${x} at the same time."
+    return 2
+fi
+(( force_brew )) && force_method="brew"
+(( force_apt )) && force_method="apt"
 
 if (( test_mode + recipe_mode + verify_mode > 1 )); then
     printe "Options ${c}--test${x}, ${c}--recipe${x}, and ${c}--verify${x} are mutually exclusive."
+    return 2
+fi
+
+if [[ "$force_method" == "apt" && "$OSTYPE" == darwin* ]] && (( ! test_mode && ! recipe_mode && ! verify_mode )); then
+    printe "${c}--apt${x} is not available on macOS."
     return 2
 fi
 
@@ -85,10 +109,43 @@ _zinstall_kv() {
     fi
 }
 
+_zinstall_subkv() {
+    (( ARGC == 2 )) || return 2
+    (( quiet_mode && ! recipe_mode )) && return 0
+    local key="$1" value="$2" line
+
+    if [[ "$value" == *$'\n'* ]]; then
+        print -r -- "    ${key}:"
+        for line in "${(@f)value}"; do
+            print -r -- "      $line"
+        done
+    else
+        printkv "    $key" "$value"
+    fi
+}
+
 _zinstall_line() {
     (( ARGC == 1 )) || return 2
     (( quiet_mode && ! recipe_mode )) && return 0
     print -- "  $1"
+}
+
+# Run an action. Quiet mode suppresses successful child output, but replays it
+# on failure so diagnostics are never lost.
+_zinstall_run() {
+    if (( ! quiet_mode )); then
+        "$@"
+        return $?
+    fi
+
+    local tmp="${TMPDIR:-/tmp}/zinstall.$$.${RANDOM}.${RANDOM}.log"
+    "$@" >"$tmp" 2>&1
+    local rc=$?
+    if (( rc != 0 )) && [[ -s "$tmp" ]]; then
+        cat "$tmp" >&2
+    fi
+    rm -f "$tmp"
+    return $rc
 }
 
 # Read one KDL scalar and remove one level of JSON quoting.
@@ -276,7 +333,7 @@ fi
 
 if [[ "$root_type" == "recipe" ]]; then
     local name command="" description="" homepage=""
-    local package method="brew" install_type=""
+    local package recipe_method="brew" method="brew" install_type=""
     local config_dir="$recipe_id"
     
     _zinstall_get "$recipe_file" 'recipe.name' || {
@@ -295,25 +352,30 @@ if [[ "$root_type" == "recipe" ]]; then
     }
     package="$REPLY"
     
-    _zinstall_get "$recipe_file" 'recipe.install.method' && method="$REPLY"
+    _zinstall_get "$recipe_file" 'recipe.install.method' && recipe_method="$REPLY"
+    method="${force_method:-$recipe_method}"
     _zinstall_get "$recipe_file" 'recipe.install.type' && install_type="$REPLY"
     _zinstall_get "$recipe_file" 'recipe.config.dir' && config_dir="$REPLY"
     
-    case "$method" in
+    case "$recipe_method" in
         brew|apt) ;;
         *)
-            printe "Unsupported installation method in schema 1: ${c}${method}${x}"
+            printe "Unsupported installation method in schema 1: ${c}${recipe_method}${x}"
             return 1
             ;;
     esac
     
-    if [[ -n "$install_type" && "$method" != "brew" ]]; then
-        printe "Install type '${c}${install_type}${x}' is only supported with Homebrew."
+    if [[ -n "$install_type" && "$recipe_method" != "brew" ]]; then
+        printe "Install type '${c}${install_type}${x}' is only supported with Homebrew recipes."
         return 1
     fi
     if [[ -n "$install_type" && "$install_type" != "cask" ]]; then
         printe "Unsupported Homebrew install type: ${c}${install_type}${x}"
         return 1
+    fi
+    if [[ -n "$install_type" && "$method" != "brew" ]]; then
+        printe "Cannot override Homebrew cask recipe '${c}${recipe_id}${x}' with ${c}--apt${x}."
+        return 2
     fi
     
     local link_count extra_count run_count mkdir_count
@@ -392,6 +454,7 @@ if [[ "$root_type" == "recipe" ]]; then
     
         _zinstall_heading "Install"
         _zinstall_kv "Method" "$method"
+        [[ -n "$force_method" && "$force_method" != "$recipe_method" ]] && _zinstall_kv "Recipe method" "$recipe_method"
         _zinstall_kv "Package" "$package"
         [[ -n "$install_type" ]] && _zinstall_kv "Type" "$install_type"
     
@@ -512,18 +575,6 @@ if [[ "$root_type" == "bundle" ]]; then
 
         _zinstall_kv "Include $bundle_i" "$included_id"
 
-        if (( ${+_zinstall_processed[$included_id]} )); then
-            _zinstall_kv "State" "already processed in this run"
-            _zinstall_kv "Action" "none"
-            continue
-        fi
-
-        if (( ${+_zinstall_active[$included_id]} )); then
-            local cycle_path="${(j: -> :)_zinstall_stack} -> $included_id"
-            printe "Circular recipe/bundle dependency detected: ${c}${cycle_path}${x}"
-            return 1
-        fi
-
         if ! is_file "$included_file"; then
             printe "Included recipe or bundle not found: ${c}${included_file}${x}"
             return 1
@@ -537,20 +588,32 @@ if [[ "$root_type" == "bundle" ]]; then
             printe "Unsupported root in included file: ${c}${included_file}${x}"
             return 1
         fi
-        _zinstall_kv "Type" "$included_type"
+        _zinstall_subkv "Type" "$included_type"
+
+        if (( ${+_zinstall_processed[$included_id]} )); then
+            _zinstall_subkv "Action" "none"
+            _zinstall_subkv "State" "already processed in this run"
+            continue
+        fi
+
+        if (( ${+_zinstall_active[$included_id]} )); then
+            local cycle_path="${(j: -> :)_zinstall_stack} -> $included_id"
+            printe "Circular recipe/bundle dependency detected: ${c}${cycle_path}${x}"
+            return 1
+        fi
         if (( test_mode )); then
             bundle_action="test $included_type"
         else
             bundle_action="process $included_type"
         fi
-        _zinstall_kv "Action" "$bundle_action"
+        _zinstall_subkv "Action" "$bundle_action"
 
-        if (( test_mode )); then
-            zinstall --quiet --test "$included_id" || return $?
-        else
-            zinstall --quiet "$included_id" || return $?
-        fi
-        _zinstall_kv "State" "processed"
+        local -a nested_args=(--quiet)
+        [[ "$force_method" == "brew" ]] && nested_args+=(--brew)
+        [[ "$force_method" == "apt" ]] && nested_args+=(--apt)
+        (( test_mode )) && nested_args+=(--test)
+        zinstall "${nested_args[@]}" "$included_id" || return $?
+        _zinstall_subkv "State" "processed"
     done
 
     unset "_zinstall_active[$recipe_id]"
@@ -611,7 +674,7 @@ else
         [[ "$method" == "apt" ]] && appinstall_args+=(--apt)
         [[ "$install_type" == "cask" ]] && appinstall_args+=(--cask)
 
-        appinstall --quiet --yes "${appinstall_args[@]}" "$package" || return $?
+        _zinstall_run appinstall --quiet --yes "${appinstall_args[@]}" "$package" || return $?
         installed_now=1
 
         if [[ -n "$command" ]] && ! is_installed "$command"; then
@@ -635,8 +698,8 @@ if (( extra_count )); then
         _zinstall_kv "Extra $i" "$extra"
 
         if (( ${+_zinstall_processed[$extra]} )); then
-            _zinstall_kv "State" "already processed in this run"
-            _zinstall_kv "Action" "none"
+            _zinstall_subkv "Action" "none"
+            _zinstall_subkv "State" "already processed in this run"
             continue
         fi
 
@@ -651,22 +714,29 @@ if (( extra_count )); then
             if _zinstall_get "$recipes_dir/$extra.kdl" 'bundle.id'; then
                 extra_type="bundle"
             fi
-            _zinstall_kv "Resolver" "$extra_type"
-            _zinstall_kv "File" "$recipes_dir/$extra.kdl"
-            if (( test_mode )); then
-                zinstall --quiet --test "$extra" || return $?
-            else
-                zinstall --quiet "$extra" || return $?
-            fi
-            _zinstall_kv "State" "processed"
+            _zinstall_subkv "Resolver" "$extra_type"
+            _zinstall_subkv "File" "$recipes_dir/$extra.kdl"
+            local -a nested_args=(--quiet)
+            [[ "$force_method" == "brew" ]] && nested_args+=(--brew)
+            [[ "$force_method" == "apt" ]] && nested_args+=(--apt)
+            (( test_mode )) && nested_args+=(--test)
+            zinstall "${nested_args[@]}" "$extra" || return $?
+            _zinstall_subkv "State" "processed"
         else
-            _zinstall_kv "Resolver" "appinstall fallback"
+            _zinstall_subkv "Resolver" "appinstall fallback"
+            local -a extra_appinstall_args=(--quiet)
+            [[ "$force_method" == "brew" ]] && extra_appinstall_args+=(--brew)
+            [[ "$force_method" == "apt" ]] && extra_appinstall_args+=(--apt)
             if (( test_mode )); then
-                appinstall --quiet --dry-run "$extra" || return $?
+                _zinstall_subkv "Action" "test appinstall fallback"
+                extra_appinstall_args+=(--dry-run)
             else
-                appinstall --quiet --yes "$extra" || return $?
+                _zinstall_subkv "Action" "process appinstall fallback"
+                extra_appinstall_args+=(--yes)
             fi
+            _zinstall_run appinstall "${extra_appinstall_args[@]}" "$extra" || return $?
             _zinstall_processed[$extra]=1
+            _zinstall_subkv "State" "processed"
         fi
     done
 fi
@@ -692,8 +762,8 @@ if [[ "$ghconf_state" == "available" ]]; then
             _zinstall_kv "Action" "would ${reply[2]}"
         else
             _zinstall_kv "Action" "${reply[2]}"
-            lns "$config_real_path" "$config_link_path" || return $?
-            prints "Configuration linked: ${c}${config_link_path}${x} -> ${c}${config_real_path}${x}"
+            _zinstall_run lns "$config_real_path" "$config_link_path" || return $?
+            (( quiet_mode )) || prints "Configuration linked: ${c}${config_link_path}${x} -> ${c}${config_real_path}${x}"
         fi
     else
         _zinstall_kv "User config" "not found"
@@ -744,8 +814,8 @@ if (( link_count )); then
             _zinstall_kv "Action" "would ${reply[2]}"
         else
             _zinstall_kv "Action" "${reply[2]}"
-            lns "$real_path" "$link_path" || return $?
-            prints "Additional configuration linked: ${c}${link_path}${x} -> ${c}${real_path}${x}"
+            _zinstall_run lns "$real_path" "$link_path" || return $?
+            (( quiet_mode )) || prints "Additional configuration linked: ${c}${link_path}${x} -> ${c}${real_path}${x}"
         fi
     done
 fi
@@ -804,7 +874,7 @@ if (( mkdir_count || run_count )); then
             [[ "$item_when" != "always" ]] && _zinstall_kv "When" "$item_when"
         else
             _zinstall_kv "Run $i" "${label:-$cmd}"
-            eval "$cmd" || {
+            _zinstall_run eval "$cmd" || {
                 printe "Setup action failed: ${c}${label:-$cmd}${x}"
                 return 1
             }

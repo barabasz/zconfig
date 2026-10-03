@@ -7,5 +7,4 @@ bundle id="cli" schema=1 {
     include id="fzf"
     include id="ripgrep"
     include id="bat"
-    include id="terminal"
 }
