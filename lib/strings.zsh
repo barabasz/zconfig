@@ -230,6 +230,94 @@ str_unquote() {
     print -r -- "${(Q)1}"
 }
 
+# Decode a JSON string literal
+# Usage: str_json_decode '"hello\nworld"'
+# Returns:
+# hello
+# world
+str_json_decode() {
+    (( ARGC == 1 )) || return 2
+
+    local input="$1"
+    local result=""
+    local char next hex
+    local -i i=1 len=${#input}
+    local -i codepoint high low
+
+    # JSON string must start and end with a double quote
+    (( len >= 2 )) || return 1
+    [[ "${input[1]}" == '"' && "${input[-1]}" == '"' ]] || return 1
+
+    # Skip surrounding quotes
+    i=2
+    while (( i < len )); do
+        char="${input[i]}"
+
+        if [[ "$char" != '\' ]]; then
+            result+="$char"
+            (( i++ ))
+            continue
+        fi
+
+        # Escape sequence must have a following character
+        (( i + 1 < len )) || return 1
+
+        next="${input[i+1]}"
+
+        case "$next" in
+            '"')  result+='"';  (( i += 2 )) ;;
+            '\')  result+='\';  (( i += 2 )) ;;
+            '/')  result+='/';  (( i += 2 )) ;;
+            'b')  result+=$'\b'; (( i += 2 )) ;;
+            'f')  result+=$'\f'; (( i += 2 )) ;;
+            'n')  result+=$'\n'; (( i += 2 )) ;;
+            'r')  result+=$'\r'; (( i += 2 )) ;;
+            't')  result+=$'\t'; (( i += 2 )) ;;
+
+            'u')
+                # Need exactly four hexadecimal digits after \u
+                (( i + 5 < len )) || return 1
+                hex="${input[i+2,i+5]}"
+                [[ "$hex" == [0-9A-Fa-f]## ]] || return 1
+                (( ${#hex} == 4 )) || return 1
+
+                codepoint=$(( 16#$hex ))
+                (( i += 6 ))
+
+                # UTF-16 surrogate pair
+                if (( codepoint >= 0xD800 && codepoint <= 0xDBFF )); then
+                    (( i + 5 < len )) || return 1
+                    [[ "${input[i]}" == '\' && "${input[i+1]}" == 'u' ]] || return 1
+
+                    hex="${input[i+2,i+5]}"
+                    [[ "$hex" == [0-9A-Fa-f]## ]] || return 1
+                    (( ${#hex} == 4 )) || return 1
+
+                    low=$(( 16#$hex ))
+                    (( low >= 0xDC00 && low <= 0xDFFF )) || return 1
+
+                    high=$codepoint
+                    codepoint=$(( 0x10000 + ((high - 0xD800) << 10) + (low - 0xDC00) ))
+                    (( i += 6 ))
+
+                elif (( codepoint >= 0xDC00 && codepoint <= 0xDFFF )); then
+                    # Lone low surrogate is invalid JSON
+                    return 1
+                fi
+
+                printf -v char '%b' "\\U$(printf '%08X' "$codepoint")"
+                result+="$char"
+                ;;
+
+            *)
+                return 1
+                ;;
+        esac
+    done
+
+    print -r -- "$result"
+}
+
 # Repeat string N times
 # Usage: str_repeat "-" 10
 # Returns: "----------"
