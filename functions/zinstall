@@ -1,15 +1,16 @@
 # Part of zconfig · https://github.com/barabasz/zconfig · MIT License
 #
-# zconfig installation tool
+# Install applications using zconfig recipes
 # Use 'zinstall --help' for more information.
 
 local -A _fn=(
     [info]="Install applications using zconfig recipes"
-    [desc]="Reads an application recipe, resolves its defaults, and diagnoses
-            the current application and configuration state.
+    [desc]="Reads a zconfig recipe and installs or configures the requested
+            application.
 
-            This version is read-only and does not modify the system."
-    [version]="0.3.0"
+            Use --test for a dry run, --recipe to display the parsed recipe,
+            or --verify to validate recipe syntax and schema."
+    [version]="0.4.1"
     [created]="2026-10-03"
     [modified]="2026-10-03"
     [license]="MIT"
@@ -18,37 +19,101 @@ local -A _fn=(
 )
 
 local -a _fn_args=(
-    "recipe|Recipe to inspect|r"
+    "recipe|Recipe to install or inspect|r"
 )
 
-local -a _fn_opts=()
+local -a _fn_opts=(
+    "test|t|Test recipe without making any changes"
+    "recipe|r|Display the parsed recipe and exit"
+    "verify|V|Verify recipe syntax and schema"
+)
+
 local -a _fn_commands=()
 
 local -a _fn_examples=(
-    "zinstall mc|Diagnose Midnight Commander installation"
-    "zinstall yazi|Diagnose Yazi installation"
+    "zinstall mc|Install and configure Midnight Commander"
+    "zinstall -t yazi|Test Yazi recipe without making changes"
+    "zinstall -r mc|Display the parsed Midnight Commander recipe"
+    "zinstall -V mc|Verify Midnight Commander recipe"
 )
 
 local -A opts=() args=()
 _fn_init "$@" || return $REPLY
 
 local recipe_id="${args[recipe]}"
+local test_mode=$(( ${+opts[test]} ))
+local recipe_mode=$(( ${+opts[recipe]} ))
+local verify_mode=$(( ${+opts[verify]} ))
+
+if (( test_mode + recipe_mode + verify_mode > 1 )); then
+    printe "Options ${c}--test${x}, ${c}--recipe${x}, and ${c}--verify${x} are mutually exclusive."
+    return 2
+fi
+
 local confdir="${CONFDIR:-${XDG_CONFIG_HOME:-$HOME/.config}}"
 local zdotdir="${ZDOTDIR:-$confdir/zsh}"
 local recipes_dir="${ZSH_RECIPES_DIR:-$zdotdir/recipes}"
 local recipe_file="$recipes_dir/$recipe_id.kdl"
 
-# Read one KDL scalar through dasel and remove one level of quoting.
-_zinstall_get() {
-    (( ARGC == 2 )) || return 2
-    local file="$1" selector="$2" raw
-    raw=$(dasel -i kdl -o json "$selector" < "$file" 2>/dev/null) || return 1
-    REPLY=$(str_unquote "$raw")
-    return 0
+# --- Internal helpers --------------------------------------------------------
+
+_zinstall_heading() {
+    (( ARGC == 1 )) || return 2
+    print
+    printc "$1" "$y"
 }
 
-# Expand only variables explicitly supported by recipe paths.
-# No eval is used.
+_zinstall_kv() {
+    (( ARGC == 2 )) || return 2
+    printkv "  $1" "$2"
+}
+
+_zinstall_line() {
+    (( ARGC == 1 )) || return 2
+    print -- "  $1"
+}
+
+# Read one KDL scalar and remove one level of JSON quoting.
+_zinstall_get() {
+    (( ARGC == 2 )) || return 2
+    local raw
+    raw=$(dasel -i kdl -o json "$2" < "$1" 2>/dev/null) || return 1
+    REPLY=$(str_unquote "$raw")
+}
+
+# Count a KDL node that dasel exposes either as one object or an array.
+_zinstall_count() {
+    (( ARGC == 2 )) || return 2
+    local json i=0
+    json=$(dasel -i kdl -o json "$2" < "$1" 2>/dev/null) || {
+        REPLY=0
+        return 0
+    }
+
+    if [[ "$json" == \{* ]]; then
+        REPLY=1
+    elif [[ "$json" == \[* ]]; then
+        while dasel -i kdl -o json "${2}[$i]" < "$1" >/dev/null 2>&1; do
+            (( i++ ))
+        done
+        REPLY=$i
+    else
+        return 1
+    fi
+}
+
+# Return selector for item INDEX (1-based) from a single node / repeated nodes.
+_zinstall_item_selector() {
+    (( ARGC == 3 )) || return 2
+    local base="$1" count="$2" index="$3"
+    if (( count == 1 )); then
+        REPLY="$base"
+    else
+        REPLY="${base}[$(( index - 1 ))]"
+    fi
+}
+
+# Expand only variables explicitly supported in recipe paths. No eval.
 _zinstall_expand_path() {
     (( ARGC == 1 )) || return 2
     local value="$1"
@@ -74,57 +139,48 @@ _zinstall_expand_path() {
     value="${value//\$HOME/$HOME}"
 
     REPLY="$value"
-    return 0
 }
 
-# Diagnose how lns would treat source -> target without changing anything.
-# reply[1] = state, reply[2] = action, reply[3] = current link target (if relevant)
+# real_path = actual files; link_path = symlink path.
+# reply[1] = state, reply[2] = action, reply[3] = current destination if link exists.
 _zinstall_link_status() {
     (( ARGC == 2 )) || return 2
-    local source="$1" target="$2"
-    local source_abs="${source:A}"
-    local current=""
+    local real_path="$1" link_path="$2" current=""
     reply=()
 
-    if [[ ! -e "$source" && ! -L "$source" ]]; then
-        reply=("source missing" "none" "")
-        return 0
-    fi
-
-    if is_link "$target"; then
-        current=$(resolve_link "$target" 2>/dev/null)
-        if [[ "${target:A}" == "$source_abs" ]]; then
+    if [[ ! -e "$real_path" && ! -L "$real_path" ]]; then
+        reply=("files missing" "none" "")
+    elif is_link "$link_path"; then
+        current=$(resolve_link "$link_path" 2>/dev/null)
+        if [[ "${link_path:A}" == "${real_path:A}" ]]; then
             reply=("correctly linked" "none" "$current")
         else
             reply=("symlink points elsewhere" "replace symlink" "$current")
         fi
-    elif is_file "$target"; then
-        reply=("regular file exists" "backup to .bak and create symlink" "")
-    elif is_dir "$target"; then
-        reply=("directory exists" "backup to .bak and create symlink" "")
-    elif [[ -e "$target" ]]; then
-        reply=("target exists" "backup to .bak and create symlink" "")
+    elif is_file "$link_path"; then
+        reply=("regular file exists at link path" "backup to .bak and create symlink" "")
+    elif is_dir "$link_path"; then
+        reply=("directory exists at link path" "backup to .bak and create symlink" "")
+    elif [[ -e "$link_path" ]]; then
+        reply=("object exists at link path" "backup to .bak and create symlink" "")
     else
-        reply=("target missing" "create symlink" "")
+        reply=("link missing" "create symlink" "")
     fi
-
-    return 0
 }
 
-# Recipe file
+# --- Parse and validate ------------------------------------------------------
+
 if ! is_file "$recipe_file"; then
     printe "Recipe not found: ${c}${recipe_file}${x}"
     return 1
 fi
 
-# KDL syntax
 if ! dasel -i kdl -o json < "$recipe_file" >/dev/null 2>&1; then
-    printe "Invalid KDL recipe: ${c}${recipe_file}${x}"
+    printe "Invalid KDL syntax: ${c}${recipe_file}${x}"
     return 1
 fi
 
-# Root type and ID
-local root_type root_id
+local root_type root_id schema
 if _zinstall_get "$recipe_file" 'recipe.id'; then
     root_type="recipe"
     root_id="$REPLY"
@@ -141,265 +197,456 @@ if [[ "$root_id" != "$recipe_id" ]]; then
     return 1
 fi
 
-# Bundle expansion will be implemented separately.
-if [[ "$root_type" == "bundle" ]]; then
-    printw "Bundle '${c}${recipe_id}${x}' detected; bundle expansion is not implemented yet."
-    return 0
-fi
-
-# Required fields
-local schema name
-if ! _zinstall_get "$recipe_file" 'recipe.schema'; then
-    printe "Missing required property: ${c}recipe.schema${x}"
+if ! _zinstall_get "$recipe_file" "${root_type}.schema"; then
+    printe "Missing required property: ${c}${root_type}.schema${x}"
     return 1
 fi
 schema="$REPLY"
 
 if [[ "$schema" != "1" ]]; then
-    printe "Unsupported recipe schema: ${c}${schema}${x}"
+    printe "Unsupported ${root_type} schema: ${c}${schema}${x}"
     return 1
 fi
 
-if ! _zinstall_get "$recipe_file" 'recipe.name'; then
+if [[ "$root_type" == "bundle" ]]; then
+    if (( verify_mode )); then
+        prints "Bundle ${c}${recipe_id}${x} is valid (schema ${schema})."
+        return 0
+    fi
+    printw "Bundle '${c}${recipe_id}${x}' detected; bundle expansion is not implemented yet."
+    return 0
+fi
+
+local name command="" description="" homepage=""
+local package method="brew" install_type=""
+local config_dir="$recipe_id"
+
+_zinstall_get "$recipe_file" 'recipe.name' || {
     printe "Missing required field: ${c}recipe.name${x}"
     return 1
-fi
+}
 name="$REPLY"
 
-# Optional metadata
-local command="" description="" homepage=""
-if _zinstall_get "$recipe_file" 'recipe.command'; then command="$REPLY"; fi
-if _zinstall_get "$recipe_file" 'recipe.description'; then description="$REPLY"; fi
-if _zinstall_get "$recipe_file" 'recipe.homepage'; then homepage="$REPLY"; fi
+_zinstall_get "$recipe_file" 'recipe.command' && command="$REPLY"
+_zinstall_get "$recipe_file" 'recipe.description' && description="$REPLY"
+_zinstall_get "$recipe_file" 'recipe.homepage' && homepage="$REPLY"
 
-# Install rule. Schema v1 uses the short form; the earlier draft remains readable.
-local package="" method="brew" install_type=""
-if _zinstall_get "$recipe_file" 'recipe.install.package'; then
-    package="$REPLY"
-elif _zinstall_get "$recipe_file" 'recipe.install.default.package'; then
-    package="$REPLY"
+_zinstall_get "$recipe_file" 'recipe.install.package' || {
+    printe "Missing required property: ${c}recipe.install.package${x}"
+    return 1
+}
+package="$REPLY"
+
+_zinstall_get "$recipe_file" 'recipe.install.method' && method="$REPLY"
+_zinstall_get "$recipe_file" 'recipe.install.type' && install_type="$REPLY"
+_zinstall_get "$recipe_file" 'recipe.config.dir' && config_dir="$REPLY"
+
+case "$method" in
+    brew|apt) ;;
+    *)
+        printe "Unsupported installation method in schema 1: ${c}${method}${x}"
+        return 1
+        ;;
+esac
+
+if [[ -n "$install_type" && "$method" != "brew" ]]; then
+    printe "Install type '${c}${install_type}${x}' is only supported with Homebrew."
+    return 1
 fi
-
-if _zinstall_get "$recipe_file" 'recipe.install.method'; then
-    method="$REPLY"
-elif _zinstall_get "$recipe_file" 'recipe.install.default.method'; then
-    method="$REPLY"
-fi
-
-if _zinstall_get "$recipe_file" 'recipe.install.type'; then
-    install_type="$REPLY"
-elif _zinstall_get "$recipe_file" 'recipe.install.default.type'; then
-    install_type="$REPLY"
-fi
-
-if [[ -z "$package" ]]; then
-    printe "Missing installation package in recipe '${c}${recipe_id}${x}'."
+if [[ -n "$install_type" && "$install_type" != "cask" ]]; then
+    printe "Unsupported Homebrew install type: ${c}${install_type}${x}"
     return 1
 fi
 
-# Config directory defaults to recipe ID.
-local config_dir="$recipe_id"
-if _zinstall_get "$recipe_file" 'recipe.config.dir'; then
-    config_dir="$REPLY"
+local link_count extra_count run_count mkdir_count
+_zinstall_count "$recipe_file" 'recipe.config.link' || return 1
+link_count=$REPLY
+_zinstall_count "$recipe_file" 'recipe.extras.install' || return 1
+extra_count=$REPLY
+_zinstall_count "$recipe_file" 'recipe.setup.run' || return 1
+run_count=$REPLY
+_zinstall_count "$recipe_file" 'recipe.setup.mkdir' || return 1
+mkdir_count=$REPLY
+
+# Validate repeated nodes used by the execution engine.
+local i selector when
+for (( i=1; i<=link_count; i++ )); do
+    _zinstall_item_selector 'recipe.config.link' "$link_count" "$i"
+    selector="$REPLY"
+    _zinstall_get "$recipe_file" "${selector}.source" || {
+        printe "Missing required property: ${c}${selector}.source${x}"
+        return 1
+    }
+done
+
+for (( i=1; i<=extra_count; i++ )); do
+    _zinstall_item_selector 'recipe.extras.install' "$extra_count" "$i"
+    selector="$REPLY"
+    _zinstall_get "$recipe_file" "${selector}.id" || {
+        printe "Missing required property: ${c}${selector}.id${x}"
+        return 1
+    }
+done
+
+for (( i=1; i<=run_count; i++ )); do
+    _zinstall_item_selector 'recipe.setup.run' "$run_count" "$i"
+    selector="$REPLY"
+    _zinstall_get "$recipe_file" "${selector}.command" || {
+        printe "Missing required property: ${c}${selector}.command${x}"
+        return 1
+    }
+    if _zinstall_get "$recipe_file" "${selector}.when"; then
+        when="$REPLY"
+        [[ "$when" == "always" || "$when" == "new" ]] || {
+            printe "Unsupported setup condition: ${c}${when}${x}"
+            return 1
+        }
+    fi
+done
+
+for (( i=1; i<=mkdir_count; i++ )); do
+    _zinstall_item_selector 'recipe.setup.mkdir' "$mkdir_count" "$i"
+    selector="$REPLY"
+    _zinstall_get "$recipe_file" "${selector}.path" || {
+        printe "Missing required property: ${c}${selector}.path${x}"
+        return 1
+    }
+done
+
+if (( verify_mode )); then
+    prints "Recipe ${c}${recipe_id}${x} is valid (KDL syntax and schema ${schema})."
+    return 0
 fi
 
-local config_source=""
-local config_target="$confdir/$config_dir"
-local ghconf_state=""
+# --- Parsed recipe view ------------------------------------------------------
 
+_zinstall_show_recipe() {
+    local j sel source_spec target_spec real_path link_path extra label cmd path item_when
+
+    _zinstall_heading "Recipe"
+    _zinstall_kv "File" "$recipe_file"
+    _zinstall_kv "ID" "$recipe_id"
+    _zinstall_kv "Schema" "$schema"
+    _zinstall_kv "Name" "$name"
+    [[ -n "$description" ]] && _zinstall_kv "Description" "$description"
+    [[ -n "$homepage" ]] && _zinstall_kv "Homepage" "$homepage"
+    [[ -n "$command" ]] && _zinstall_kv "Command" "$command"
+
+    _zinstall_heading "Install"
+    _zinstall_kv "Method" "$method"
+    _zinstall_kv "Package" "$package"
+    [[ -n "$install_type" ]] && _zinstall_kv "Type" "$install_type"
+
+    _zinstall_heading "Config"
+    _zinstall_kv "Directory" "$config_dir"
+    real_path="\$GHCONFDIR/$config_dir"
+    link_path="\$CONFDIR/$config_dir"
+    _zinstall_kv "Files" "$real_path"
+    _zinstall_kv "Link" "$link_path -> $real_path"
+
+    if (( link_count )); then
+        _zinstall_heading "Additional config links"
+        for (( j=1; j<=link_count; j++ )); do
+            _zinstall_item_selector 'recipe.config.link' "$link_count" "$j"
+            sel="$REPLY"
+            _zinstall_get "$recipe_file" "${sel}.source"
+            source_spec="$REPLY"
+            if _zinstall_get "$recipe_file" "${sel}.target"; then
+                target_spec="$REPLY"
+            else
+                target_spec="\$CONFDIR/$source_spec"
+            fi
+            real_path="\$GHCONFDIR/$source_spec"
+            link_path="$target_spec"
+            _zinstall_kv "Files" "$real_path"
+            _zinstall_kv "Link $j" "$link_path -> $real_path"
+        done
+    fi
+
+    if (( extra_count )); then
+        _zinstall_heading "Extras"
+        for (( j=1; j<=extra_count; j++ )); do
+            _zinstall_item_selector 'recipe.extras.install' "$extra_count" "$j"
+            sel="$REPLY"
+            _zinstall_get "$recipe_file" "${sel}.id"
+            _zinstall_kv "Install $j" "$REPLY"
+        done
+    fi
+
+    if (( mkdir_count || run_count )); then
+        _zinstall_heading "Setup"
+        for (( j=1; j<=mkdir_count; j++ )); do
+            _zinstall_item_selector 'recipe.setup.mkdir' "$mkdir_count" "$j"
+            sel="$REPLY"
+            _zinstall_get "$recipe_file" "${sel}.path"
+            path="$REPLY"
+            _zinstall_kv "mkdir $j" "$path"
+        done
+        for (( j=1; j<=run_count; j++ )); do
+            _zinstall_item_selector 'recipe.setup.run' "$run_count" "$j"
+            sel="$REPLY"
+            label=""
+            item_when="always"
+            _zinstall_get "$recipe_file" "${sel}.label" && label="$REPLY"
+            _zinstall_get "$recipe_file" "${sel}.when" && item_when="$REPLY"
+            _zinstall_get "$recipe_file" "${sel}.command"
+            cmd="$REPLY"
+            _zinstall_kv "Run $j" "${label:-$cmd}"
+            [[ -n "$label" ]] && _zinstall_kv "Command" "$cmd"
+            [[ "$item_when" != "always" ]] && _zinstall_kv "When" "$item_when"
+        done
+    fi
+}
+
+if (( recipe_mode )); then
+    _zinstall_show_recipe
+    return 0
+fi
+
+# --- Execute / dry-run -------------------------------------------------------
+
+local ghconf_state config_real_path="" config_link_path="$confdir/$config_dir"
 if [[ -z ${GHCONFDIR:-} ]]; then
     ghconf_state="GHCONFDIR is not set"
 elif ! is_dir "$GHCONFDIR"; then
     ghconf_state="GHCONFDIR directory does not exist"
 else
     ghconf_state="available"
-    config_source="$GHCONFDIR/$config_dir"
+    config_real_path="$GHCONFDIR/$config_dir"
 fi
 
-# --- Presentation ------------------------------------------------------------
+local application_installed=0 installed_now=0
+[[ -n "$command" ]] && is_installed "$command" && application_installed=1
 
-printh "Recipe" "$c"
-printkv "File" "$recipe_file"
-printkv "Type" "$root_type"
-printkv "ID" "$recipe_id"
-printkv "Schema" "$schema"
-printkv "Name" "$name"
-[[ -n "$description" ]] && printkv "Description" "$description"
-[[ -n "$homepage" ]] && printkv "Homepage" "$homepage"
-[[ -n "$command" ]] && printkv "Command" "$command"
+_zinstall_heading "Recipe"
+_zinstall_kv "ID" "$recipe_id"
+_zinstall_kv "Name" "$name"
+_zinstall_kv "Schema" "$schema"
 
-print
-printh "Application" "$c"
-if [[ -n "$command" ]]; then
-    printkv "Command" "$command"
-    if is_installed "$command"; then
-        printkv "State" "installed"
-        zinfo -s "$command"
-        printkv "Action" "none"
-    else
-        printkv "State" "not installed"
+_zinstall_heading "Application"
+[[ -n "$command" ]] && _zinstall_kv "Command" "$command"
+
+if (( application_installed )); then
+    _zinstall_kv "State" "installed"
+    local app_info
+    app_info=$(zinfo -s "$command" 2>/dev/null)
+    [[ -n "$app_info" ]] && _zinstall_line "$app_info"
+    _zinstall_kv "Action" "none"
+else
+    _zinstall_kv "State" "not installed"
+    if (( test_mode )); then
+        installed_now=1
         if [[ "$method" == "brew" && "$install_type" == "cask" ]]; then
-            printkv "Action" "install with brew cask: $package"
+            _zinstall_kv "Action" "would install with brew cask: $package"
         else
-            printkv "Action" "install with $method: $package"
+            _zinstall_kv "Action" "would install with $method: $package"
+        fi
+    else
+        _zinstall_kv "Action" "install with $method: $package"
+        local -a appinstall_args=()
+        [[ "$method" == "brew" ]] && appinstall_args+=(--brew)
+        [[ "$method" == "apt" ]] && appinstall_args+=(--apt)
+        [[ "$install_type" == "cask" ]] && appinstall_args+=(--cask)
+
+        appinstall "${appinstall_args[@]}" "$package" || return $?
+        installed_now=1
+
+        if [[ -n "$command" ]] && ! is_installed "$command"; then
+            printe "Installation completed, but command '${c}${command}${x}' is not available."
+            return 1
         fi
     fi
-else
-    printkv "State" "unknown (recipe has no command field)"
-    printkv "Action" "installation state cannot be checked with is_installed"
 fi
 
-print
-printh "Install" "$c"
-printkv "Method" "$method"
-printkv "Package" "$package"
-[[ -n "$install_type" ]] && printkv "Type" "$install_type"
+# Extras are deliberately simple: recipe wins, otherwise appinstall.
+if (( extra_count )); then
+    local extra stack
+    _zinstall_heading "Extras"
+    for (( i=1; i<=extra_count; i++ )); do
+        _zinstall_item_selector 'recipe.extras.install' "$extra_count" "$i"
+        selector="$REPLY"
+        _zinstall_get "$recipe_file" "${selector}.id"
+        extra="$REPLY"
+        _zinstall_kv "Extra $i" "$extra"
 
-print
-printh "Config" "$c"
-printkv "Directory" "$config_dir"
-printkv "GHCONFDIR" "$ghconf_state"
+        if is_file "$recipes_dir/$extra.kdl"; then
+            stack="${ZINSTALL_STACK:-}"
+            if [[ ":$stack:" == *":$extra:"* || "$extra" == "$recipe_id" ]]; then
+                printe "Circular extra recipe dependency detected: ${c}${extra}${x}"
+                return 1
+            fi
+            local ZINSTALL_STACK="${stack:+$stack:}$recipe_id"
+            if (( test_mode )); then
+                zinstall -t "$extra" || return $?
+            else
+                zinstall "$extra" || return $?
+            fi
+        else
+            if (( test_mode )); then
+                appinstall --dry-run "$extra" || return $?
+            else
+                appinstall "$extra" || return $?
+            fi
+        fi
+    done
+fi
+
+# Standard config is implicit. Actual files live in GHCONFDIR; CONFDIR holds the symlink.
+# Relationship: CONFDIR/<dir> -> GHCONFDIR/<dir>.
+_zinstall_heading "Config"
+_zinstall_kv "Directory" "$config_dir"
+_zinstall_kv "GHCONFDIR" "$ghconf_state"
 
 if [[ "$ghconf_state" == "available" ]]; then
-    printkv "Source" "$config_source"
-    printkv "Target" "$config_target"
+    _zinstall_kv "Files" "$config_real_path"
+    _zinstall_kv "Link" "$config_link_path -> $config_real_path"
 
-    if [[ -e "$config_source" || -L "$config_source" ]]; then
-        printkv "User config" "found"
-        _zinstall_link_status "$config_source" "$config_target"
-        printkv "Target state" "${reply[1]}"
-        [[ -n "${reply[3]}" ]] && printkv "Current link" "${reply[3]}"
-        printkv "Action" "${reply[2]}"
+    if [[ -e "$config_real_path" || -L "$config_real_path" ]]; then
+        _zinstall_kv "User config" "found"
+        _zinstall_link_status "$config_real_path" "$config_link_path"
+        _zinstall_kv "Link state" "${reply[1]}"
+        [[ -n "${reply[3]}" ]] && _zinstall_kv "Current link" "$config_link_path -> ${reply[3]}"
+        if [[ "${reply[2]}" == "none" ]]; then
+            _zinstall_kv "Action" "none"
+        elif (( test_mode )); then
+            _zinstall_kv "Action" "would ${reply[2]}"
+        else
+            _zinstall_kv "Action" "${reply[2]}"
+            lns "$config_real_path" "$config_link_path" || return $?
+            prints "Configuration linked: ${c}${config_link_path}${x} -> ${c}${config_real_path}${x}"
+        fi
     else
-        printkv "User config" "not found"
-        printkv "Action" "use application default configuration"
+        _zinstall_kv "User config" "not found"
+        _zinstall_kv "Action" "use application default configuration"
     fi
 else
-    printkv "Action" "skip user configuration and use application defaults"
+    _zinstall_kv "Action" "skip user configuration and use application defaults"
 fi
 
-# Additional config links.
-local links_json
-if links_json=$(dasel -i kdl -o json 'recipe.config.link' < "$recipe_file" 2>/dev/null); then
-    local i=0 link_source link_target link_source_abs link_target_abs
-    local links_found=0
-
-    print
-    printh "Additional config links" "$c"
-
-    if [[ "$links_json" == \{* ]]; then
-        if _zinstall_get "$recipe_file" 'recipe.config.link.source'; then
-            link_source="$REPLY"
-            if _zinstall_get "$recipe_file" 'recipe.config.link.target'; then
-                link_target="$REPLY"
-            else
-                link_target="$confdir/$link_source"
-            fi
-
-            if [[ "$ghconf_state" == "available" ]]; then
-                link_source_abs="$GHCONFDIR/$link_source"
-                _zinstall_expand_path "$link_target"
-                link_target_abs="$REPLY"
-                printkv "Source" "$link_source_abs"
-                printkv "Target" "$link_target_abs"
-                _zinstall_link_status "$link_source_abs" "$link_target_abs"
-                printkv "State" "${reply[1]}"
-                [[ -n "${reply[3]}" ]] && printkv "Current link" "${reply[3]}"
-                printkv "Action" "${reply[2]}"
-            else
-                printkv "Source" "\$GHCONFDIR/$link_source"
-                printkv "Target" "$link_target"
-                printkv "State" "cannot inspect without GHCONFDIR"
-                printkv "Action" "skip"
-            fi
-            links_found=1
+# Explicit additional links. KDL uses source/target; internally we resolve them
+# to real_path (actual files) and link_path (symlink path).
+if (( link_count )); then
+    local source_spec target_spec real_path link_path
+    _zinstall_heading "Additional config links"
+    for (( i=1; i<=link_count; i++ )); do
+        _zinstall_item_selector 'recipe.config.link' "$link_count" "$i"
+        selector="$REPLY"
+        _zinstall_get "$recipe_file" "${selector}.source"
+        source_spec="$REPLY"
+        if _zinstall_get "$recipe_file" "${selector}.target"; then
+            target_spec="$REPLY"
+        else
+            target_spec="$confdir/$source_spec"
         fi
-    elif [[ "$links_json" == \[* ]]; then
-        while _zinstall_get "$recipe_file" "recipe.config.link[$i].source"; do
-            link_source="$REPLY"
-            if _zinstall_get "$recipe_file" "recipe.config.link[$i].target"; then
-                link_target="$REPLY"
-            else
-                link_target="$confdir/$link_source"
-            fi
 
-            (( links_found )) && print
-            printkv "Link $(( i + 1 ))" "$link_source"
-
-            if [[ "$ghconf_state" == "available" ]]; then
-                link_source_abs="$GHCONFDIR/$link_source"
-                _zinstall_expand_path "$link_target"
-                link_target_abs="$REPLY"
-                printkv "Source" "$link_source_abs"
-                printkv "Target" "$link_target_abs"
-                _zinstall_link_status "$link_source_abs" "$link_target_abs"
-                printkv "State" "${reply[1]}"
-                [[ -n "${reply[3]}" ]] && printkv "Current link" "${reply[3]}"
-                printkv "Action" "${reply[2]}"
-            else
-                printkv "Source" "\$GHCONFDIR/$link_source"
-                printkv "Target" "$link_target"
-                printkv "State" "cannot inspect without GHCONFDIR"
-                printkv "Action" "skip"
-            fi
-
-            (( i++ ))
-            links_found=1
-        done
-    fi
-
-    (( links_found )) || printi "No readable additional links."
-fi
-
-# Extras: resolve whether an extra would use another recipe or appinstall.
-local extras_json
-if extras_json=$(dasel -i kdl -o json 'recipe.extras.install' < "$recipe_file" 2>/dev/null); then
-    local i=0 extra_id extra_file
-    local extras_found=0
-
-    print
-    printh "Extras" "$c"
-
-    if [[ "$extras_json" == \{* ]]; then
-        if _zinstall_get "$recipe_file" 'recipe.extras.install.id'; then
-            extra_id="$REPLY"
-            extra_file="$recipes_dir/$extra_id.kdl"
-            printkv "Install" "$extra_id"
-            if is_file "$extra_file"; then
-                printkv "Resolver" "recipe: $extra_file"
-            else
-                printkv "Resolver" "appinstall $extra_id"
-            fi
-            extras_found=1
+        if [[ "$ghconf_state" != "available" ]]; then
+            printw "Skipping '${c}${source_spec}${x}': GHCONFDIR is not available."
+            continue
         fi
-    elif [[ "$extras_json" == \[* ]]; then
-        while _zinstall_get "$recipe_file" "recipe.extras.install[$i].id"; do
-            extra_id="$REPLY"
-            extra_file="$recipes_dir/$extra_id.kdl"
-            printkv "Install $(( i + 1 ))" "$extra_id"
-            if is_file "$extra_file"; then
-                printkv "Resolver $(( i + 1 ))" "recipe: $extra_file"
+
+        real_path="$GHCONFDIR/$source_spec"
+        _zinstall_expand_path "$target_spec"
+        link_path="$REPLY"
+        _zinstall_kv "Files" "$real_path"
+        _zinstall_kv "Link" "$link_path -> $real_path"
+
+        if [[ ! -e "$real_path" && ! -L "$real_path" ]]; then
+            printw "Additional config files not found: ${c}${real_path}${x}"
+            continue
+        fi
+
+        _zinstall_link_status "$real_path" "$link_path"
+        _zinstall_kv "Link state" "${reply[1]}"
+        [[ -n "${reply[3]}" ]] && _zinstall_kv "Current link" "$link_path -> ${reply[3]}"
+        if [[ "${reply[2]}" == "none" ]]; then
+            _zinstall_kv "Action" "none"
+        elif (( test_mode )); then
+            _zinstall_kv "Action" "would ${reply[2]}"
+        else
+            _zinstall_kv "Action" "${reply[2]}"
+            lns "$real_path" "$link_path" || return $?
+            prints "Additional configuration linked: ${c}${link_path}${x} -> ${c}${real_path}${x}"
+        fi
+    done
+fi
+
+# Setup. Current test recipes use run actions. mkdir is supported as a small
+# declarative convenience and is processed before run actions.
+if (( mkdir_count || run_count )); then
+    local path label cmd item_when
+    _zinstall_heading "Setup"
+
+    for (( i=1; i<=mkdir_count; i++ )); do
+        _zinstall_item_selector 'recipe.setup.mkdir' "$mkdir_count" "$i"
+        selector="$REPLY"
+        _zinstall_get "$recipe_file" "${selector}.path"
+        path="$REPLY"
+        _zinstall_expand_path "$path"
+        path="$REPLY"
+        item_when="always"
+        _zinstall_get "$recipe_file" "${selector}.when" && item_when="$REPLY"
+
+        if [[ "$item_when" == "new" && $installed_now -eq 0 ]]; then
+            _zinstall_kv "Skip" "mkdir $path (when=new)"
+        elif (( test_mode )); then
+            if [[ "$item_when" == "always" ]]; then
+                _zinstall_kv "mkdir $i" "would create $path"
             else
-                printkv "Resolver $(( i + 1 ))" "appinstall $extra_id"
+                _zinstall_kv "mkdir $i" "would create $path (when=$item_when)"
             fi
-            (( i++ ))
-            extras_found=1
-        done
+        else
+            _zinstall_kv "mkdir $i" "$path"
+            mkdir -p "$path" || {
+                printe "Cannot create directory: ${c}${path}${x}"
+                return 1
+            }
+        fi
+    done
+
+    for (( i=1; i<=run_count; i++ )); do
+        _zinstall_item_selector 'recipe.setup.run' "$run_count" "$i"
+        selector="$REPLY"
+        label=""
+        item_when="always"
+        _zinstall_get "$recipe_file" "${selector}.label" && label="$REPLY"
+        _zinstall_get "$recipe_file" "${selector}.when" && item_when="$REPLY"
+        _zinstall_get "$recipe_file" "${selector}.command"
+        cmd="$REPLY"
+
+        if [[ "$item_when" == "new" && $installed_now -eq 0 ]]; then
+            _zinstall_kv "Skip" "${label:-$cmd} (when=new)"
+            continue
+        fi
+
+        if (( test_mode )); then
+            _zinstall_kv "Run $i" "would run: ${label:-$cmd}"
+            [[ -n "$label" ]] && _zinstall_kv "Command" "$cmd"
+            [[ "$item_when" != "always" ]] && _zinstall_kv "When" "$item_when"
+        else
+            _zinstall_kv "Run $i" "${label:-$cmd}"
+            zsh -c "$cmd" || {
+                printe "Setup action failed: ${c}${label:-$cmd}${x}"
+                return 1
+            }
+        fi
+    done
+fi
+
+_zinstall_heading "Result"
+if (( test_mode )); then
+    printi "Test complete: no changes were made."
+elif [[ -n "$command" ]]; then
+    if is_installed "$command"; then
+        local final_info
+        final_info=$(zinfo -s "$command" 2>/dev/null)
+        [[ -n "$final_info" ]] && _zinstall_line "$final_info"
+        prints "${g}${name}${x} is installed and recipe processing completed."
+    else
+        printe "Recipe processing completed, but command '${c}${command}${x}' is not available."
+        return 1
     fi
-
-    (( extras_found )) || printi "No readable extras."
+else
+    prints "Recipe processing completed."
 fi
 
-# Setup remains diagnostic in v0.3.0.
-if dasel -i kdl -o json 'recipe.setup' < "$recipe_file" >/dev/null 2>&1; then
-    print
-    printh "Setup" "$c"
-    printkv "State" "setup actions defined"
-    printkv "Action" "would execute after installation/configuration"
-    printi "Setup execution is disabled in v0.3.0."
-fi
-
-print
-printh "Result" "$c"
-printi "Diagnostic mode only: no changes were made."
 return 0
