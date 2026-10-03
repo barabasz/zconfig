@@ -5,12 +5,12 @@
 
 local -A _fn=(
     [info]="Install applications using zconfig recipes"
-    [desc]="Reads a zconfig recipe and installs or configures the requested
-            application.
+    [desc]="Installs applications and bundles using zconfig recipes.
+            Recipes describe one application; bundles group recipes or other bundles.
 
-            Use --test for a dry run, --recipe to display the parsed recipe,
-            or --verify to validate recipe syntax and schema."
-    [version]="0.4.3"
+            Use --test for a dry run, --recipe to display the parsed entry,
+            --verify to validate syntax and schema, or --quiet for concise output."
+    [version]="0.6.0"
     [created]="2026-10-03"
     [modified]="2026-10-03"
     [license]="MIT"
@@ -19,13 +19,14 @@ local -A _fn=(
 )
 
 local -a _fn_args=(
-    "recipe|Recipe to install or inspect|r"
+    "recipe|Recipe or bundle to install or inspect|r"
 )
 
 local -a _fn_opts=(
     "test|t|Test recipe without making any changes"
     "recipe|r|Display the parsed recipe and exit"
     "verify|V|Verify recipe syntax and schema"
+    "quiet|q|Show only essential information"
 )
 
 local -a _fn_commands=()
@@ -35,6 +36,8 @@ local -a _fn_examples=(
     "zinstall -t yazi|Test Yazi recipe without making changes"
     "zinstall -r mc|Display the parsed Midnight Commander recipe"
     "zinstall -V mc|Verify Midnight Commander recipe"
+    "zinstall -t terminal|Test a bundle and all included entries"
+    "zinstall -q mc|Install with concise output"
 )
 
 local -A opts=() args=()
@@ -44,6 +47,7 @@ local recipe_id="${args[recipe]}"
 local test_mode=$(( ${+opts[test]} ))
 local recipe_mode=$(( ${+opts[recipe]} ))
 local verify_mode=$(( ${+opts[verify]} ))
+local quiet_mode=$(( ${+opts[quiet]} ))
 
 if (( test_mode + recipe_mode + verify_mode > 1 )); then
     printe "Options ${c}--test${x}, ${c}--recipe${x}, and ${c}--verify${x} are mutually exclusive."
@@ -59,12 +63,14 @@ local recipe_file="$recipes_dir/$recipe_id.kdl"
 
 _zinstall_heading() {
     (( ARGC == 1 )) || return 2
+    (( quiet_mode && ! recipe_mode )) && return 0
     print
     printc "$1" "$y"
 }
 
 _zinstall_kv() {
     (( ARGC == 2 )) || return 2
+    (( quiet_mode && ! recipe_mode )) && return 0
     local key="$1" value="$2" line
 
     # printkv handles single-line values. For multiline values, print the key
@@ -81,6 +87,7 @@ _zinstall_kv() {
 
 _zinstall_line() {
     (( ARGC == 1 )) || return 2
+    (( quiet_mode && ! recipe_mode )) && return 0
     print -- "  $1"
 }
 
@@ -204,7 +211,7 @@ else
 fi
 
 if [[ "$root_id" != "$recipe_id" ]]; then
-    printe "Recipe ID '${c}${root_id}${x}' does not match filename '${c}${recipe_id}.kdl${x}'."
+    printe "Entry ID '${c}${root_id}${x}' does not match filename '${c}${recipe_id}.kdl${x}'."
     return 1
 fi
 
@@ -219,198 +226,343 @@ if [[ "$schema" != "1" ]]; then
     return 1
 fi
 
+# Bundle metadata and includes are intentionally minimal in schema 1.
+# A bundle may include recipes or other bundles from the same recipes/ namespace.
+local bundle_name="" bundle_description="" include_count=0
 if [[ "$root_type" == "bundle" ]]; then
-    if (( verify_mode )); then
-        prints "Bundle ${c}${recipe_id}${x} is valid (schema ${schema})."
-        return 0
+    _zinstall_get "$recipe_file" 'bundle.name' && bundle_name="$REPLY"
+    _zinstall_get "$recipe_file" 'bundle.description' && bundle_description="$REPLY"
+
+    _zinstall_count "$recipe_file" 'bundle.include' || return 1
+    include_count=$REPLY
+    if (( include_count == 0 )); then
+        printe "Bundle '${c}${recipe_id}${x}' does not contain any ${c}include${x} entries."
+        return 1
     fi
-    printw "Bundle '${c}${recipe_id}${x}' detected; bundle expansion is not implemented yet."
-    return 0
-fi
 
-local name command="" description="" homepage=""
-local package method="brew" install_type=""
-local config_dir="$recipe_id"
-
-_zinstall_get "$recipe_file" 'recipe.name' || {
-    printe "Missing required field: ${c}recipe.name${x}"
-    return 1
-}
-name="$REPLY"
-
-_zinstall_get "$recipe_file" 'recipe.command' && command="$REPLY"
-_zinstall_get "$recipe_file" 'recipe.description' && description="$REPLY"
-_zinstall_get "$recipe_file" 'recipe.homepage' && homepage="$REPLY"
-
-_zinstall_get "$recipe_file" 'recipe.install.package' || {
-    printe "Missing required property: ${c}recipe.install.package${x}"
-    return 1
-}
-package="$REPLY"
-
-_zinstall_get "$recipe_file" 'recipe.install.method' && method="$REPLY"
-_zinstall_get "$recipe_file" 'recipe.install.type' && install_type="$REPLY"
-_zinstall_get "$recipe_file" 'recipe.config.dir' && config_dir="$REPLY"
-
-case "$method" in
-    brew|apt) ;;
-    *)
-        printe "Unsupported installation method in schema 1: ${c}${method}${x}"
-        return 1
-        ;;
-esac
-
-if [[ -n "$install_type" && "$method" != "brew" ]]; then
-    printe "Install type '${c}${install_type}${x}' is only supported with Homebrew."
-    return 1
-fi
-if [[ -n "$install_type" && "$install_type" != "cask" ]]; then
-    printe "Unsupported Homebrew install type: ${c}${install_type}${x}"
-    return 1
-fi
-
-local link_count extra_count run_count mkdir_count
-_zinstall_count "$recipe_file" 'recipe.config.link' || return 1
-link_count=$REPLY
-_zinstall_count "$recipe_file" 'recipe.extras.install' || return 1
-extra_count=$REPLY
-_zinstall_count "$recipe_file" 'recipe.setup.run' || return 1
-run_count=$REPLY
-_zinstall_count "$recipe_file" 'recipe.setup.mkdir' || return 1
-mkdir_count=$REPLY
-
-# Validate repeated nodes used by the execution engine.
-local i selector when
-for (( i=1; i<=link_count; i++ )); do
-    _zinstall_item_selector 'recipe.config.link' "$link_count" "$i"
-    selector="$REPLY"
-    _zinstall_get "$recipe_file" "${selector}.source" || {
-        printe "Missing required property: ${c}${selector}.source${x}"
-        return 1
-    }
-done
-
-for (( i=1; i<=extra_count; i++ )); do
-    _zinstall_item_selector 'recipe.extras.install' "$extra_count" "$i"
-    selector="$REPLY"
-    _zinstall_get "$recipe_file" "${selector}.id" || {
-        printe "Missing required property: ${c}${selector}.id${x}"
-        return 1
-    }
-done
-
-for (( i=1; i<=run_count; i++ )); do
-    _zinstall_item_selector 'recipe.setup.run' "$run_count" "$i"
-    selector="$REPLY"
-    _zinstall_get "$recipe_file" "${selector}.command" || {
-        printe "Missing required property: ${c}${selector}.command${x}"
-        return 1
-    }
-    if _zinstall_get "$recipe_file" "${selector}.when"; then
-        when="$REPLY"
-        [[ "$when" == "always" || "$when" == "new" ]] || {
-            printe "Unsupported setup condition: ${c}${when}${x}"
+    local bundle_i bundle_selector
+    for (( bundle_i=1; bundle_i<=include_count; bundle_i++ )); do
+        _zinstall_item_selector 'bundle.include' "$include_count" "$bundle_i"
+        bundle_selector="$REPLY"
+        _zinstall_get "$recipe_file" "${bundle_selector}.id" || {
+            printe "Missing required property: ${c}${bundle_selector}.id${x}"
             return 1
         }
-    fi
-done
+    done
 
-for (( i=1; i<=mkdir_count; i++ )); do
-    _zinstall_item_selector 'recipe.setup.mkdir' "$mkdir_count" "$i"
-    selector="$REPLY"
-    _zinstall_get "$recipe_file" "${selector}.path" || {
-        printe "Missing required property: ${c}${selector}.path${x}"
+    if (( verify_mode )); then
+        prints "Bundle ${c}${recipe_id}${x} is valid (KDL syntax and schema ${schema})."
+        return 0
+    fi
+
+    if (( recipe_mode )); then
+        _zinstall_heading "Bundle"
+        _zinstall_kv "File" "$recipe_file"
+        _zinstall_kv "ID" "$recipe_id"
+        _zinstall_kv "Schema" "$schema"
+        [[ -n "$bundle_name" ]] && _zinstall_kv "Name" "$bundle_name"
+        [[ -n "$bundle_description" ]] && _zinstall_kv "Description" "$bundle_description"
+
+        _zinstall_heading "Includes"
+        for (( bundle_i=1; bundle_i<=include_count; bundle_i++ )); do
+            _zinstall_item_selector 'bundle.include' "$include_count" "$bundle_i"
+            bundle_selector="$REPLY"
+            _zinstall_get "$recipe_file" "${bundle_selector}.id"
+            _zinstall_kv "Include $bundle_i" "$REPLY"
+        done
+        return 0
+    fi
+fi
+
+if [[ "$root_type" == "recipe" ]]; then
+    local name command="" description="" homepage=""
+    local package method="brew" install_type=""
+    local config_dir="$recipe_id"
+    
+    _zinstall_get "$recipe_file" 'recipe.name' || {
+        printe "Missing required field: ${c}recipe.name${x}"
         return 1
     }
-done
+    name="$REPLY"
+    
+    _zinstall_get "$recipe_file" 'recipe.command' && command="$REPLY"
+    _zinstall_get "$recipe_file" 'recipe.description' && description="$REPLY"
+    _zinstall_get "$recipe_file" 'recipe.homepage' && homepage="$REPLY"
+    
+    _zinstall_get "$recipe_file" 'recipe.install.package' || {
+        printe "Missing required property: ${c}recipe.install.package${x}"
+        return 1
+    }
+    package="$REPLY"
+    
+    _zinstall_get "$recipe_file" 'recipe.install.method' && method="$REPLY"
+    _zinstall_get "$recipe_file" 'recipe.install.type' && install_type="$REPLY"
+    _zinstall_get "$recipe_file" 'recipe.config.dir' && config_dir="$REPLY"
+    
+    case "$method" in
+        brew|apt) ;;
+        *)
+            printe "Unsupported installation method in schema 1: ${c}${method}${x}"
+            return 1
+            ;;
+    esac
+    
+    if [[ -n "$install_type" && "$method" != "brew" ]]; then
+        printe "Install type '${c}${install_type}${x}' is only supported with Homebrew."
+        return 1
+    fi
+    if [[ -n "$install_type" && "$install_type" != "cask" ]]; then
+        printe "Unsupported Homebrew install type: ${c}${install_type}${x}"
+        return 1
+    fi
+    
+    local link_count extra_count run_count mkdir_count
+    _zinstall_count "$recipe_file" 'recipe.config.link' || return 1
+    link_count=$REPLY
+    _zinstall_count "$recipe_file" 'recipe.extras.install' || return 1
+    extra_count=$REPLY
+    _zinstall_count "$recipe_file" 'recipe.setup.run' || return 1
+    run_count=$REPLY
+    _zinstall_count "$recipe_file" 'recipe.setup.mkdir' || return 1
+    mkdir_count=$REPLY
+    
+    # Validate repeated nodes used by the execution engine.
+    local i selector when
+    for (( i=1; i<=link_count; i++ )); do
+        _zinstall_item_selector 'recipe.config.link' "$link_count" "$i"
+        selector="$REPLY"
+        _zinstall_get "$recipe_file" "${selector}.source" || {
+            printe "Missing required property: ${c}${selector}.source${x}"
+            return 1
+        }
+    done
+    
+    for (( i=1; i<=extra_count; i++ )); do
+        _zinstall_item_selector 'recipe.extras.install' "$extra_count" "$i"
+        selector="$REPLY"
+        _zinstall_get "$recipe_file" "${selector}.id" || {
+            printe "Missing required property: ${c}${selector}.id${x}"
+            return 1
+        }
+    done
+    
+    for (( i=1; i<=run_count; i++ )); do
+        _zinstall_item_selector 'recipe.setup.run' "$run_count" "$i"
+        selector="$REPLY"
+        _zinstall_get "$recipe_file" "${selector}.command" || {
+            printe "Missing required property: ${c}${selector}.command${x}"
+            return 1
+        }
+        if _zinstall_get "$recipe_file" "${selector}.when"; then
+            when="$REPLY"
+            [[ "$when" == "always" || "$when" == "new" ]] || {
+                printe "Unsupported setup condition: ${c}${when}${x}"
+                return 1
+            }
+        fi
+    done
+    
+    for (( i=1; i<=mkdir_count; i++ )); do
+        _zinstall_item_selector 'recipe.setup.mkdir' "$mkdir_count" "$i"
+        selector="$REPLY"
+        _zinstall_get "$recipe_file" "${selector}.path" || {
+            printe "Missing required property: ${c}${selector}.path${x}"
+            return 1
+        }
+    done
+    
+    if (( verify_mode )); then
+        prints "Recipe ${c}${recipe_id}${x} is valid (KDL syntax and schema ${schema})."
+        return 0
+    fi
+    
+    # --- Parsed recipe view ------------------------------------------------------
+    
+    _zinstall_show_recipe() {
+        local j sel source_spec target_spec real_path link_path extra label cmd mkdir_path item_when
+    
+        _zinstall_heading "Recipe"
+        _zinstall_kv "File" "$recipe_file"
+        _zinstall_kv "ID" "$recipe_id"
+        _zinstall_kv "Schema" "$schema"
+        _zinstall_kv "Name" "$name"
+        [[ -n "$description" ]] && _zinstall_kv "Description" "$description"
+        [[ -n "$homepage" ]] && _zinstall_kv "Homepage" "$homepage"
+        [[ -n "$command" ]] && _zinstall_kv "Command" "$command"
+    
+        _zinstall_heading "Install"
+        _zinstall_kv "Method" "$method"
+        _zinstall_kv "Package" "$package"
+        [[ -n "$install_type" ]] && _zinstall_kv "Type" "$install_type"
+    
+        _zinstall_heading "Config"
+        _zinstall_kv "Directory" "$config_dir"
+        real_path="\$GHCONFDIR/$config_dir"
+        link_path="\$CONFDIR/$config_dir"
+        _zinstall_kv "Files" "$real_path"
+        _zinstall_kv "Link" "$link_path -> $real_path"
+    
+        if (( link_count )); then
+            _zinstall_heading "Additional config links"
+            for (( j=1; j<=link_count; j++ )); do
+                _zinstall_item_selector 'recipe.config.link' "$link_count" "$j"
+                sel="$REPLY"
+                _zinstall_get "$recipe_file" "${sel}.source"
+                source_spec="$REPLY"
+                if _zinstall_get "$recipe_file" "${sel}.target"; then
+                    target_spec="$REPLY"
+                else
+                    target_spec="\$CONFDIR/$source_spec"
+                fi
+                real_path="\$GHCONFDIR/$source_spec"
+                link_path="$target_spec"
+                _zinstall_kv "Files" "$real_path"
+                _zinstall_kv "Link $j" "$link_path -> $real_path"
+            done
+        fi
+    
+        if (( extra_count )); then
+            _zinstall_heading "Extras"
+            for (( j=1; j<=extra_count; j++ )); do
+                _zinstall_item_selector 'recipe.extras.install' "$extra_count" "$j"
+                sel="$REPLY"
+                _zinstall_get "$recipe_file" "${sel}.id"
+                _zinstall_kv "Install $j" "$REPLY"
+            done
+        fi
+    
+        if (( mkdir_count || run_count )); then
+            _zinstall_heading "Setup"
+            for (( j=1; j<=mkdir_count; j++ )); do
+                _zinstall_item_selector 'recipe.setup.mkdir' "$mkdir_count" "$j"
+                sel="$REPLY"
+                _zinstall_get "$recipe_file" "${sel}.path"
+                mkdir_path="$REPLY"
+                _zinstall_kv "mkdir $j" "$mkdir_path"
+            done
+            for (( j=1; j<=run_count; j++ )); do
+                _zinstall_item_selector 'recipe.setup.run' "$run_count" "$j"
+                sel="$REPLY"
+                label=""
+                item_when="always"
+                _zinstall_get "$recipe_file" "${sel}.label" && label="$REPLY"
+                _zinstall_get "$recipe_file" "${sel}.when" && item_when="$REPLY"
+                _zinstall_get "$recipe_file" "${sel}.command"
+                cmd="$REPLY"
+                _zinstall_kv "Run $j" "${label:-$cmd}"
+                [[ -n "$label" ]] && _zinstall_kv "Command" "$cmd"
+                [[ "$item_when" != "always" ]] && _zinstall_kv "When" "$item_when"
+            done
+        fi
+    }
+    
+    if (( recipe_mode )); then
+        _zinstall_show_recipe
+        return 0
+    fi
+    
+fi
 
-if (( verify_mode )); then
-    prints "Recipe ${c}${recipe_id}${x} is valid (KDL syntax and schema ${schema})."
+# --- Recursive run state ----------------------------------------------------
+#
+# Zsh uses dynamic scoping for local parameters. The top-level zinstall call
+# creates these arrays once; recursive calls made while processing extras see
+# and modify the same arrays without global state or temporary files.
+if (( ! ${+parameters[_zinstall_processed]} )); then
+    local -A _zinstall_processed=()
+    local -A _zinstall_active=()
+    local -a _zinstall_stack=()
+fi
+
+# A processed entry can be reached more than once through extras or bundles.
+# Do not execute it twice in the same zinstall run.
+if (( ${+_zinstall_processed[$recipe_id]} )); then
+    _zinstall_heading "Recipe"
+    _zinstall_kv "ID" "$recipe_id"
+    _zinstall_kv "State" "already processed in this run"
     return 0
 fi
 
-# --- Parsed recipe view ------------------------------------------------------
+# An active entry means recursion returned to an item already on the stack.
+if (( ${+_zinstall_active[$recipe_id]} )); then
+    local cycle_path="${(j: -> :)_zinstall_stack} -> $recipe_id"
+    printe "Circular recipe/bundle dependency detected: ${c}${cycle_path}${x}"
+    return 1
+fi
 
-_zinstall_show_recipe() {
-    local j sel source_spec target_spec real_path link_path extra label cmd mkdir_path item_when
+_zinstall_active[$recipe_id]=1
+_zinstall_stack+=("$recipe_id")
 
-    _zinstall_heading "Recipe"
-    _zinstall_kv "File" "$recipe_file"
+# --- Bundle execution --------------------------------------------------------
+if [[ "$root_type" == "bundle" ]]; then
+    local bundle_i bundle_selector included_id included_file included_type bundle_action
+
+    _zinstall_heading "Bundle"
     _zinstall_kv "ID" "$recipe_id"
+    [[ -n "$bundle_name" ]] && _zinstall_kv "Name" "$bundle_name"
     _zinstall_kv "Schema" "$schema"
-    _zinstall_kv "Name" "$name"
-    [[ -n "$description" ]] && _zinstall_kv "Description" "$description"
-    [[ -n "$homepage" ]] && _zinstall_kv "Homepage" "$homepage"
-    [[ -n "$command" ]] && _zinstall_kv "Command" "$command"
 
-    _zinstall_heading "Install"
-    _zinstall_kv "Method" "$method"
-    _zinstall_kv "Package" "$package"
-    [[ -n "$install_type" ]] && _zinstall_kv "Type" "$install_type"
+    _zinstall_heading "Includes"
+    for (( bundle_i=1; bundle_i<=include_count; bundle_i++ )); do
+        _zinstall_item_selector 'bundle.include' "$include_count" "$bundle_i"
+        bundle_selector="$REPLY"
+        _zinstall_get "$recipe_file" "${bundle_selector}.id"
+        included_id="$REPLY"
+        included_file="$recipes_dir/$included_id.kdl"
 
-    _zinstall_heading "Config"
-    _zinstall_kv "Directory" "$config_dir"
-    real_path="\$GHCONFDIR/$config_dir"
-    link_path="\$CONFDIR/$config_dir"
-    _zinstall_kv "Files" "$real_path"
-    _zinstall_kv "Link" "$link_path -> $real_path"
+        _zinstall_kv "Include $bundle_i" "$included_id"
 
-    if (( link_count )); then
-        _zinstall_heading "Additional config links"
-        for (( j=1; j<=link_count; j++ )); do
-            _zinstall_item_selector 'recipe.config.link' "$link_count" "$j"
-            sel="$REPLY"
-            _zinstall_get "$recipe_file" "${sel}.source"
-            source_spec="$REPLY"
-            if _zinstall_get "$recipe_file" "${sel}.target"; then
-                target_spec="$REPLY"
-            else
-                target_spec="\$CONFDIR/$source_spec"
-            fi
-            real_path="\$GHCONFDIR/$source_spec"
-            link_path="$target_spec"
-            _zinstall_kv "Files" "$real_path"
-            _zinstall_kv "Link $j" "$link_path -> $real_path"
-        done
+        if (( ${+_zinstall_processed[$included_id]} )); then
+            _zinstall_kv "State" "already processed in this run"
+            _zinstall_kv "Action" "none"
+            continue
+        fi
+
+        if (( ${+_zinstall_active[$included_id]} )); then
+            local cycle_path="${(j: -> :)_zinstall_stack} -> $included_id"
+            printe "Circular recipe/bundle dependency detected: ${c}${cycle_path}${x}"
+            return 1
+        fi
+
+        if ! is_file "$included_file"; then
+            printe "Included recipe or bundle not found: ${c}${included_file}${x}"
+            return 1
+        fi
+
+        if _zinstall_get "$included_file" 'bundle.id'; then
+            included_type="bundle"
+        elif _zinstall_get "$included_file" 'recipe.id'; then
+            included_type="recipe"
+        else
+            printe "Unsupported root in included file: ${c}${included_file}${x}"
+            return 1
+        fi
+        _zinstall_kv "Type" "$included_type"
+        if (( test_mode )); then
+            bundle_action="test $included_type"
+        else
+            bundle_action="process $included_type"
+        fi
+        _zinstall_kv "Action" "$bundle_action"
+
+        if (( test_mode )); then
+            zinstall --quiet --test "$included_id" || return $?
+        else
+            zinstall --quiet "$included_id" || return $?
+        fi
+        _zinstall_kv "State" "processed"
+    done
+
+    unset "_zinstall_active[$recipe_id]"
+    _zinstall_processed[$recipe_id]=1
+    _zinstall_stack[-1]=()
+
+    _zinstall_heading "Result"
+    if (( test_mode )); then
+        (( quiet_mode )) || printi "Bundle test complete: no changes were made."
+    else
+        (( quiet_mode )) || prints "Bundle ${g}${bundle_name:-$recipe_id}${x} processed successfully."
     fi
-
-    if (( extra_count )); then
-        _zinstall_heading "Extras"
-        for (( j=1; j<=extra_count; j++ )); do
-            _zinstall_item_selector 'recipe.extras.install' "$extra_count" "$j"
-            sel="$REPLY"
-            _zinstall_get "$recipe_file" "${sel}.id"
-            _zinstall_kv "Install $j" "$REPLY"
-        done
-    fi
-
-    if (( mkdir_count || run_count )); then
-        _zinstall_heading "Setup"
-        for (( j=1; j<=mkdir_count; j++ )); do
-            _zinstall_item_selector 'recipe.setup.mkdir' "$mkdir_count" "$j"
-            sel="$REPLY"
-            _zinstall_get "$recipe_file" "${sel}.path"
-            mkdir_path="$REPLY"
-            _zinstall_kv "mkdir $j" "$mkdir_path"
-        done
-        for (( j=1; j<=run_count; j++ )); do
-            _zinstall_item_selector 'recipe.setup.run' "$run_count" "$j"
-            sel="$REPLY"
-            label=""
-            item_when="always"
-            _zinstall_get "$recipe_file" "${sel}.label" && label="$REPLY"
-            _zinstall_get "$recipe_file" "${sel}.when" && item_when="$REPLY"
-            _zinstall_get "$recipe_file" "${sel}.command"
-            cmd="$REPLY"
-            _zinstall_kv "Run $j" "${label:-$cmd}"
-            [[ -n "$label" ]] && _zinstall_kv "Command" "$cmd"
-            [[ "$item_when" != "always" ]] && _zinstall_kv "When" "$item_when"
-        done
-    fi
-}
-
-if (( recipe_mode )); then
-    _zinstall_show_recipe
     return 0
 fi
 
@@ -470,8 +622,10 @@ else
 fi
 
 # Extras are deliberately simple: recipe wins, otherwise appinstall.
+# IDs already processed during this invocation are skipped. Active IDs indicate
+# a circular chain and are rejected before recursion.
 if (( extra_count )); then
-    local extra stack
+    local extra cycle_path
     _zinstall_heading "Extras"
     for (( i=1; i<=extra_count; i++ )); do
         _zinstall_item_selector 'recipe.extras.install' "$extra_count" "$i"
@@ -480,24 +634,39 @@ if (( extra_count )); then
         extra="$REPLY"
         _zinstall_kv "Extra $i" "$extra"
 
+        if (( ${+_zinstall_processed[$extra]} )); then
+            _zinstall_kv "State" "already processed in this run"
+            _zinstall_kv "Action" "none"
+            continue
+        fi
+
+        if (( ${+_zinstall_active[$extra]} )); then
+            cycle_path="${(j: -> :)_zinstall_stack} -> $extra"
+            printe "Circular recipe/bundle dependency detected: ${c}${cycle_path}${x}"
+            return 1
+        fi
+
         if is_file "$recipes_dir/$extra.kdl"; then
-            stack="${ZINSTALL_STACK:-}"
-            if [[ ":$stack:" == *":$extra:"* || "$extra" == "$recipe_id" ]]; then
-                printe "Circular extra recipe dependency detected: ${c}${extra}${x}"
-                return 1
+            local extra_type="recipe"
+            if _zinstall_get "$recipes_dir/$extra.kdl" 'bundle.id'; then
+                extra_type="bundle"
             fi
-            local ZINSTALL_STACK="${stack:+$stack:}$recipe_id"
+            _zinstall_kv "Resolver" "$extra_type"
+            _zinstall_kv "File" "$recipes_dir/$extra.kdl"
             if (( test_mode )); then
-                zinstall -t "$extra" || return $?
+                zinstall --quiet --test "$extra" || return $?
             else
-                zinstall "$extra" || return $?
+                zinstall --quiet "$extra" || return $?
             fi
+            _zinstall_kv "State" "processed"
         else
+            _zinstall_kv "Resolver" "appinstall fallback"
             if (( test_mode )); then
-                appinstall --dry-run "$extra" || return $?
+                appinstall --quiet --dry-run "$extra" || return $?
             else
                 appinstall --quiet --yes "$extra" || return $?
             fi
+            _zinstall_processed[$extra]=1
         fi
     done
 fi
@@ -645,19 +814,25 @@ fi
 
 _zinstall_heading "Result"
 if (( test_mode )); then
-    printi "Test complete: no changes were made."
+    (( quiet_mode )) || printi "Test complete: no changes were made."
 elif [[ -n "$command" ]]; then
     if is_installed "$command"; then
         local final_info
         final_info=$(zinfo -s "$command" 2>/dev/null)
         [[ -n "$final_info" ]] && _zinstall_line "$final_info"
-        prints "${g}${name}${x} is installed and recipe processing completed."
+        (( quiet_mode )) || prints "${g}${name}${x} is installed and recipe processing completed."
     else
         printe "Recipe processing completed, but command '${c}${command}${x}' is not available."
         return 1
     fi
 else
-    prints "Recipe processing completed."
+    (( quiet_mode )) || prints "Recipe processing completed."
 fi
+
+# Successful completion: leave the active recursion stack and remember this ID
+# so another branch of the same run cannot process it a second time.
+unset "_zinstall_active[$recipe_id]"
+_zinstall_processed[$recipe_id]=1
+_zinstall_stack[-1]=()
 
 return 0

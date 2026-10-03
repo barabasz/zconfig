@@ -1,0 +1,11 @@
+/- kdl-version 2
+
+bundle id="cli" schema=1 {
+    name "CLI tools"
+    description "Basic command-line utilities"
+
+    include id="fzf"
+    include id="ripgrep"
+    include id="bat"
+    include id="terminal"
+}

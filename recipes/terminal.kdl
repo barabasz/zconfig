@@ -1,0 +1,11 @@
+/- kdl-version 2
+
+bundle id="terminal" schema=1 {
+    name "Terminal tools"
+    description "Terminal utilities and file managers"
+
+    include id="cli"
+    include id="mc"
+    include id="yazi"
+    include id="fzf"
+}
