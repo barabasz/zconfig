@@ -1,0 +1,10 @@
+/- kdl-version 2
+
+recipe id="bat" schema=1 {
+    name "bat"
+    description "A cat clone with syntax highlighting"
+    homepage "https://github.com/sharkdp/bat"
+    command "bat"
+
+    install package="bat"
+}

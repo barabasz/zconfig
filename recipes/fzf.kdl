@@ -1,0 +1,10 @@
+/- kdl-version 2
+
+recipe id="fzf" schema=1 {
+    name "fzf"
+    description "Command-line fuzzy finder"
+    homepage "https://github.com/junegunn/fzf"
+    command "fzf"
+
+    install package="fzf"
+}

@@ -1,0 +1,26 @@
+/- kdl-version 2
+
+recipe id="yazi" schema=1 {
+    name "Yazi"
+    description "Terminal file manager written in Rust"
+    homepage "https://github.com/sxyazi/yazi"
+    command "yazi"
+
+    install package="yazi"
+
+    setup {
+        run label="Install mount plugin" command="ya pack -a yazi-rs/plugins:mount"
+        run label="Install full-border plugin" command="ya pack -a yazi-rs/plugins:full-border"
+        run label="Install git plugin" command="ya pack -a yazi-rs/plugins:git"
+        run label="Install smart-enter plugin" command="ya pack -a yazi-rs/plugins:smart-enter"
+        run label="Install smart-filter plugin" command="ya pack -a yazi-rs/plugins:smart-filter"
+        run label="Install mime-ext plugin" command="ya pack -a yazi-rs/plugins:mime-ext"
+        run label="Install mediainfo plugin" command="ya pack -a boydaihungst/mediainfo"
+        run label="Install glow plugin" command="ya pack -a Reledia/glow.yazi"
+
+        run label="Install Dracula theme" command=#"""
+            rm -rf "$CONFDIR/yazi/flavors/dracula.yazi"
+            git clone https://github.com/dracula/yazi.git "$CONFDIR/yazi/flavors/dracula.yazi"
+            """#
+    }
+}

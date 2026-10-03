@@ -1,0 +1,10 @@
+/- kdl-version 2
+
+recipe id="ripgrep" schema=1 {
+    name "ripgrep"
+    description "Line-oriented search tool"
+    homepage "https://github.com/BurntSushi/ripgrep"
+    command "rg"
+
+    install package="ripgrep"
+}

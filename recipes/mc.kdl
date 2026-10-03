@@ -1,37 +1,14 @@
 /- kdl-version 2
 
-// Experimental zconfig recipe - not a final schema.
 recipe id="mc" schema=1 {
     name "Midnight Commander"
     description "Feature-rich full-screen text mode visual file manager"
     homepage "https://midnight-commander.org/"
     command "mc"
 
-    dependencies {
-        package name="fzf" optional=#false
-        package name="bat" optional=#true
-    }
-
-    install {
-        default manager="brew" package="midnight-commander"
-        on os="linux" distro="debian" manager="apt" package="mc"
-    }
+    install package="midnight-commander"
 
     config {
-        link source="mc" target="$XDG_CONFIG_HOME/mc"
         link source="mc/skins" target="$XDG_DATA_HOME/mc/skins"
-    }
-
-    post-install {
-        mkdir path="$XDG_DATA_HOME/mc"
-
-        run shell="zsh" command=#"""
-            echo "post-install test"
-            printf '%s\n' "$HOME"
-            """#
-    }
-
-    verify {
-        version args="--version"
     }
 }
