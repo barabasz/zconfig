@@ -731,6 +731,7 @@ install_core_utils() {
 
 install_extra_utils() {
     local utils=(
+        "7zip:p7zip:"    # 7-Zip file archiver
         "bat:bat:"       # cat replacement with syntax highlighting
         "curl::curl"     # URL transfers - used by network.zsh, wanip
         "dig::dnsutils"  # DNS lookup - used by network.zsh, mdig, wanip
