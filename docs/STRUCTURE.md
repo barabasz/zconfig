@@ -48,7 +48,7 @@ Part of [zconfig](../README.md) documentation.
 │   └── varia.zsh           # Miscellaneous helpers
 │
 ├── apps/                # Application integrations
-│   ├── _brew.zsh           # Homebrew (priority load)
+│   ├── brew.zsh            # Homebrew (priority load)
 │   ├── omp.zsh             # Oh My Posh
 │   ├── fzf.zsh             # Fuzzy finder
 │   └── ...                 # Other app configs
