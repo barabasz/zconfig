@@ -8,13 +8,14 @@ local -A _fn=(
     [desc]="Installs packages using the best available package manager.
             Auto-discovers: prefers brew if available, falls back to apt on Linux.
             Displays full application name and version during installation."
-    [version]="0.8.6"
+    [version]="0.8.7"
     [created]="2025"
     [modified]="2026-10-03"
     [license]="MIT"
     [author]="Andrzej Barabasz"
     [notes]="Package names may differ between brew and apt (e.g., fd vs fd-find).
-            Use --brew-name or --apt-name to specify alternate names."
+            Use --brew-name or --apt-name to specify alternate names.
+            Use --yes to suppress package-manager confirmation prompts."
 )
 
 local -a _fn_args=(
@@ -28,6 +29,7 @@ local -a _fn_opts=(
     "brew-name|B|Alternate package name for brew|name"
     "apt-name|A|Alternate package name for apt|name"
     "quiet|q|Quieter output"
+    "yes|y|Assume yes to package manager confirmation prompts"
     "dry-run|n|Show what would be done without installing"
     "force|f|Install even if already present"
 )
@@ -38,6 +40,7 @@ local -a _fn_examples=(
     "appinstall -b node|Force brew installation"
     "appinstall -c visual-studio-code|Install VS Code as cask"
     "appinstall -n mc|Dry run - show what would happen"
+    "appinstall -y mc|Install without confirmation prompts"
 )
 
 local -A opts=() args=()
@@ -47,6 +50,7 @@ local package="${args[package]}"
 local brew_pkg="${opts[brew-name]:-$package}"
 local apt_pkg="${opts[apt-name]:-$package}"
 local quiet=$(( ${+opts[quiet]} ))
+local assume_yes=$(( ${+opts[yes]} ))
 local dry_run=$(( ${+opts[dry-run]} ))
 local force=$(( ${+opts[force]} ))
 local use_cask=$(( ${+opts[cask]} ))
@@ -122,9 +126,9 @@ _appinstall_run() {
     if (( dry_run )); then
         print "  ${c}[dry-run]${x} $*"
         return 0
-    else
-        eval "$@"
     fi
+
+    "$@"
 }
 
 ## Determine package manager to use
@@ -182,11 +186,8 @@ fi
 
 ## Get package information
 local pkg_name="" pkg_version="" pkg_desc=""
-local info_result=0
-
 case "$use_manager" in
     brew)
-        local actual_pkg="$brew_pkg"
         if _appinstall_brew_info "$brew_pkg" "$use_cask"; then
             pkg_name="${REPLY%%|*}"
             local rest="${REPLY#*|}"
@@ -205,7 +206,6 @@ case "$use_manager" in
                 fi
             else
                 printw "Package ${c}${brew_pkg}${x} not found in brew."
-                info_result=1
             fi
         fi
         ;;
@@ -217,7 +217,6 @@ case "$use_manager" in
             pkg_desc="${rest#*|}"
         else
             printw "Package ${c}${apt_pkg}${x} not found in apt."
-            info_result=1
         fi
         ;;
 esac
@@ -237,18 +236,26 @@ local install_status=0
 
 case "$use_manager" in
     brew)
-        if (( use_cask )); then
-            (( quiet )) || printi "Using: brew install --cask ${brew_pkg}"
-            _appinstall_run "brew install --cask -q '$brew_pkg'"
+        local -a brew_cmd=(brew install -q)
+        (( use_cask )) && brew_cmd+=(--cask)
+        brew_cmd+=("$brew_pkg")
+
+        (( quiet )) || printi "Using: ${brew_cmd[*]}"
+
+        local -a brew_env=()
+        (( assume_yes )) && brew_env+=(HOMEBREW_NO_ASK=1)
+        (( quiet )) && brew_env+=(HOMEBREW_AUTO_UPDATE_QUIET=1)
+
+        if (( ${#brew_env[@]} )); then
+            _appinstall_run env "${brew_env[@]}" "${brew_cmd[@]}"
         else
-            (( quiet )) || printi "Using: brew install ${brew_pkg}"
-            _appinstall_run "brew install -q '$brew_pkg'"
+            _appinstall_run "${brew_cmd[@]}"
         fi
         install_status=$?
         ;;
     apt)
         (( quiet )) || printi "Using: apt-get install ${apt_pkg}"
-        _appinstall_run "sudo apt-get install -y -qq '$apt_pkg'"
+        _appinstall_run sudo apt-get install -y -qq "$apt_pkg"
         install_status=$?
         ;;
 esac

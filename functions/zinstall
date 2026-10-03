@@ -10,7 +10,7 @@ local -A _fn=(
 
             Use --test for a dry run, --recipe to display the parsed recipe,
             or --verify to validate recipe syntax and schema."
-    [version]="0.4.1"
+    [version]="0.4.2"
     [created]="2026-10-03"
     [modified]="2026-10-03"
     [license]="MIT"
@@ -321,7 +321,7 @@ fi
 # --- Parsed recipe view ------------------------------------------------------
 
 _zinstall_show_recipe() {
-    local j sel source_spec target_spec real_path link_path extra label cmd path item_when
+    local j sel source_spec target_spec real_path link_path extra label cmd mkdir_path item_when
 
     _zinstall_heading "Recipe"
     _zinstall_kv "File" "$recipe_file"
@@ -379,8 +379,8 @@ _zinstall_show_recipe() {
             _zinstall_item_selector 'recipe.setup.mkdir' "$mkdir_count" "$j"
             sel="$REPLY"
             _zinstall_get "$recipe_file" "${sel}.path"
-            path="$REPLY"
-            _zinstall_kv "mkdir $j" "$path"
+            mkdir_path="$REPLY"
+            _zinstall_kv "mkdir $j" "$mkdir_path"
         done
         for (( j=1; j<=run_count; j++ )); do
             _zinstall_item_selector 'recipe.setup.run' "$run_count" "$j"
@@ -448,7 +448,7 @@ else
         [[ "$method" == "apt" ]] && appinstall_args+=(--apt)
         [[ "$install_type" == "cask" ]] && appinstall_args+=(--cask)
 
-        appinstall "${appinstall_args[@]}" "$package" || return $?
+        appinstall --quiet --yes "${appinstall_args[@]}" "$package" || return $?
         installed_now=1
 
         if [[ -n "$command" ]] && ! is_installed "$command"; then
@@ -485,7 +485,7 @@ if (( extra_count )); then
             if (( test_mode )); then
                 appinstall --dry-run "$extra" || return $?
             else
-                appinstall "$extra" || return $?
+                appinstall --quiet --yes "$extra" || return $?
             fi
         fi
     done
@@ -573,31 +573,31 @@ fi
 # Setup. Current test recipes use run actions. mkdir is supported as a small
 # declarative convenience and is processed before run actions.
 if (( mkdir_count || run_count )); then
-    local path label cmd item_when
+    local mkdir_path label cmd item_when
     _zinstall_heading "Setup"
 
     for (( i=1; i<=mkdir_count; i++ )); do
         _zinstall_item_selector 'recipe.setup.mkdir' "$mkdir_count" "$i"
         selector="$REPLY"
         _zinstall_get "$recipe_file" "${selector}.path"
-        path="$REPLY"
-        _zinstall_expand_path "$path"
-        path="$REPLY"
+        mkdir_path="$REPLY"
+        _zinstall_expand_path "$mkdir_path"
+        mkdir_path="$REPLY"
         item_when="always"
         _zinstall_get "$recipe_file" "${selector}.when" && item_when="$REPLY"
 
         if [[ "$item_when" == "new" && $installed_now -eq 0 ]]; then
-            _zinstall_kv "Skip" "mkdir $path (when=new)"
+            _zinstall_kv "Skip" "mkdir $mkdir_path (when=new)"
         elif (( test_mode )); then
             if [[ "$item_when" == "always" ]]; then
-                _zinstall_kv "mkdir $i" "would create $path"
+                _zinstall_kv "mkdir $i" "would create $mkdir_path"
             else
-                _zinstall_kv "mkdir $i" "would create $path (when=$item_when)"
+                _zinstall_kv "mkdir $i" "would create $mkdir_path (when=$item_when)"
             fi
         else
-            _zinstall_kv "mkdir $i" "$path"
-            mkdir -p "$path" || {
-                printe "Cannot create directory: ${c}${path}${x}"
+            _zinstall_kv "mkdir $i" "$mkdir_path"
+            mkdir -p "$mkdir_path" || {
+                printe "Cannot create directory: ${c}${mkdir_path}${x}"
                 return 1
             }
         fi
@@ -624,7 +624,7 @@ if (( mkdir_count || run_count )); then
             [[ "$item_when" != "always" ]] && _zinstall_kv "When" "$item_when"
         else
             _zinstall_kv "Run $i" "${label:-$cmd}"
-            zsh -c "$cmd" || {
+            eval "$cmd" || {
                 printe "Setup action failed: ${c}${label:-$cmd}${x}"
                 return 1
             }
