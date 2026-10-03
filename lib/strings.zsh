@@ -222,6 +222,14 @@ str_count() {
 
 # --- Formatting & Modification ---
 
+# Remove one level of shell quoting
+# Usage: str_unquote '"hello world"'
+# Returns: hello world
+str_unquote() {
+    (( ARGC == 1 )) || return 2
+    print -r -- "${(Q)1}"
+}
+
 # Repeat string N times
 # Usage: str_repeat "-" 10
 # Returns: "----------"
