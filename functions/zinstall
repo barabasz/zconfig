@@ -11,9 +11,9 @@ local -A _fn=(
             Use --test for a dry run, --recipe to display the parsed entry,
             --verify to validate syntax and schema, --quiet to suppress routine output,
             or --brew/--apt to override the recipe installation method."
-    [version]="0.7.1"
+    [version]="0.7.5"
     [created]="2026-10-03"
-    [modified]="2026-10-03"
+    [modified]="2026-10-04"
     [license]="MIT"
     [author]="Andrzej Barabasz"
     [required]="dasel"
@@ -148,12 +148,21 @@ _zinstall_run() {
     return $rc
 }
 
-# Read one KDL scalar and remove one level of JSON quoting.
+# Read one KDL scalar from Dasel JSON output. JSON strings must be decoded
+# (not merely unquoted) so escapes such as \n become real characters.
+# Non-string scalars (for example schema=1) are returned unchanged.
 _zinstall_get() {
     (( ARGC == 2 )) || return 2
+    setopt local_options extended_glob
+
     local raw
     raw=$(dasel -i kdl -o json "$2" < "$1" 2>/dev/null) || return 1
-    REPLY=$(str_unquote "$raw")
+
+    if [[ "$raw" == \"* ]]; then
+        REPLY=$(str_json_decode "$raw") || return 1
+    else
+        REPLY="$raw"
+    fi
 }
 
 # Count a KDL node that dasel exposes either as one object or an array.
@@ -334,7 +343,7 @@ fi
 if [[ "$root_type" == "recipe" ]]; then
     local name command="" description="" homepage=""
     local package recipe_method="brew" method="brew" install_type=""
-    local config_dir="$recipe_id"
+    local config_dir="$recipe_id" config_auto=1 config_auto_raw=""
     
     _zinstall_get "$recipe_file" 'recipe.name' || {
         printe "Missing required field: ${c}recipe.name${x}"
@@ -356,6 +365,17 @@ if [[ "$root_type" == "recipe" ]]; then
     method="${force_method:-$recipe_method}"
     _zinstall_get "$recipe_file" 'recipe.install.type' && install_type="$REPLY"
     _zinstall_get "$recipe_file" 'recipe.config.dir' && config_dir="$REPLY"
+    if _zinstall_get "$recipe_file" 'recipe.config.auto'; then
+        config_auto_raw="$REPLY"
+        case "$config_auto_raw" in
+            true)  config_auto=1 ;;
+            false) config_auto=0 ;;
+            *)
+                printe "Invalid ${c}recipe.config.auto${x}: expected ${c}true${x} or ${c}false${x}."
+                return 1
+                ;;
+        esac
+    fi
     
     case "$recipe_method" in
         brew|apt) ;;
@@ -459,11 +479,15 @@ if [[ "$root_type" == "recipe" ]]; then
         [[ -n "$install_type" ]] && _zinstall_kv "Type" "$install_type"
     
         _zinstall_heading "Config"
-        _zinstall_kv "Directory" "$config_dir"
-        real_path="\$GHCONFDIR/$config_dir"
-        link_path="\$CONFDIR/$config_dir"
-        _zinstall_kv "Files" "$real_path"
-        _zinstall_kv "Link" "$link_path -> $real_path"
+        if (( config_auto )); then
+            _zinstall_kv "Directory" "$config_dir"
+            real_path="\$GHCONFDIR/$config_dir"
+            link_path="\$CONFDIR/$config_dir"
+            _zinstall_kv "Files" "$real_path"
+            _zinstall_kv "Link" "$link_path -> $real_path"
+        else
+            _zinstall_kv "Auto" "disabled"
+        fi
     
         if (( link_count )); then
             _zinstall_heading "Additional config links"
@@ -741,36 +765,42 @@ if (( extra_count )); then
     done
 fi
 
-# Standard config is implicit. Actual files live in GHCONFDIR; CONFDIR holds the symlink.
-# Relationship: CONFDIR/<dir> -> GHCONFDIR/<dir>.
+# Standard config is implicit unless recipe.config.auto=false.
+# When enabled, actual files live in GHCONFDIR and CONFDIR holds the symlink:
+# CONFDIR/<dir> -> GHCONFDIR/<dir>.
 _zinstall_heading "Config"
-_zinstall_kv "Directory" "$config_dir"
-_zinstall_kv "GHCONFDIR" "$ghconf_state"
+if (( config_auto )); then
+    _zinstall_kv "Directory" "$config_dir"
+    _zinstall_kv "GHCONFDIR" "$ghconf_state"
 
-if [[ "$ghconf_state" == "available" ]]; then
-    _zinstall_kv "Files" "$config_real_path"
-    _zinstall_kv "Link" "$config_link_path -> $config_real_path"
+    if [[ "$ghconf_state" == "available" ]]; then
+        _zinstall_kv "Files" "$config_real_path"
+        _zinstall_kv "Link" "$config_link_path -> $config_real_path"
 
-    if [[ -e "$config_real_path" || -L "$config_real_path" ]]; then
-        _zinstall_kv "User config" "found"
-        _zinstall_link_status "$config_real_path" "$config_link_path"
-        _zinstall_kv "Link state" "${reply[1]}"
-        [[ -n "${reply[3]}" ]] && _zinstall_kv "Current link" "$config_link_path -> ${reply[3]}"
-        if [[ "${reply[2]}" == "none" ]]; then
-            _zinstall_kv "Action" "none"
-        elif (( test_mode )); then
-            _zinstall_kv "Action" "would ${reply[2]}"
+        if [[ -e "$config_real_path" || -L "$config_real_path" ]]; then
+            _zinstall_kv "User config" "found"
+            _zinstall_link_status "$config_real_path" "$config_link_path"
+            _zinstall_kv "Link state" "${reply[1]}"
+            [[ -n "${reply[3]}" ]] && _zinstall_kv "Current link" "$config_link_path -> ${reply[3]}"
+            if [[ "${reply[2]}" == "none" ]]; then
+                _zinstall_kv "Action" "none"
+            elif (( test_mode )); then
+                _zinstall_kv "Action" "would ${reply[2]}"
+            else
+                _zinstall_kv "Action" "${reply[2]}"
+                _zinstall_run lns "$config_real_path" "$config_link_path" || return $?
+                (( quiet_mode )) || prints "Configuration linked: ${c}${config_link_path}${x} -> ${c}${config_real_path}${x}"
+            fi
         else
-            _zinstall_kv "Action" "${reply[2]}"
-            _zinstall_run lns "$config_real_path" "$config_link_path" || return $?
-            (( quiet_mode )) || prints "Configuration linked: ${c}${config_link_path}${x} -> ${c}${config_real_path}${x}"
+            _zinstall_kv "User config" "not found"
+            _zinstall_kv "Action" "use application default configuration"
         fi
     else
-        _zinstall_kv "User config" "not found"
-        _zinstall_kv "Action" "use application default configuration"
+        _zinstall_kv "Action" "skip user configuration and use application defaults"
     fi
 else
-    _zinstall_kv "Action" "skip user configuration and use application defaults"
+    _zinstall_kv "Auto" "disabled"
+    _zinstall_kv "Action" "leave standard configuration path unmanaged"
 fi
 
 # Explicit additional links. KDL uses source/target; internally we resolve them
