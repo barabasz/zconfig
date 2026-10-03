@@ -6,8 +6,11 @@ zfile_track_start ${0:A}
 
 # fzf (fuzzy finder) integration
 
-# Guard
-is_installed fzf || return
+# Guard: check if fzf is installed
+if ! is_installed fzf; then
+    zfile_track_end ${0:A}
+    return
+fi
 
 # Cache paths
 local cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/zsh"

@@ -7,7 +7,10 @@ zfile_track_start ${0:A}
 # Python virtual environment configuration
 
 # Guard: Fast check if python is even installed
-(( ${+commands[python3]} )) || return
+if (( ! ${+commands[python3]} )); then
+    zfile_track_end ${0:A}
+    return
+fi
 
 # 1. Ensure Homebrew Python libexec is prepended as base fallback (before /usr/bin)
 local brew_python_bin="/opt/homebrew/opt/python@3.14/libexec/bin"

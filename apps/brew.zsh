@@ -9,8 +9,11 @@ zfile_track_start ${0:A}
 brew_mac_path="/opt/homebrew/bin/brew"
 brew_linux_path="/home/linuxbrew/.linuxbrew/bin/brew"
 
-# Guard
-is_file "$brew_mac_path" || is_file "$brew_linux_path" || return
+# Guard: check if Homebrew executable exists for either macOS or Linux
+if ! is_file "$brew_mac_path" && ! is_file "$brew_linux_path"; then
+    zfile_track_end ${0:A}
+    return
+fi
 
 # homebrew shellenv integration
 if [[ -f $brew_mac_path ]]; then

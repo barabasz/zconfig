@@ -6,8 +6,11 @@ zfile_track_start ${0:A}
 
 # Oh My Posh configuration
 
-# Guard: Fast check using hash table instead of function call
-(( ${+commands[oh-my-posh]} )) || return
+# Guard: Fast check using hash table if oh-my-posh is installed
+if (( ! ${+commands[oh-my-posh]} )); then
+    zfile_track_end ${0:A}
+    return
+fi
 
 # Define paths 
 # matches your current config path:

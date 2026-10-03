@@ -6,8 +6,11 @@ zfile_track_start ${0:A}
 
 # The Fuck integration
 
-# Guard
-is_installed thefuck || return
+# Guard: check if thefuck is installed
+if ! is_installed thefuck; then
+    zfile_track_end ${0:A}
+    return
+fi
 
 fuck() {
     unfunction fuck

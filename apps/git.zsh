@@ -8,8 +8,11 @@ zfile_track_start ${0:A}
 
 export MYGH="https://raw.githubusercontent.com/barabasz"
 
-# Guard
-is_dir "$HOME/GitHub" || return
+# Guard: Check if the directory exists.
+if ! is_dir "$HOME/GitHub"; then
+    zfile_track_end ${0:A}
+    return
+fi
 
 export GHDIR=$HOME/GitHub
 is_folder "$GHDIR/bin" && export GHBINDIR=$GHDIR/bin

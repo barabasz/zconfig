@@ -6,8 +6,11 @@ zfile_track_start ${0:A}
 
 ## ACME Shell script: acme.sh
 
-# Guard
-is_dir "$HOME/.acme.sh" || return
+# Guard: Check if the directory exists.
+if ! is_dir "$HOME/.acme.sh"; then
+    zfile_track_end ${0:A}
+    return
+fi
 
 source "$HOME/.acme.sh/acme.sh.env"
 

@@ -6,8 +6,11 @@ zfile_track_start ${0:A}
 
 ## SSH configuration
 
-# Guard
-is_installed ssh || return
+# Guard: check if ssh is installed
+if ! is_installed ssh; then
+    zfile_track_end ${0:A}
+    return
+fi
 
 export SSH_HOME="$CONFDIR/ssh"
 export SSH_AUTH_SOCK="$SSH_HOME/ssh_auth.sock"

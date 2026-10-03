@@ -6,8 +6,11 @@ zfile_track_start ${0:A}
 
 # bat (cat clone) integration
 
-# Guard
-is_installed bat || return
+# Guard: check if bat is installed
+if ! is_installed bat; then
+    zfile_track_end ${0:A}
+    return
+fi
 
 [[ -d "$CONFDIR/bat" ]] && export BAT_CONFIG_DIR="$CONFDIR/bat"
 # Get the colors in the opened man using bat

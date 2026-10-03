@@ -6,8 +6,11 @@ zfile_track_start ${0:A}
 
 # zoxide shell integration
 
-# Guard
-is_installed zoxide || return
+# Guard: check if zoxide is installed
+if ! is_installed zoxide; then
+    zfile_track_end ${0:A}
+    return
+fi
 
 eval "$(zoxide init zsh)"
 

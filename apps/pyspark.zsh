@@ -7,7 +7,10 @@ zfile_track_start ${0:A}
 # PySpark configuration
 
 # Guard: Fast check if pyspark is installed
-(( ${+commands[pyspark]} )) || return
+if (( ! ${+commands[pyspark]} )); then
+    zfile_track_end ${0:A}
+    return
+fi
 
 pyspark() {
     local startup_file="$CONFDIR/pyspark/startup.py"
