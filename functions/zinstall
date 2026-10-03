@@ -10,7 +10,7 @@ local -A _fn=(
 
             Use --test for a dry run, --recipe to display the parsed recipe,
             or --verify to validate recipe syntax and schema."
-    [version]="0.4.2"
+    [version]="0.4.3"
     [created]="2026-10-03"
     [modified]="2026-10-03"
     [license]="MIT"
@@ -65,7 +65,18 @@ _zinstall_heading() {
 
 _zinstall_kv() {
     (( ARGC == 2 )) || return 2
-    printkv "  $1" "$2"
+    local key="$1" value="$2" line
+
+    # printkv handles single-line values. For multiline values, print the key
+    # once and indent every content line so section formatting stays readable.
+    if [[ "$value" == *$'\n'* ]]; then
+        print -r -- "  ${key}:"
+        for line in "${(@f)value}"; do
+            print -r -- "    $line"
+        done
+    else
+        printkv "  $key" "$value"
+    fi
 }
 
 _zinstall_line() {
