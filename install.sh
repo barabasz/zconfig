@@ -26,8 +26,8 @@
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.8.11"
-SCRIPT_DATE="2026-10-04"
+SCRIPT_VERSION="0.8.12"
+SCRIPT_DATE="2026-10-05"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
 ZSHENV_LINK="$HOME/.zshenv"
@@ -47,6 +47,11 @@ mkdir -p "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$XDG_BIN_HOME" "$XDG_LIB_HOME" "$
 # Logging - clean log + verbose debug log
 LOGFILE="$XDG_TMP_HOME/zconfig_$(date +%Y%m%d_%H%M%S).log"
 DEBUGLOG="${LOGFILE%.log}.debug.log"
+# Both advertised logs must exist even when installation stops during bootstrap.
+if ! touch "$LOGFILE" "$DEBUGLOG"; then
+    printf 'Cannot create installation logs in %s\n' "$XDG_TMP_HOME" >&2
+    exit 1
+fi
 
 # Step counter - UPDATE THIS when adding/removing installation steps!
 # macOS: 10 steps, Linux: 15 steps (set dynamically after OS detection)
@@ -102,6 +107,7 @@ FAILED_TOOLS=()
 SUDO_PASS=""
 export -n SUDO_PASS
 SUDO_PASSWORD_READY=0
+SUDO_ACCESS_DENIED=0
 SUDO_INITIALIZED=0
 
 # PID of background sudo keep-alive loop (both platforms)
@@ -355,8 +361,14 @@ init_sudo() {
         # earlier in this terminal. Do not combine -k with -v: cache it normally.
         sudo -k >> "$DEBUGLOG" 2>&1 || return 1
         if ! sudo_validate_password; then
-            print_error "Cannot authenticate with sudo (see $DEBUGLOG)"
-            return 1
+            if [[ "$SUDO_ACCESS_DENIED" -eq 1 ]]; then
+                print_warning "sudo is installed, but this user is not authorized; root access is needed to finish configuration"
+                bootstrap_sudo || return 1
+                sudo_validate_password || { print_error "Cannot authenticate after configuring sudo (see $DEBUGLOG)"; return 1; }
+            else
+                print_error "Cannot authenticate with sudo (see $DEBUGLOG)"
+                return 1
+            fi
         fi
     else
         # Keep native macOS authentication, including its PAM/Touch ID setup.
@@ -396,13 +408,21 @@ read_sudo_password() {
 # This sudo invocation validates credentials only: it executes no child command.
 # Suppress xtrace locally so bash -x cannot print the password expansion.
 sudo_validate_password() {
-    local tracing=0 status
+    local tracing=0 status diagnostic diagnostic_start=0
     if [[ "$-" == *x* ]]; then
         tracing=1
         set +x
     fi
-    printf '%s\n' "$SUDO_PASS" | sudo -S -p '' -v >> "$DEBUGLOG" 2>&1
+    [[ -f "$DEBUGLOG" ]] && diagnostic_start=$(wc -l < "$DEBUGLOG")
+    # Keep sudo in the original process context: command substitution would
+    # change its parent PID and break caches tied to that parent.
+    printf '%s\n' "$SUDO_PASS" | LC_ALL=C sudo -S -p '' -v >> "$DEBUGLOG" 2>&1
     status=$?
+    diagnostic=$(tail -n "+$((diagnostic_start + 1))" "$DEBUGLOG")
+    SUDO_ACCESS_DENIED=0
+    case "$diagnostic" in
+        *"not in the sudoers"*|*"not allowed to run sudo"*|*"may not run sudo"*|*"not allowed to execute"*) SUDO_ACCESS_DENIED=1 ;;
+    esac
     [[ "$tracing" -eq 1 ]] && set -x
     return "$status"
 }
@@ -823,10 +843,17 @@ install_sudo() {
         return 0
     fi
 
-    # sudo not found - install it via su (single password prompt)
     print_warning "${g}sudo${x} is not installed"
-    print_info "Installing ${g}sudo${x} and configuring sudoers..."
-    print_info "Root password required:"
+    bootstrap_sudo || return 1
+    print_success "${g}sudo${x} installed$(fmt_version sudo)"
+    track_install "sudo"
+    return 0
+}
+
+# Also used when a previous run installed the package but did not grant access.
+bootstrap_sudo() {
+    print_info "Preparing sudo and configuring sudoers..."
+    print_info "Root password required (separate from your user password):"
 
     # Install sudo AND configure a validated drop-in in one su -c command.
     local username
@@ -841,36 +868,51 @@ install_sudo() {
     local root_script
     root_script="username='$username'"$'\n'"$(cat <<'ROOT_SCRIPT'
 set -e
+# su -c may retain the user's PATH, which omits /usr/sbin on Debian.
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 export LC_ALL=C
-apt-get -qq -o APT::Update::Error-Mode=any update
-DEBIAN_FRONTEND=noninteractive apt-get -qq install -y sudo
+if ! command -v sudo >/dev/null 2>&1; then
+    apt-get -qq -o APT::Update::Error-Mode=any update
+    DEBIAN_FRONTEND=noninteractive apt-get -qq install -y sudo
+fi
+if [ ! -x /usr/sbin/visudo ]; then
+    printf 'sudo installation is incomplete: /usr/sbin/visudo is missing\n' >&2
+    exit 1
+fi
 install -d -m 0750 /etc/sudoers.d
 sudoers_file="/etc/sudoers.d/zconfig-$username"
 if [ -e "$sudoers_file" ] || [ -L "$sudoers_file" ]; then
-    printf 'Refusing to overwrite %s\n' "$sudoers_file" >&2
-    exit 1
+    printf 'Keeping existing sudoers entry: %s\n' "$sudoers_file"
+    /usr/sbin/visudo -c
+    exit 0
 fi
 # The temporary filename contains a dot, so includedir ignores it.
 sudoers_temp=$(mktemp /etc/sudoers.d/.zconfig.XXXXXX)
 trap 'rm -f "$sudoers_temp"' EXIT
 printf '%s ALL=(ALL:ALL) ALL\n' "$username" > "$sudoers_temp"
 chmod 0440 "$sudoers_temp"
-visudo -cf "$sudoers_temp"
+/usr/sbin/visudo -cf "$sudoers_temp"
 mv "$sudoers_temp" "$sudoers_file"
-if ! visudo -c; then
+if ! /usr/sbin/visudo -c; then
     rm -f "$sudoers_file"
     exit 1
 fi
 ROOT_SCRIPT
 )"
 
-    if su -c "$root_script"; then
-        print_success "${g}sudo${x} installed$(fmt_version sudo)"
-        print_info "User granted sudo access via /etc/sudoers.d/zconfig-$username (default timeout)"
-        track_install "sudo"
+    # Only output is piped: su still reads authentication from the terminal.
+    # Capture su's status rather than tee's status, without enabling pipefail.
+    local root_status tee_status
+    print_log "Executing sudo bootstrap via su"
+    su -c "$root_script" 2>&1 | tee -a "$DEBUGLOG"
+    local pipeline_status=("${PIPESTATUS[@]}")
+    root_status=${pipeline_status[0]}
+    tee_status=${pipeline_status[1]}
+    if [[ "$root_status" -eq 0 && "$tee_status" -eq 0 ]]; then
+        print_info "Sudoers checked for $username via /etc/sudoers.d/zconfig-$username (default timeout)"
         return 0
     else
-        print_error "Failed to install/configure ${g}sudo${x}"
+        print_error "Failed to prepare sudo access (root command exit: $root_status, logging exit: $tee_status; see $DEBUGLOG)"
         return 1
     fi
 }
