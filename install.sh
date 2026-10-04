@@ -10,7 +10,7 @@
 #  3. Installing core utilities (Linux only)
 #  4. Installing git (xcode-select on macOS, apt on Linux)
 #  5. Installing Homebrew (if not present)
-#  6. Installing extra utilities like at, eza, fzf, etc.
+#  6. Installing extra utilities like 7-Zip, eza, fzf, etc.
 #  7. Installing the Z shell itself
 #  8. Installing oh-my-posh prompt theme engine
 #  9. Handling existing installation (backup/remove)
@@ -19,13 +19,15 @@
 # 12. Minimizing login info: .hushlogin, MOTD scripts (Linux only)
 # 13. Setting zsh as default shell
 # 14. Starting zsh with new configuration
+# Primary test targets: current macOS and Ubuntu Server.
+# Older distribution releases are not a compatibility target.
 
 # =============================================================================
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.8.8"
-SCRIPT_DATE="2026-10-02"
+SCRIPT_VERSION="0.8.9"
+SCRIPT_DATE="2026-10-04"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
 ZSHENV_LINK="$HOME/.zshenv"
@@ -40,7 +42,7 @@ XDG_STATE_HOME=${XDG_STATE_HOME:-$HOME/.local/state}
 TEMP=${TEMP:-$XDG_TMP_HOME}
 
 # Ensure directories exist
-mkdir -p $XDG_CONFIG_HOME $XDG_CACHE_HOME $XDG_BIN_HOME $XDG_LIB_HOME $XDG_TMP_HOME $XDG_DATA_HOME $XDG_STATE_HOME
+mkdir -p "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$XDG_BIN_HOME" "$XDG_LIB_HOME" "$XDG_TMP_HOME" "$XDG_DATA_HOME" "$XDG_STATE_HOME" || exit 1
 
 # Logging - clean log + verbose debug log
 LOGFILE="$XDG_TMP_HOME/zconfig_$(date +%Y%m%d_%H%M%S).log"
@@ -90,10 +92,10 @@ ZCONFIG="${g}zconfig${x}"
 INSTALLED=()
 SKIPPED=()
 
-# Sudo password storage (for sudo -S approach)
-SUDO_PASS=""
+# No password is stored: sudo manages authentication and its timestamp cache.
+SUDO_INITIALIZED=0
 
-# PID of background sudo keep-alive loop (macOS)
+# PID of background sudo keep-alive loop (both platforms)
 SUDO_KEEPALIVE_PID=""
 
 # Timing - record start time
@@ -217,7 +219,7 @@ detect_os() {
     case "$(uname -s)" in
         Darwin)
             OS_TYPE="macos"
-            TOTAL_STEPS=11  # macOS has fewer steps (no sudo, apt, etc.)
+            TOTAL_STEPS=10  # macOS has fewer steps (no sudo, apt, etc.)
             ;;
         Linux)
             if [[ -f /etc/os-release ]]; then
@@ -321,47 +323,59 @@ abort_missing() {
 }
 
 # =============================================================================
-# Sudo wrapper functions - uses stored password via sudo -S
-# This approach ensures only one password prompt for all sudo operations
+# Sudo wrapper functions - authenticate in the foreground, then use sudo -n
+# Keep the timestamp alive without changing the system's sudoers timeout.
 # =============================================================================
 
-# Initialize sudo - ask for password once and validate it
-# Called after install_sudo (Debian) or at start (Ubuntu/macOS)
+# Initialize sudo in the foreground, before any privileged background command.
+# Linux: called after install_sudo. macOS: called when privileges are needed.
 init_sudo() {
-    [[ "$OS_TYPE" == "macos" ]] && return 0  # macOS doesn't need this
+    [[ "$SUDO_INITIALIZED" -eq 1 ]] && return 0
 
-    if [[ -n "$SUDO_PASS" ]]; then
-        return 0  # Already initialized
-    fi
-
-    print_info "Sudo password required (will be asked only once):"
-    read -s -p "[sudo] password for $(whoami): " SUDO_PASS
-    echo ""
-
-    # Validate password
-    if echo "$SUDO_PASS" | sudo -S -v 2>/dev/null; then
-        print_success "Sudo password verified"
-        return 0
-    else
-        print_error "Invalid password"
+    print_log "Sudo implementation: $(sudo --version 2>/dev/null | head -n 1)"
+    print_log "Sudo terminal: $(tty 2>/dev/null)"
+    print_info "Administrator access required (sudo may ask for your password):"
+    if ! sudo -v; then
+        print_error "Cannot obtain sudo access"
         return 1
     fi
+
+    SUDO_INITIALIZED=1
+
+    # Check the same background context that spin uses. Some sudo policies
+    # cache credentials by parent PID rather than by terminal session.
+    if ! spin "Checking cached sudo access in background..." sudo_background_check; then
+        print_error "Cached sudo access is unavailable in background commands"
+        print_info "Run from an interactive terminal (SSH: use ssh -t) and check $DEBUGLOG"
+        return 1
+    fi
+
+    sudo_keepalive_start
+    print_success "Sudo access ready; keeping credentials cached during installation"
+    return 0
 }
 
-# Run command with sudo using stored password
+# Keep a shell parent alive, as apt_run/do_sudo do inside the spinner.
+sudo_background_check() {
+    sudo -n true
+    local status=$?
+    return "$status"
+}
+
+# Preserve the command's stdin; never pipe a password into its input.
 do_sudo() {
-    if [[ "$OS_TYPE" == "macos" ]]; then
-        sudo "$@"
-    else
-        echo "$SUDO_PASS" | sudo -S "$@" 2>/dev/null
+    # macOS may first need sudo when changing the default shell.
+    if [[ "$SUDO_INITIALIZED" -ne 1 ]]; then
+        init_sudo || return 1
     fi
+    sudo -n "$@"
 }
 
 # Silent apt-get wrapper (no warnings, no needrestart prompts)
 # Usage: apt_run update | upgrade -y | install -y <pkg>
 apt_run() {
-    echo "$SUDO_PASS" | sudo -S DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a \
-        apt-get -qq "$@" 2>/dev/null
+    do_sudo env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a \
+        apt-get -qq "$@"
 }
 
 # Convenience wrapper for apt install
@@ -369,11 +383,13 @@ apt_install() {
     apt_run install -y "$@"
 }
 
-# Cleanup sudo password from memory
+# Stop refresh first, then invalidate this session's cached credentials.
 cleanup_sudo() {
     sudo_keepalive_stop
-    SUDO_PASS=""
-    unset SUDO_PASS
+    if [[ "$SUDO_INITIALIZED" -eq 1 ]]; then
+        sudo -k 2>/dev/null || true
+        SUDO_INITIALIZED=0
+    fi
 }
 
 # Keep sudo credentials cached while a long non-interactive command runs
@@ -381,18 +397,27 @@ cleanup_sudo() {
 sudo_keepalive_start() {
     [[ -n "$SUDO_KEEPALIVE_PID" ]] && return 0
     (
+        local sleeper=""
+        trap '[[ -n "$sleeper" ]] && kill "$sleeper" 2>/dev/null; exit 0' TERM INT
         while kill -0 "$$" 2>/dev/null; do
-            sudo -n -v 2>/dev/null
-            sleep 30
+            if ! sudo -n -v >> "$DEBUGLOG" 2>&1; then
+                print_log "WARNING: Sudo keep-alive failed; later sudo commands may fail"
+                break
+            fi
+            sleep 20 &
+            sleeper=$!
+            wait "$sleeper" || break
+            sleeper=""
         done
     ) &>/dev/null &
     SUDO_KEEPALIVE_PID=$!
-    disown "$SUDO_KEEPALIVE_PID" 2>/dev/null
+    print_log "Sudo keep-alive started (PID: $SUDO_KEEPALIVE_PID)"
 }
 
 sudo_keepalive_stop() {
     [[ -z "$SUDO_KEEPALIVE_PID" ]] && return 0
-    kill "$SUDO_KEEPALIVE_PID" 2>/dev/null
+    kill "$SUDO_KEEPALIVE_PID" 2>/dev/null || true
+    wait "$SUDO_KEEPALIVE_PID" 2>/dev/null || true
     SUDO_KEEPALIVE_PID=""
 }
 
@@ -404,6 +429,8 @@ spin() {
     local frames='|/-\'
     local delay=0.15
     local i=0
+    local monitor_was_enabled=0
+    [[ "$-" == *m* ]] && monitor_was_enabled=1
 
     # Log the command being executed (short form to clean log, full to debug)
     print_log "Executing: ${*%% *}"
@@ -441,8 +468,10 @@ spin() {
     printf "\r\033[K"
     printf '\033[?25h'
 
-    # Re-enable job control (only needed for bash, zsh uses LOCAL_OPTIONS)
-    [[ -z "$ZSH_VERSION" ]] && set -m
+    # Restore the original job-control state (zsh uses LOCAL_OPTIONS).
+    if [[ -z "$ZSH_VERSION" && "$monitor_was_enabled" -eq 1 ]]; then
+        set -m
+    fi
 
     # Log result to both files
     if [[ $exit_code -eq 0 ]]; then
@@ -588,7 +617,7 @@ install_header() {
     print_comment "Debug log: $DEBUGLOG"
     print_info "This will install $ZCONFIG to ${c}$ZCONFIG_DIR${x}"
     # Note for Linux users (OS_TYPE not set yet, so check directly)
-    [[ "$(uname -s)" == "Linux" ]] && print_comment "Note: sudo password will be asked only once"
+    [[ "$(uname -s)" == "Linux" ]] && print_comment "Note: sudo authenticates once; cached access is kept alive during installation"
 }
 
 # Print installation summary
@@ -682,16 +711,45 @@ install_sudo() {
     print_info "Installing ${g}sudo${x} and configuring sudoers..."
     print_info "Root password required:"
 
-    # Install sudo AND configure sudoers in one su -c command
+    # Install sudo AND configure a validated drop-in in one su -c command.
     local username
     username=$(whoami)
-    # Add user to sudoers with extended timeout (30 min) to avoid repeated prompts during install
-    local sudoers_line="$username ALL=(ALL:ALL) ALL"
-    local sudoers_timeout="Defaults:$username timestamp_timeout=30"
 
-    if su -c "LC_ALL=C apt-get update -qq >/dev/null 2>&1 && LC_ALL=C apt-get install -y -qq sudo >/dev/null 2>&1 && printf '%s\n' '$sudoers_line' '$sudoers_timeout' >> /etc/sudoers"; then
+    # This name is used in a sudoers entry, filename and root shell command.
+    if [[ ! "$username" =~ ^[a-zA-Z_][a-zA-Z0-9_-]*[$]?$ ]]; then
+        print_error "Cannot safely create a sudoers entry for user: $username"
+        return 1
+    fi
+
+    local root_script
+    root_script="username='$username'"$'\n'"$(cat <<'ROOT_SCRIPT'
+set -e
+export LC_ALL=C
+apt-get -qq -o APT::Update::Error-Mode=any update
+DEBIAN_FRONTEND=noninteractive apt-get -qq install -y sudo
+install -d -m 0750 /etc/sudoers.d
+sudoers_file="/etc/sudoers.d/zconfig-$username"
+if [ -e "$sudoers_file" ] || [ -L "$sudoers_file" ]; then
+    printf 'Refusing to overwrite %s\n' "$sudoers_file" >&2
+    exit 1
+fi
+# The temporary filename contains a dot, so includedir ignores it.
+sudoers_temp=$(mktemp /etc/sudoers.d/.zconfig.XXXXXX)
+trap 'rm -f "$sudoers_temp"' EXIT
+printf '%s ALL=(ALL:ALL) ALL\n' "$username" > "$sudoers_temp"
+chmod 0440 "$sudoers_temp"
+visudo -cf "$sudoers_temp"
+mv "$sudoers_temp" "$sudoers_file"
+if ! visudo -c; then
+    rm -f "$sudoers_file"
+    exit 1
+fi
+ROOT_SCRIPT
+)"
+
+    if su -c "$root_script"; then
         print_success "${g}sudo${x} installed$(fmt_version sudo)"
-        print_info "User added to sudoers with 30min timeout"
+        print_info "User granted sudo access via /etc/sudoers.d/zconfig-$username (default timeout)"
         track_install "sudo"
         return 0
     else
@@ -712,8 +770,15 @@ update_system() {
     print_info "Set timezone to ${c}Europe/Warsaw${x} and synced clock"
     print_info "Current time: ${c}$(date '+%Y-%m-%d %H:%M:%S %Z')${x}"
 
-    spin "Updating package lists..." apt_run update
-    spin "Upgrading packages..." apt_run upgrade -y
+    # Treat partial repository download failures as errors as well.
+    if ! spin "Updating package lists..." apt_run -o APT::Update::Error-Mode=any update; then
+        print_error "Failed to update package lists (see $DEBUGLOG)"
+        return 1
+    fi
+    if ! spin "Upgrading packages..." apt_run upgrade -y; then
+        print_error "Failed to upgrade system packages (see $DEBUGLOG)"
+        return 1
+    fi
 
     print_success "System packages updated"
     return 0
@@ -731,7 +796,7 @@ install_core_utils() {
 
 install_extra_utils() {
     local utils=(
-        "7zip:p7zip:"    # 7-Zip file archiver
+        "7zz:sevenzip:"  # Official 7-Zip, installed via Homebrew on both platforms
         "bat:bat:"       # cat replacement with syntax highlighting
         "curl::curl"     # URL transfers - used by network.zsh, wanip
         "dig::dnsutils"  # DNS lookup - used by network.zsh, mdig, wanip
@@ -968,13 +1033,22 @@ create_symlink() {
 }
 
 init_brew_shellenv() {
-    if [[ -f /opt/homebrew/bin/brew ]]; then
-        eval "$(/opt/homebrew/bin/brew shellenv)"
-    elif [[ -f /usr/local/bin/brew ]]; then
-        eval "$(/usr/local/bin/brew shellenv)"
-    elif [[ -f /home/linuxbrew/.linuxbrew/bin/brew ]]; then
-        eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+    local brew_path brew_env
+    if [[ -x /opt/homebrew/bin/brew ]]; then
+        brew_path=/opt/homebrew/bin/brew
+    elif [[ -x /usr/local/bin/brew ]]; then
+        brew_path=/usr/local/bin/brew
+    elif [[ -x /home/linuxbrew/.linuxbrew/bin/brew ]]; then
+        brew_path=/home/linuxbrew/.linuxbrew/bin/brew
+    elif [[ -x "$HOME/.linuxbrew/bin/brew" ]]; then
+        brew_path="$HOME/.linuxbrew/bin/brew"
+    else
+        return 1
     fi
+
+    brew_env=$("$brew_path" shellenv) || return 1
+    eval "$brew_env" || return 1
+    cmd_exists brew
 }
 
 install_homebrew() {
@@ -990,7 +1064,7 @@ install_homebrew() {
 
     for brew_path in "${brew_paths[@]}"; do
         if [[ -x "$brew_path" ]]; then
-            init_brew_shellenv
+            init_brew_shellenv || { print_error "Failed to initialize Homebrew environment"; return 1; }
             print_success "${g}Homebrew${x} is available$(fmt_version brew)"
             track_skip "Homebrew"
             brew analytics off &>/dev/null
@@ -1008,8 +1082,8 @@ install_homebrew() {
 
     # Fix for Linux: ensure /home/linuxbrew exists with correct permissions
     if is_debian; then
-        do_sudo mkdir -p /home/linuxbrew/
-        do_sudo chmod 755 /home/linuxbrew/
+        do_sudo mkdir -p /home/linuxbrew/ || return 1
+        do_sudo chmod 755 /home/linuxbrew/ || return 1
     fi
 
     # macOS: Homebrew installer in NONINTERACTIVE mode never prompts for
@@ -1018,20 +1092,15 @@ install_homebrew() {
     # the credentials alive while the installer runs in the background.
     if [[ "$OS_TYPE" == "macos" ]]; then
         print_info "Homebrew requires administrator privileges (sudo)"
-        if ! sudo -v; then
-            print_error "Cannot obtain sudo access (is ${c}$(whoami)${x} an Administrator?)"
-            return 1
-        fi
-        sudo_keepalive_start
+        init_sudo || return 1
     fi
 
     # Download Homebrew installer to a temp file (keeps the debug log short
     # and catches download errors instead of running an empty script)
     local brew_installer brew_status=0
-    brew_installer=$(mktemp "${TMPDIR:-/tmp}/brew-install.XXXXXX")
+    brew_installer=$(mktemp "${TMPDIR:-/tmp}/brew-install.XXXXXX") || return 1
     if ! curl -fsSL "$URL_HOMEBREW" -o "$brew_installer"; then
         rm -f "$brew_installer"
-        sudo_keepalive_stop
         print_error "Failed to download ${g}Homebrew${x} installer"
         return 1
     fi
@@ -1039,10 +1108,9 @@ install_homebrew() {
     # Run Homebrew installer with spinner
     spin "Installing Homebrew (this may take a while)..." env NONINTERACTIVE=1 /bin/bash "$brew_installer" || brew_status=$?
     rm -f "$brew_installer"
-    sudo_keepalive_stop
 
     if [[ $brew_status -eq 0 ]]; then
-        init_brew_shellenv
+        init_brew_shellenv || { print_error "Failed to initialize Homebrew environment"; return 1; }
         print_success "${g}Homebrew${x} installed$(fmt_version brew)"
         track_install "Homebrew"
         brew analytics off &>/dev/null
@@ -1074,9 +1142,12 @@ set_default_shell() {
     fi
 
     # Ensure zsh is in /etc/shells
-    if ! grep -q "^${zsh_path}$" /etc/shells 2>/dev/null; then
+    if ! grep -Fqx "$zsh_path" /etc/shells 2>/dev/null; then
         print_info "Adding ${c}$zsh_path${x} to ${c}/etc/shells${x}"
-        echo "$zsh_path" | do_sudo tee -a /etc/shells >/dev/null
+        if ! do_sudo sh -c 'printf "%s\n" "$1" >> /etc/shells' sh "$zsh_path"; then
+            print_error "Failed to add zsh to /etc/shells"
+            return 1
+        fi
     fi
 
     # Change default shell (use do_sudo to avoid extra password prompt)
@@ -1093,16 +1164,13 @@ set_default_shell() {
 post_install_fixes() {
     print_header "Performing post-installation fixes"
 
-    # Fix permissions for .config directory (common issue on Linux)
-    if [[ -d "$XDG_CONFIG_HOME" ]]; then
-        do_sudo chown -R "$(whoami)" "$XDG_CONFIG_HOME"
-        print_info "Ensured ownership of ${c}$XDG_CONFIG_HOME${x}"
-    fi
-
     # Create symlink for bat if batcat exists (common on Debian-based Linux)
     if is_debian && [[ -x /usr/bin/batcat ]]; then
-        do_sudo ln -sf /usr/bin/batcat /usr/local/bin/bat 2>/dev/null
-        print_info "Created symlink for bat: ${c}bat${x} -> ${c}batcat${x}"
+        if do_sudo ln -sf /usr/bin/batcat /usr/local/bin/bat; then
+            print_info "Created symlink for bat: ${c}bat${x} -> ${c}batcat${x}"
+        else
+            print_warning "Failed to create bat symlink"
+        fi
     fi
 }
 
@@ -1120,8 +1188,10 @@ main() {
     # Requirement checks
     check_os || return 1
     install_sudo || return 1
-    init_sudo || return 1 # Get sudo password
-    update_system
+    if is_debian; then
+        init_sudo || return 1
+    fi
+    update_system || return 1
 
     # Installation steps
     install_core_utils || return 1
@@ -1143,12 +1213,12 @@ main() {
     minimize_login_info
 
     # Set default shell to zsh
-    set_default_shell
+    set_default_shell || return 1
 
     # Post-installation fixes
     post_install_fixes
 
-    # Cleanup sudo password from memory
+    # Stop keep-alive and clear cached credentials before exec zsh.
     cleanup_sudo
 
     # Success message
@@ -1157,6 +1227,23 @@ main() {
     # Prompt to start zsh
     prompt_start_zsh
 }
+
+# Always clean up on success, failure, Ctrl+C or termination.
+installer_exit() {
+    local exit_code=$?
+    cleanup_sudo
+    [[ -t 1 ]] && printf '\033[?25h'
+    if [[ "$exit_code" -ne 0 ]]; then
+        print_error "Installation stopped (exit code: $exit_code)"
+        print_info "Installation log: $LOGFILE"
+        print_info "Debug log: $DEBUGLOG"
+    fi
+    return "$exit_code"
+}
+
+trap installer_exit EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 # Run main function
 main
