@@ -10,7 +10,7 @@ local -A _fn=(
             or any combination of them. Dependencies and bundles are processed recursively.
 
             remove/unlink never remove or modify real files stored in GHCONFDIR."
-    [version]="0.1.2"
+    [version]="0.1.5"
     [created]="2026-10-04"
     [modified]="2026-10-04"
     [license]="MIT"
@@ -46,6 +46,7 @@ local -a _fn_commands=(
 
 local -a _fn_examples=(
     "zapp install mc|Install and configure Midnight Commander"
+    "zapp install docx2pdf|Install the Python docx2pdf CLI with pipx"
     "zapp remove mc|Remove Midnight Commander and managed config symlinks"
     "zapp link karabiner|Link Karabiner configuration without installing it"
     "zapp unlink mc|Unlink Midnight Commander configuration only"
