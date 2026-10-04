@@ -25,5 +25,7 @@ recipe id="python" schema=1 {
                 "$VENVDIR/python/bin/python" -m pip install --quiet pipx
             fi
             """#
+
+        run label="Activate Python virtual environment" command="app_python_env_activate"
     }
 }

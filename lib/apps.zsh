@@ -8,6 +8,31 @@ zfile_track_start ${0:A}
 # These functions are intentionally non-interactive and do not provide user UX.
 # Configuration files and symlinks are outside their scope.
 
+# Activate zconfig's main Python virtual environment in the current shell.
+# Mirrors the runtime integration used by apps/python.zsh, but is also callable
+# immediately after zapp creates the environment so no shell reload is needed.
+# Usage: app_python_env_activate
+# Returns: 0 activated, 1 venv unavailable, 2 invalid usage
+app_python_env_activate() {
+    (( ARGC == 0 )) || return 2
+
+    local venvdir="${VENVDIR:-$HOME/.local/venv}"
+    local venv_path="$venvdir/python"
+    [[ -x "$venv_path/bin/python" ]] || return 1
+
+    # zconfig owns PATH manipulation through lib/path.zsh. Validate helpers
+    # before changing any shell state so activation is all-or-nothing.
+    (( ${+functions[path_remove]} && ${+functions[path_prepend]} )) || return 1
+    path_remove "$venv_path/bin" || return $?
+    path_prepend "$venv_path/bin" || return $?
+
+    export VIRTUAL_ENV="$venv_path"
+    unset PYTHONHOME
+    export VIRTUAL_ENV_PROMPT="python"
+    rehash
+    return 0
+}
+
 # Resolve pipx executable.
 # pipx is installed inside zconfig's main Python virtual environment, so it may
 # exist before that venv has been added to PATH in the current shell.
@@ -121,6 +146,9 @@ app_install() {
         pipx)
             app_manager_available pipx || return 1
             [[ -z "$type" ]] || return 2
+            # zconfig PATH helper is used only when BINDIR is missing. Existing
+            # PATH priority is owned by zconfig and must not be reordered here.
+            (( ${+functions[path_append]} )) || return 1
             ;;
         *)
             return 2
@@ -158,16 +186,10 @@ app_install() {
             PIPX_BIN_DIR="$pipx_bin" "$pipx_cmd" install --quiet "$package"
             rc=$?
 
-            # Make newly exposed pipx applications available immediately in
-            # the current shell, even if the bin directory did not exist when
-            # the shell started.
-            if (( rc == 0 )); then
-                if (( ${+functions[path_prepend]} )); then
-                    (( ${+functions[path_remove]} )) && path_remove "$pipx_bin"
-                    path_prepend "$pipx_bin"
-                elif [[ ":$PATH:" != *":$pipx_bin:"* ]]; then
-                    export PATH="$pipx_bin:$PATH"
-                fi
+            # Expose pipx applications immediately without changing zconfig's
+            # established PATH priority. Append BINDIR only when it is absent.
+            if (( rc == 0 )) && (( ${path[(Ie)$pipx_bin]} == 0 )); then
+                path_append "$pipx_bin" || return $?
             fi
             ;;
 

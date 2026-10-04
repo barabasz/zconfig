@@ -1,0 +1,16 @@
+/- kdl-version 2
+
+recipe id="docx2pdf" schema=1 {
+    name "docx2pdf"
+    description "Convert DOCX files to PDF using Microsoft Word on macOS or Windows"
+    homepage "https://github.com/AlJohri/docx2pdf"
+    command "docx2pdf"
+
+    dependencies {
+        install id="python"
+    }
+
+    install method="pipx" package="docx2pdf"
+
+    config auto=false
+}
