@@ -8,7 +8,7 @@ local -A _fn=(
     [desc]="Removes an installed package using the appropriate package manager.
             In automatic mode, detects whether the package is installed via brew or apt.
             Does not remove or modify application configuration files."
-    [version]="0.1.0"
+    [version]="0.1.2"
     [created]="2026-10-04"
     [modified]="2026-10-04"
     [license]="MIT"
@@ -82,7 +82,7 @@ _appremove_brew_installed() {
     local name="${first_line%% *}"
     local version="${first_line#* }"
 
-    REPLY="$name|$version"
+    reply=("$name" "$version")
 }
 
 ## Helper: Get installed apt package info
@@ -98,7 +98,7 @@ _appremove_apt_installed() {
     local version="${rest#*|}"
     version="${version%%-*}"
 
-    REPLY="$name|$version"
+    reply=("$name" "$version")
 }
 
 ## Helper: Execute or dry-run
@@ -115,6 +115,7 @@ _appremove_run() {
 local use_manager=""
 local installed_name=""
 local installed_version=""
+local -a reply=()
 
 if (( force_brew && force_apt )); then
     printe "Cannot use both --brew and --apt at the same time."
@@ -129,10 +130,10 @@ if (( force_brew )); then
 
     use_manager="brew"
     if _appremove_brew_installed "$brew_pkg" "$use_cask"; then
-        installed_name="${REPLY%%|*}"
-        installed_version="${REPLY#*|}"
+        installed_name="${reply[1]}"
+        installed_version="${reply[2]}"
     else
-        prints "${g}${package}${x} is already not installed via brew."
+        prints "${g}${package}${x} is not installed via brew."
         return 0
     fi
 
@@ -148,10 +149,10 @@ elif (( force_apt )); then
 
     use_manager="apt"
     if _appremove_apt_installed "$apt_pkg"; then
-        installed_name="${REPLY%%|*}"
-        installed_version="${REPLY#*|}"
+        installed_name="${reply[1]}"
+        installed_version="${reply[2]}"
     else
-        prints "${g}${package}${x} is already not installed via apt."
+        prints "${g}${package}${x} is not installed via apt."
         return 0
     fi
 
@@ -160,14 +161,14 @@ else
     # detect where the package is actually installed instead of blindly preferring brew.
     if (( has_brew )) && _appremove_brew_installed "$brew_pkg" "$use_cask"; then
         use_manager="brew"
-        installed_name="${REPLY%%|*}"
-        installed_version="${REPLY#*|}"
+        installed_name="${reply[1]}"
+        installed_version="${reply[2]}"
     elif (( is_linux && has_apt )) && _appremove_apt_installed "$apt_pkg"; then
         use_manager="apt"
-        installed_name="${REPLY%%|*}"
-        installed_version="${REPLY#*|}"
+        installed_name="${reply[1]}"
+        installed_version="${reply[2]}"
     else
-        prints "${g}${package}${x} is already not installed."
+        prints "${g}${package}${x} is not installed."
         return 0
     fi
 fi

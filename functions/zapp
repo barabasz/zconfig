@@ -1,0 +1,1265 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
+# Manage applications using zconfig recipes
+# Use 'zapp --help' for more information.
+
+local -A _fn=(
+    [info]="Manage applications using zconfig recipes"
+    [desc]="Installs, removes, links, and unlinks applications using one recipe format.
+            Recipes may manage a package, configuration symlinks, setup actions, or any
+            combination of them. Bundles are processed recursively.
+
+            remove/unlink never remove or modify real files stored in GHCONFDIR."
+    [version]="0.1.0"
+    [created]="2026-10-04"
+    [modified]="2026-10-04"
+    [license]="MIT"
+    [author]="Andrzej Barabasz"
+    [required]="dasel"
+    [notes]="install: install package, extras, link config, run setup
+            remove: remove package and safely unlink managed config; extras are preserved
+            link: link managed config only
+            unlink: safely unlink managed config only
+            show: display parsed recipe or bundle
+            verify: validate KDL syntax and schema 1
+
+            unlink/remove never delete real files. Only a verified symlink outside
+            GHCONFDIR may be removed."
+)
+
+local -a _fn_args=(
+    "action|Action to perform|r"
+    "app|Recipe or bundle ID|r"
+)
+
+local -a _fn_opts=(
+    "test|t|Show what would be done without making changes"
+    "quiet|q|Suppress routine output; show errors only"
+    "brew|b|Force Homebrew for managed package operations"
+    "apt|a|Force apt for managed package operations"
+)
+
+local -a _fn_commands=(
+    "install|Install application and apply its recipe"
+    "remove|Remove application and safely unlink managed configuration"
+    "link|Link managed configuration only"
+    "unlink|Safely unlink managed configuration only"
+    "show|Display the parsed recipe or bundle"
+    "verify|Validate recipe syntax and schema"
+)
+
+local -a _fn_examples=(
+    "zapp install mc|Install and configure Midnight Commander"
+    "zapp remove mc|Remove Midnight Commander and managed config symlinks"
+    "zapp link karabiner|Link Karabiner configuration without installing it"
+    "zapp unlink mc|Unlink Midnight Commander configuration only"
+    "zapp -t install terminal|Test bundle installation"
+    "zapp show gh|Display the parsed GitHub CLI recipe"
+    "zapp verify mc|Validate the Midnight Commander recipe"
+    "zapp -q install mc|Install quietly"
+)
+
+local -A opts=() args=()
+_fn_init "$@" || return $REPLY
+
+setopt localoptions typesetsilent
+
+local action="${args[action]}"
+local app_id="${args[app]}"
+local test_mode=$(( ${+opts[test]} ))
+local quiet_mode=$(( ${+opts[quiet]} ))
+local force_brew=$(( ${+opts[brew]} ))
+local force_apt=$(( ${+opts[apt]} ))
+local force_method=""
+
+case "$action" in
+    install|remove|link|unlink|show|verify) ;;
+    *)
+        printe "Unknown action: ${c}${action}${x}. Use install, remove, link, unlink, show, or verify."
+        return 2
+        ;;
+esac
+
+if (( force_brew && force_apt )); then
+    printe "Cannot use both ${c}--brew${x} and ${c}--apt${x} at the same time."
+    return 2
+fi
+(( force_brew )) && force_method="brew"
+(( force_apt )) && force_method="apt"
+
+if (( test_mode )) && [[ "$action" == show || "$action" == verify ]]; then
+    printe "Option ${c}--test${x} is not applicable to action ${c}${action}${x}."
+    return 2
+fi
+
+if [[ "$force_method" == apt && "$OSTYPE" == darwin* ]] && \
+   [[ "$action" == install || "$action" == remove ]] && (( ! test_mode )); then
+    printe "${c}--apt${x} is not available on macOS."
+    return 2
+fi
+
+if [[ "$action" == install || "$action" == remove ]]; then
+    if ! whence -w app_manager_available >/dev/null 2>&1 || \
+       ! whence -w app_is_installed >/dev/null 2>&1 || \
+       ! whence -w app_install >/dev/null 2>&1 || \
+       ! whence -w app_remove >/dev/null 2>&1; then
+        printe "Application helpers are not loaded. Expected ${c}lib/apps.zsh${x}."
+        return 1
+    fi
+fi
+
+local confdir="${CONFDIR:-${XDG_CONFIG_HOME:-$HOME/.config}}"
+local zdotdir="${ZDOTDIR:-$confdir/zsh}"
+local recipes_dir="${ZSH_RECIPES_DIR:-$zdotdir/recipes}"
+local recipe_file="$recipes_dir/$app_id.kdl"
+
+# --- Output helpers ----------------------------------------------------------
+
+_zapp_heading() {
+    (( ARGC == 1 )) || return 2
+    if (( quiet_mode )) && [[ "$action" != show ]]; then
+        return 0
+    fi
+    print
+    printc "$1" "$y"
+}
+
+_zapp_kv() {
+    (( ARGC == 2 )) || return 2
+    if (( quiet_mode )) && [[ "$action" != show ]]; then
+        return 0
+    fi
+    local key="$1" value="$2" line
+
+    if [[ "$value" == *$'\n'* ]]; then
+        print -r -- "  ${key}:"
+        for line in "${(@f)value}"; do
+            print -r -- "    $line"
+        done
+    else
+        printkv "  $key" "$value"
+    fi
+}
+
+_zapp_subkv() {
+    (( ARGC == 2 )) || return 2
+    if (( quiet_mode )) && [[ "$action" != show ]]; then
+        return 0
+    fi
+    local key="$1" value="$2" line
+
+    if [[ "$value" == *$'\n'* ]]; then
+        print -r -- "    ${key}:"
+        for line in "${(@f)value}"; do
+            print -r -- "      $line"
+        done
+    else
+        printkv "    $key" "$value"
+    fi
+}
+
+_zapp_line() {
+    (( ARGC == 1 )) || return 2
+    if (( quiet_mode )) && [[ "$action" != show ]]; then
+        return 0
+    fi
+    print -- "  $1"
+}
+
+# Quiet mode hides successful child output but replays it on failure.
+_zapp_run() {
+    if (( ! quiet_mode )); then
+        "$@"
+        return $?
+    fi
+
+    local tmp="/tmp/zapp.$$.${RANDOM}.${RANDOM}.log"
+    "$@" >"$tmp" 2>&1
+    local rc=$?
+    if (( rc != 0 )) && [[ -s "$tmp" ]]; then
+        cat "$tmp" >&2
+    fi
+    rm -f "$tmp"
+    return $rc
+}
+
+# --- KDL helpers -------------------------------------------------------------
+
+_zapp_get() {
+    (( ARGC == 2 )) || return 2
+    setopt local_options extended_glob
+
+    local raw
+    raw=$(dasel -i kdl -o json "$2" < "$1" 2>/dev/null) || return 1
+
+    if [[ "$raw" == \"* ]]; then
+        REPLY=$(str_json_decode "$raw") || return 1
+    else
+        REPLY="$raw"
+    fi
+}
+
+_zapp_count() {
+    (( ARGC == 2 )) || return 2
+    local json i=0
+    json=$(dasel -i kdl -o json "$2" < "$1" 2>/dev/null) || {
+        REPLY=0
+        return 0
+    }
+
+    if [[ "$json" == \{* ]]; then
+        REPLY=1
+    elif [[ "$json" == \[* ]]; then
+        while dasel -i kdl -o json "${2}[$i]" < "$1" >/dev/null 2>&1; do
+            (( i++ ))
+        done
+        REPLY=$i
+    else
+        return 1
+    fi
+}
+
+_zapp_item_selector() {
+    (( ARGC == 3 )) || return 2
+    local base="$1" count="$2" index="$3"
+    if (( count == 1 )); then
+        REPLY="$base"
+    else
+        REPLY="${base}[$(( index - 1 ))]"
+    fi
+}
+
+_zapp_expand_path() {
+    (( ARGC == 1 )) || return 2
+    local value="$1"
+    local xdg_config="${XDG_CONFIG_HOME:-$confdir}"
+    local xdg_data="${XDG_DATA_HOME:-$HOME/.local/share}"
+    local xdg_cache="${XDG_CACHE_HOME:-$HOME/.cache}"
+    local xdg_state="${XDG_STATE_HOME:-$HOME/.local/state}"
+    local ghconf="${GHCONFDIR:-}"
+
+    value="${value//\$\{XDG_CONFIG_HOME\}/$xdg_config}"
+    value="${value//\$XDG_CONFIG_HOME/$xdg_config}"
+    value="${value//\$\{XDG_DATA_HOME\}/$xdg_data}"
+    value="${value//\$XDG_DATA_HOME/$xdg_data}"
+    value="${value//\$\{XDG_CACHE_HOME\}/$xdg_cache}"
+    value="${value//\$XDG_CACHE_HOME/$xdg_cache}"
+    value="${value//\$\{XDG_STATE_HOME\}/$xdg_state}"
+    value="${value//\$XDG_STATE_HOME/$xdg_state}"
+    value="${value//\$\{CONFDIR\}/$confdir}"
+    value="${value//\$CONFDIR/$confdir}"
+    value="${value//\$\{GHCONFDIR\}/$ghconf}"
+    value="${value//\$GHCONFDIR/$ghconf}"
+    value="${value//\$\{HOME\}/$HOME}"
+    value="${value//\$HOME/$HOME}"
+
+    REPLY="$value"
+}
+
+# --- Link helpers ------------------------------------------------------------
+
+# For linking: reply = state, action, current destination.
+_zapp_link_status() {
+    (( ARGC == 2 )) || return 2
+    local real_path="$1" link_path="$2" current=""
+    reply=()
+
+    if [[ ! -e "$real_path" && ! -L "$real_path" ]]; then
+        reply=("files missing" "none" "")
+    elif is_link "$link_path"; then
+        current=$(resolve_link "$link_path" 2>/dev/null)
+        if [[ "${link_path:A}" == "${real_path:A}" ]]; then
+            reply=("correctly linked" "none" "$current")
+        else
+            reply=("symlink points elsewhere" "replace symlink" "$current")
+        fi
+    elif is_file "$link_path"; then
+        reply=("regular file exists at link path" "backup to .bak and create symlink" "")
+    elif is_dir "$link_path"; then
+        reply=("directory exists at link path" "backup to .bak and create symlink" "")
+    elif [[ -e "$link_path" ]]; then
+        reply=("object exists at link path" "backup to .bak and create symlink" "")
+    else
+        reply=("link missing" "create symlink" "")
+    fi
+}
+
+# Normalize PATH's location without following its final component. If a parent
+# directory resolves into GHCONFDIR, deleting PATH would be unsafe.
+_zapp_path_location() {
+    (( ARGC == 1 )) || return 2
+    local p="$1"
+    REPLY="${p:h:A}/${p:t}"
+}
+
+_zapp_is_inside_ghconf() {
+    (( ARGC == 1 )) || return 2
+    [[ -n ${GHCONFDIR:-} ]] || return 1
+
+    local gh_root="${GHCONFDIR:A}" candidate
+    _zapp_path_location "$1"
+    candidate="$REPLY"
+    [[ "$candidate" == "$gh_root" || "$candidate" == "$gh_root/"* ]]
+}
+
+# Expected sources must be named inside GHCONFDIR. Use :a rather than :A here:
+# the source itself may be a symlink, but zapp never removes or modifies it.
+_zapp_validate_source() {
+    (( ARGC == 1 )) || return 2
+    [[ -n ${GHCONFDIR:-} ]] || return 1
+
+    local gh_root="${GHCONFDIR:a}"
+    local source_abs="${1:a}"
+    [[ "$source_abs" == "$gh_root/"* ]]
+}
+
+_zapp_preflight_managed_link() {
+    (( ARGC == 2 )) || return 2
+    local real_path="$1" link_path="$2"
+
+    if ! _zapp_validate_source "$real_path"; then
+        printe "Unsafe recipe source outside GHCONFDIR: ${c}${real_path}${x}"
+        return 1
+    fi
+
+    if _zapp_is_inside_ghconf "$link_path"; then
+        printe "Refusing to manage a link path inside GHCONFDIR: ${c}${link_path}${x}"
+        return 1
+    fi
+
+    return 0
+}
+
+# For unlinking: reply = state, action, current destination.
+_zapp_unlink_status() {
+    (( ARGC == 2 )) || return 2
+    local real_path="$1" link_path="$2" current=""
+    reply=()
+
+    if [[ -L "$link_path" ]]; then
+        current=$(resolve_link "$link_path" 2>/dev/null)
+        if [[ -n "$current" && "$current" == "${real_path:a}" ]]; then
+            reply=("correctly linked" "remove symlink" "$current")
+        else
+            reply=("symlink points elsewhere" "preserve" "$current")
+        fi
+    elif [[ -e "$link_path" ]]; then
+        if [[ -d "$link_path" ]]; then
+            reply=("directory exists at link path" "preserve" "")
+        elif [[ -f "$link_path" ]]; then
+            reply=("regular file exists at link path" "preserve" "")
+        else
+            reply=("object exists at link path" "preserve" "")
+        fi
+    else
+        reply=("link missing" "none" "")
+    fi
+}
+
+# Absolute safety invariant: rm receives only the verified symlink path, never
+# the GHCONFDIR source. No recursive remove is used anywhere in zapp.
+_zapp_unlink_expected() {
+    (( ARGC == 2 )) || return 2
+    local real_path="$1" link_path="$2" current=""
+
+    _zapp_preflight_managed_link "$real_path" "$link_path" || return $?
+    [[ -L "$link_path" ]] || return 1
+
+    current=$(resolve_link "$link_path" 2>/dev/null) || return 1
+    [[ -n "$current" && "$current" == "${real_path:a}" ]] || return 1
+
+    command rm "$link_path"
+}
+
+# --- Parse and validate ------------------------------------------------------
+
+if [[ ! -f "$recipe_file" ]]; then
+    printe "Recipe not found: ${c}${recipe_file}${x}"
+    return 1
+fi
+
+if ! dasel -i kdl -o json < "$recipe_file" >/dev/null 2>&1; then
+    printe "Invalid KDL syntax: ${c}${recipe_file}${x}"
+    return 1
+fi
+
+local root_type root_id schema
+if _zapp_get "$recipe_file" 'recipe.id'; then
+    root_type="recipe"
+    root_id="$REPLY"
+elif _zapp_get "$recipe_file" 'bundle.id'; then
+    root_type="bundle"
+    root_id="$REPLY"
+else
+    printe "Unsupported recipe root in: ${c}${recipe_file}${x}"
+    return 1
+fi
+
+if [[ "$root_id" != "$app_id" ]]; then
+    printe "Entry ID '${c}${root_id}${x}' does not match filename '${c}${app_id}.kdl${x}'."
+    return 1
+fi
+
+if ! _zapp_get "$recipe_file" "${root_type}.schema"; then
+    printe "Missing required property: ${c}${root_type}.schema${x}"
+    return 1
+fi
+schema="$REPLY"
+
+if [[ "$schema" != "1" ]]; then
+    printe "Unsupported ${root_type} schema: ${c}${schema}${x}"
+    return 1
+fi
+
+# --- Bundle metadata ---------------------------------------------------------
+
+local bundle_name="" bundle_description="" include_count=0
+if [[ "$root_type" == bundle ]]; then
+    _zapp_get "$recipe_file" 'bundle.name' && bundle_name="$REPLY"
+    _zapp_get "$recipe_file" 'bundle.description' && bundle_description="$REPLY"
+
+    _zapp_count "$recipe_file" 'bundle.include' || return 1
+    include_count=$REPLY
+    if (( include_count == 0 )); then
+        printe "Bundle '${c}${app_id}${x}' does not contain any ${c}include${x} entries."
+        return 1
+    fi
+
+    local bundle_i bundle_selector
+    for (( bundle_i=1; bundle_i<=include_count; bundle_i++ )); do
+        _zapp_item_selector 'bundle.include' "$include_count" "$bundle_i"
+        bundle_selector="$REPLY"
+        _zapp_get "$recipe_file" "${bundle_selector}.id" || {
+            printe "Missing required property: ${c}${bundle_selector}.id${x}"
+            return 1
+        }
+    done
+
+    if [[ "$action" == verify ]]; then
+        prints "Bundle ${c}${app_id}${x} is valid (KDL syntax and schema ${schema})."
+        return 0
+    fi
+
+    if [[ "$action" == show ]]; then
+        _zapp_heading "Bundle"
+        _zapp_kv "File" "$recipe_file"
+        _zapp_kv "ID" "$app_id"
+        _zapp_kv "Schema" "$schema"
+        [[ -n "$bundle_name" ]] && _zapp_kv "Name" "$bundle_name"
+        [[ -n "$bundle_description" ]] && _zapp_kv "Description" "$bundle_description"
+
+        _zapp_heading "Includes"
+        for (( bundle_i=1; bundle_i<=include_count; bundle_i++ )); do
+            _zapp_item_selector 'bundle.include' "$include_count" "$bundle_i"
+            bundle_selector="$REPLY"
+            _zapp_get "$recipe_file" "${bundle_selector}.id"
+            _zapp_kv "Include $bundle_i" "$REPLY"
+        done
+        return 0
+    fi
+fi
+
+# --- Recipe metadata ---------------------------------------------------------
+
+local name="" command="" description="" homepage=""
+local has_install=0 package="" recipe_method="brew" method="brew" install_type=""
+local config_dir="$app_id" config_auto=1 config_auto_raw=""
+local link_count=0 extra_count=0 run_count=0 mkdir_count=0
+
+if [[ "$root_type" == recipe ]]; then
+    _zapp_get "$recipe_file" 'recipe.name' || {
+        printe "Missing required property: ${c}recipe.name${x}"
+        return 1
+    }
+    name="$REPLY"
+
+    _zapp_get "$recipe_file" 'recipe.command' && command="$REPLY"
+    _zapp_get "$recipe_file" 'recipe.description' && description="$REPLY"
+    _zapp_get "$recipe_file" 'recipe.homepage' && homepage="$REPLY"
+
+    if _zapp_get "$recipe_file" 'recipe.install.package'; then
+        has_install=1
+        package="$REPLY"
+    fi
+
+    if _zapp_get "$recipe_file" 'recipe.install.method'; then
+        (( has_install )) || {
+            printe "Property ${c}recipe.install.method${x} requires ${c}recipe.install.package${x}."
+            return 1
+        }
+        recipe_method="$REPLY"
+    fi
+
+    if _zapp_get "$recipe_file" 'recipe.install.type'; then
+        (( has_install )) || {
+            printe "Property ${c}recipe.install.type${x} requires ${c}recipe.install.package${x}."
+            return 1
+        }
+        install_type="$REPLY"
+    fi
+
+    method="${force_method:-$recipe_method}"
+
+    if (( has_install )); then
+        case "$recipe_method" in
+            brew|apt) ;;
+            *)
+                printe "Unsupported installation method in schema 1: ${c}${recipe_method}${x}"
+                return 1
+                ;;
+        esac
+
+        if [[ -n "$install_type" && "$recipe_method" != brew ]]; then
+            printe "Install type '${c}${install_type}${x}' is only supported with Homebrew recipes."
+            return 1
+        fi
+        if [[ -n "$install_type" && "$install_type" != cask ]]; then
+            printe "Unsupported Homebrew install type: ${c}${install_type}${x}"
+            return 1
+        fi
+        if [[ -n "$install_type" && "$method" != brew ]]; then
+            printe "Cannot override Homebrew cask recipe '${c}${app_id}${x}' with ${c}--apt${x}."
+            return 2
+        fi
+    fi
+
+    _zapp_get "$recipe_file" 'recipe.config.dir' && config_dir="$REPLY"
+    if _zapp_get "$recipe_file" 'recipe.config.auto'; then
+        config_auto_raw="$REPLY"
+        case "$config_auto_raw" in
+            true)  config_auto=1 ;;
+            false) config_auto=0 ;;
+            *)
+                printe "Invalid ${c}recipe.config.auto${x}: expected ${c}true${x} or ${c}false${x}."
+                return 1
+                ;;
+        esac
+    fi
+
+    _zapp_count "$recipe_file" 'recipe.config.link' || return 1
+    link_count=$REPLY
+    _zapp_count "$recipe_file" 'recipe.extras.install' || return 1
+    extra_count=$REPLY
+    _zapp_count "$recipe_file" 'recipe.setup.run' || return 1
+    run_count=$REPLY
+    _zapp_count "$recipe_file" 'recipe.setup.mkdir' || return 1
+    mkdir_count=$REPLY
+
+    local i selector when
+    for (( i=1; i<=link_count; i++ )); do
+        _zapp_item_selector 'recipe.config.link' "$link_count" "$i"
+        selector="$REPLY"
+        _zapp_get "$recipe_file" "${selector}.source" || {
+            printe "Missing required property: ${c}${selector}.source${x}"
+            return 1
+        }
+    done
+
+    for (( i=1; i<=extra_count; i++ )); do
+        _zapp_item_selector 'recipe.extras.install' "$extra_count" "$i"
+        selector="$REPLY"
+        _zapp_get "$recipe_file" "${selector}.id" || {
+            printe "Missing required property: ${c}${selector}.id${x}"
+            return 1
+        }
+    done
+
+    for (( i=1; i<=run_count; i++ )); do
+        _zapp_item_selector 'recipe.setup.run' "$run_count" "$i"
+        selector="$REPLY"
+        _zapp_get "$recipe_file" "${selector}.command" || {
+            printe "Missing required property: ${c}${selector}.command${x}"
+            return 1
+        }
+        if _zapp_get "$recipe_file" "${selector}.when"; then
+            when="$REPLY"
+            [[ "$when" == always || "$when" == new ]] || {
+                printe "Unsupported setup condition: ${c}${when}${x}"
+                return 1
+            }
+        fi
+    done
+
+    for (( i=1; i<=mkdir_count; i++ )); do
+        _zapp_item_selector 'recipe.setup.mkdir' "$mkdir_count" "$i"
+        selector="$REPLY"
+        _zapp_get "$recipe_file" "${selector}.path" || {
+            printe "Missing required property: ${c}${selector}.path${x}"
+            return 1
+        }
+    done
+
+    if [[ "$action" == verify ]]; then
+        prints "Recipe ${c}${app_id}${x} is valid (KDL syntax and schema ${schema})."
+        return 0
+    fi
+
+    if [[ "$action" == show ]]; then
+        local j sel source_spec target_spec real_path link_path extra label cmd mkdir_path item_when
+
+        _zapp_heading "Recipe"
+        _zapp_kv "File" "$recipe_file"
+        _zapp_kv "ID" "$app_id"
+        _zapp_kv "Schema" "$schema"
+        _zapp_kv "Name" "$name"
+        [[ -n "$description" ]] && _zapp_kv "Description" "$description"
+        [[ -n "$homepage" ]] && _zapp_kv "Homepage" "$homepage"
+        [[ -n "$command" ]] && _zapp_kv "Command" "$command"
+
+        if (( has_install )); then
+            _zapp_heading "Install"
+            _zapp_kv "Method" "$method"
+            [[ -n "$force_method" && "$force_method" != "$recipe_method" ]] && _zapp_kv "Recipe method" "$recipe_method"
+            _zapp_kv "Package" "$package"
+            [[ -n "$install_type" ]] && _zapp_kv "Type" "$install_type"
+        fi
+
+        _zapp_heading "Config"
+        if (( config_auto )); then
+            _zapp_kv "Directory" "$config_dir"
+            real_path="\$GHCONFDIR/$config_dir"
+            link_path="\$CONFDIR/$config_dir"
+            _zapp_kv "Files" "$real_path"
+            _zapp_kv "Link" "$link_path -> $real_path"
+        else
+            _zapp_kv "Auto" "disabled"
+        fi
+
+        if (( link_count )); then
+            _zapp_heading "Additional config links"
+            for (( j=1; j<=link_count; j++ )); do
+                _zapp_item_selector 'recipe.config.link' "$link_count" "$j"
+                sel="$REPLY"
+                _zapp_get "$recipe_file" "${sel}.source"
+                source_spec="$REPLY"
+                if _zapp_get "$recipe_file" "${sel}.target"; then
+                    target_spec="$REPLY"
+                else
+                    target_spec="\$CONFDIR/$source_spec"
+                fi
+                real_path="\$GHCONFDIR/$source_spec"
+                _zapp_kv "Files" "$real_path"
+                _zapp_kv "Link $j" "$target_spec -> $real_path"
+            done
+        fi
+
+        if (( extra_count )); then
+            _zapp_heading "Extras"
+            for (( j=1; j<=extra_count; j++ )); do
+                _zapp_item_selector 'recipe.extras.install' "$extra_count" "$j"
+                sel="$REPLY"
+                _zapp_get "$recipe_file" "${sel}.id"
+                _zapp_kv "Install $j" "$REPLY"
+            done
+        fi
+
+        if (( mkdir_count || run_count )); then
+            _zapp_heading "Setup"
+            for (( j=1; j<=mkdir_count; j++ )); do
+                _zapp_item_selector 'recipe.setup.mkdir' "$mkdir_count" "$j"
+                sel="$REPLY"
+                _zapp_get "$recipe_file" "${sel}.path"
+                _zapp_kv "mkdir $j" "$REPLY"
+            done
+            for (( j=1; j<=run_count; j++ )); do
+                _zapp_item_selector 'recipe.setup.run' "$run_count" "$j"
+                sel="$REPLY"
+                label=""
+                item_when="always"
+                _zapp_get "$recipe_file" "${sel}.label" && label="$REPLY"
+                _zapp_get "$recipe_file" "${sel}.when" && item_when="$REPLY"
+                _zapp_get "$recipe_file" "${sel}.command"
+                cmd="$REPLY"
+                _zapp_kv "Run $j" "${label:-$cmd}"
+                [[ -n "$label" ]] && _zapp_kv "Command" "$cmd"
+                [[ "$item_when" != always ]] && _zapp_kv "When" "$item_when"
+            done
+        fi
+        return 0
+    fi
+fi
+
+# --- Recursive run state ----------------------------------------------------
+
+if (( ! ${+parameters[_zapp_processed]} )); then
+    local -A _zapp_processed=()
+    local -A _zapp_active=()
+    local -a _zapp_stack=()
+fi
+
+if (( ${+_zapp_processed[$app_id]} )); then
+    _zapp_heading "Recipe"
+    _zapp_kv "ID" "$app_id"
+    _zapp_kv "State" "already processed in this run"
+    return 0
+fi
+
+if (( ${+_zapp_active[$app_id]} )); then
+    local cycle_path="${(j: -> :)_zapp_stack} -> $app_id"
+    printe "Circular recipe/bundle dependency detected: ${c}${cycle_path}${x}"
+    return 1
+fi
+
+_zapp_active[$app_id]=1
+_zapp_stack+=("$app_id")
+
+# --- Bundle execution -------------------------------------------------------
+
+if [[ "$root_type" == bundle ]]; then
+    _zapp_heading "Bundle"
+    _zapp_kv "ID" "$app_id"
+    [[ -n "$bundle_name" ]] && _zapp_kv "Name" "$bundle_name"
+    _zapp_kv "Schema" "$schema"
+
+    _zapp_heading "Includes"
+    local bundle_i bundle_selector included_id included_file included_type
+    for (( bundle_i=1; bundle_i<=include_count; bundle_i++ )); do
+        _zapp_item_selector 'bundle.include' "$include_count" "$bundle_i"
+        bundle_selector="$REPLY"
+        _zapp_get "$recipe_file" "${bundle_selector}.id"
+        included_id="$REPLY"
+        included_file="$recipes_dir/$included_id.kdl"
+
+        _zapp_kv "Include $bundle_i" "$included_id"
+
+        if [[ ! -f "$included_file" ]]; then
+            printe "Included recipe or bundle not found: ${c}${included_file}${x}"
+            return 1
+        fi
+
+        if _zapp_get "$included_file" 'bundle.id'; then
+            included_type="bundle"
+        elif _zapp_get "$included_file" 'recipe.id'; then
+            included_type="recipe"
+        else
+            printe "Unsupported root in included file: ${c}${included_file}${x}"
+            return 1
+        fi
+        _zapp_subkv "Type" "$included_type"
+
+        if (( ${+_zapp_processed[$included_id]} )); then
+            _zapp_subkv "Action" "none"
+            _zapp_subkv "State" "already processed in this run"
+            continue
+        fi
+
+        if (( ${+_zapp_active[$included_id]} )); then
+            local cycle_path="${(j: -> :)_zapp_stack} -> $included_id"
+            printe "Circular recipe/bundle dependency detected: ${c}${cycle_path}${x}"
+            return 1
+        fi
+
+        if (( test_mode )); then
+            _zapp_subkv "Action" "would $action $included_type"
+        else
+            _zapp_subkv "Action" "$action $included_type"
+        fi
+
+        local -a nested_opts=(--quiet)
+        [[ "$force_method" == brew ]] && nested_opts+=(--brew)
+        [[ "$force_method" == apt ]] && nested_opts+=(--apt)
+        (( test_mode )) && nested_opts+=(--test)
+        zapp "${nested_opts[@]}" "$action" "$included_id" || return $?
+        _zapp_subkv "State" "processed"
+    done
+
+    unset "_zapp_active[$app_id]"
+    _zapp_processed[$app_id]=1
+    _zapp_stack[-1]=()
+
+    _zapp_heading "Result"
+    if (( test_mode )); then
+        (( quiet_mode )) || printi "Bundle test complete: no changes were made."
+    else
+        (( quiet_mode )) || prints "Bundle ${g}${bundle_name:-$app_id}${x}: ${action} completed successfully."
+    fi
+    return 0
+fi
+
+# --- Recipe execution -------------------------------------------------------
+
+_zapp_heading "Recipe"
+_zapp_kv "ID" "$app_id"
+_zapp_kv "Name" "$name"
+_zapp_kv "Schema" "$schema"
+
+local ghconf_state config_real_path="" config_link_path="$confdir/$config_dir"
+if [[ -z ${GHCONFDIR:-} ]]; then
+    ghconf_state="GHCONFDIR is not set"
+elif [[ ! -d "$GHCONFDIR" ]]; then
+    ghconf_state="GHCONFDIR directory does not exist"
+else
+    ghconf_state="available"
+    config_real_path="$GHCONFDIR/$config_dir"
+fi
+
+# Preflight every managed config path before any action that may modify state.
+# This protects GHCONFDIR not only from unlink/remove, but also from an unsafe
+# link target that could make lns back up or replace a path inside the repo.
+if [[ "$action" == install || "$action" == remove || "$action" == link || "$action" == unlink ]] && \
+   [[ "$ghconf_state" == available ]]; then
+    if (( config_auto )); then
+        _zapp_preflight_managed_link "$config_real_path" "$config_link_path" || return $?
+    fi
+
+    local pre_i pre_selector pre_source pre_target pre_real pre_link
+    for (( pre_i=1; pre_i<=link_count; pre_i++ )); do
+        _zapp_item_selector 'recipe.config.link' "$link_count" "$pre_i"
+        pre_selector="$REPLY"
+        _zapp_get "$recipe_file" "${pre_selector}.source"
+        pre_source="$REPLY"
+        if _zapp_get "$recipe_file" "${pre_selector}.target"; then
+            pre_target="$REPLY"
+        else
+            pre_target="$confdir/$pre_source"
+        fi
+        pre_real="$GHCONFDIR/$pre_source"
+        _zapp_expand_path "$pre_target"
+        pre_link="$REPLY"
+        _zapp_preflight_managed_link "$pre_real" "$pre_link" || return $?
+    done
+fi
+
+# --- Application package ----------------------------------------------------
+
+local installed_now=0
+if [[ "$action" == install || "$action" == remove ]]; then
+    _zapp_heading "Application"
+
+    if (( ! has_install )); then
+        _zapp_kv "State" "unmanaged"
+        _zapp_kv "Action" "none (recipe has no install section)"
+    else
+        [[ -n "$command" ]] && _zapp_kv "Command" "$command"
+        _zapp_kv "Manager" "$method"
+        _zapp_kv "Package" "$package"
+        [[ -n "$install_type" ]] && _zapp_kv "Type" "$install_type"
+
+        local manager_available=0 package_installed=0
+        app_manager_available "$method" && manager_available=1
+        if (( manager_available )); then
+            app_is_installed "$method" "$package" "$install_type" && package_installed=1
+        fi
+
+        if (( ! manager_available )); then
+            _zapp_kv "State" "unknown (package manager unavailable)"
+        elif (( package_installed )); then
+            _zapp_kv "State" "installed"
+            if [[ -n "$command" ]]; then
+                local app_info
+                app_info=$(zinfo -s "$command" 2>/dev/null)
+                [[ -n "$app_info" ]] && _zapp_line "$app_info"
+            fi
+        else
+            _zapp_kv "State" "not installed"
+        fi
+
+        if [[ "$action" == install ]]; then
+            if (( package_installed )); then
+                _zapp_kv "Action" "none"
+            elif (( test_mode )); then
+                if [[ "$method" == brew && "$install_type" == cask ]]; then
+                    _zapp_kv "Action" "would install with brew cask: $package"
+                else
+                    _zapp_kv "Action" "would install with $method: $package"
+                fi
+            else
+                _zapp_kv "Action" "install with $method: $package"
+                _zapp_run app_install "$method" "$package" "$install_type" || return $?
+                installed_now=1
+
+                if [[ -n "$command" ]] && ! is_installed "$command"; then
+                    printe "Installation completed, but command '${c}${command}${x}' is not available."
+                    return 1
+                fi
+            fi
+        else
+            if (( manager_available && ! package_installed )); then
+                _zapp_kv "Action" "none"
+            elif (( test_mode )); then
+                if [[ "$method" == brew && "$install_type" == cask ]]; then
+                    _zapp_kv "Action" "would remove with brew cask: $package"
+                else
+                    _zapp_kv "Action" "would remove with $method: $package"
+                fi
+            else
+                _zapp_kv "Action" "remove with $method: $package"
+                _zapp_run app_remove "$method" "$package" "$install_type" || return $?
+                if app_is_installed "$method" "$package" "$install_type"; then
+                    printe "Package '${c}${package}${x}' is still installed after removal."
+                    return 1
+                fi
+            fi
+        fi
+    fi
+fi
+
+# --- Extras: install only ---------------------------------------------------
+
+if [[ "$action" == install ]] && (( extra_count )); then
+    local i selector extra extra_type cycle_path
+    _zapp_heading "Extras"
+
+    for (( i=1; i<=extra_count; i++ )); do
+        _zapp_item_selector 'recipe.extras.install' "$extra_count" "$i"
+        selector="$REPLY"
+        _zapp_get "$recipe_file" "${selector}.id"
+        extra="$REPLY"
+        _zapp_kv "Extra $i" "$extra"
+
+        if (( ${+_zapp_processed[$extra]} )); then
+            _zapp_subkv "Action" "none"
+            _zapp_subkv "State" "already processed in this run"
+            continue
+        fi
+
+        if (( ${+_zapp_active[$extra]} )); then
+            cycle_path="${(j: -> :)_zapp_stack} -> $extra"
+            printe "Circular recipe/bundle dependency detected: ${c}${cycle_path}${x}"
+            return 1
+        fi
+
+        if [[ -f "$recipes_dir/$extra.kdl" ]]; then
+            extra_type="recipe"
+            _zapp_get "$recipes_dir/$extra.kdl" 'bundle.id' && extra_type="bundle"
+            _zapp_subkv "Resolver" "$extra_type"
+            _zapp_subkv "File" "$recipes_dir/$extra.kdl"
+
+            local -a nested_opts=(--quiet)
+            [[ "$force_method" == brew ]] && nested_opts+=(--brew)
+            [[ "$force_method" == apt ]] && nested_opts+=(--apt)
+            (( test_mode )) && nested_opts+=(--test)
+            zapp "${nested_opts[@]}" install "$extra" || return $?
+            _zapp_subkv "State" "processed"
+        else
+            local extra_method="${force_method:-brew}"
+            _zapp_subkv "Resolver" "package fallback"
+            _zapp_subkv "Manager" "$extra_method"
+
+            if app_is_installed "$extra_method" "$extra" ""; then
+                _zapp_subkv "Action" "none"
+                _zapp_subkv "State" "installed"
+            elif (( test_mode )); then
+                _zapp_subkv "Action" "would install $extra"
+                _zapp_subkv "State" "would process"
+            else
+                _zapp_subkv "Action" "install $extra"
+                _zapp_run app_install "$extra_method" "$extra" "" || return $?
+                _zapp_subkv "State" "installed"
+            fi
+            _zapp_processed[$extra]=1
+        fi
+    done
+fi
+
+if [[ "$action" == remove ]] && (( extra_count )); then
+    _zapp_heading "Extras"
+    _zapp_kv "Action" "preserve; extras are not removed automatically"
+fi
+
+# --- Config link/unlink -----------------------------------------------------
+
+if [[ "$action" == install || "$action" == link ]]; then
+    local strict_link=0
+    [[ "$action" == link ]] && strict_link=1
+
+    _zapp_heading "Config"
+    if (( config_auto )); then
+        _zapp_kv "Directory" "$config_dir"
+        _zapp_kv "GHCONFDIR" "$ghconf_state"
+
+        if [[ "$ghconf_state" == available ]]; then
+            _zapp_kv "Files" "$config_real_path"
+            _zapp_kv "Link" "$config_link_path -> $config_real_path"
+
+            if [[ -e "$config_real_path" || -L "$config_real_path" ]]; then
+                _zapp_kv "User config" "found"
+                _zapp_link_status "$config_real_path" "$config_link_path"
+                _zapp_kv "Link state" "${reply[1]}"
+                [[ -n "${reply[3]}" ]] && _zapp_kv "Current link" "$config_link_path -> ${reply[3]}"
+
+                if [[ "${reply[2]}" == none ]]; then
+                    _zapp_kv "Action" "none"
+                elif (( test_mode )); then
+                    _zapp_kv "Action" "would ${reply[2]}"
+                else
+                    _zapp_kv "Action" "${reply[2]}"
+                    _zapp_preflight_managed_link "$config_real_path" "$config_link_path" || return $?
+                    _zapp_run lns "$config_real_path" "$config_link_path" || return $?
+                fi
+            else
+                _zapp_kv "User config" "not found"
+                if (( strict_link )); then
+                    _zapp_kv "Action" "none"
+                else
+                    _zapp_kv "Action" "use application default configuration"
+                fi
+            fi
+        else
+            if (( strict_link )); then
+                printe "Cannot link configuration safely: ${c}${ghconf_state}${x}."
+                return 1
+            fi
+            _zapp_kv "Action" "skip user configuration and use application defaults"
+        fi
+    else
+        _zapp_kv "Auto" "disabled"
+        _zapp_kv "Action" "leave standard configuration path unmanaged"
+    fi
+
+    if (( link_count )); then
+        local i selector source_spec target_spec real_path link_path
+        _zapp_heading "Additional config links"
+
+        for (( i=1; i<=link_count; i++ )); do
+            _zapp_item_selector 'recipe.config.link' "$link_count" "$i"
+            selector="$REPLY"
+            _zapp_get "$recipe_file" "${selector}.source"
+            source_spec="$REPLY"
+            if _zapp_get "$recipe_file" "${selector}.target"; then
+                target_spec="$REPLY"
+            else
+                target_spec="$confdir/$source_spec"
+            fi
+
+            if [[ "$ghconf_state" != available ]]; then
+                if (( strict_link )); then
+                    printe "Cannot link configuration safely: ${c}${ghconf_state}${x}."
+                    return 1
+                fi
+                printw "Skipping '${c}${source_spec}${x}': GHCONFDIR is not available."
+                continue
+            fi
+
+            real_path="$GHCONFDIR/$source_spec"
+            _zapp_expand_path "$target_spec"
+            link_path="$REPLY"
+            _zapp_kv "Files" "$real_path"
+            _zapp_kv "Link" "$link_path -> $real_path"
+
+            if [[ ! -e "$real_path" && ! -L "$real_path" ]]; then
+                if (( strict_link )); then
+                    printe "Additional configuration source not found: ${c}${real_path}${x}"
+                    return 1
+                fi
+                printw "Additional config files not found: ${c}${real_path}${x}"
+                continue
+            fi
+
+            _zapp_link_status "$real_path" "$link_path"
+            _zapp_kv "Link state" "${reply[1]}"
+            [[ -n "${reply[3]}" ]] && _zapp_kv "Current link" "$link_path -> ${reply[3]}"
+
+            if [[ "${reply[2]}" == none ]]; then
+                _zapp_kv "Action" "none"
+            elif (( test_mode )); then
+                _zapp_kv "Action" "would ${reply[2]}"
+            else
+                _zapp_kv "Action" "${reply[2]}"
+                _zapp_preflight_managed_link "$real_path" "$link_path" || return $?
+                _zapp_run lns "$real_path" "$link_path" || return $?
+            fi
+        done
+    fi
+fi
+
+if [[ "$action" == remove || "$action" == unlink ]]; then
+    local strict_unlink=0
+    [[ "$action" == unlink ]] && strict_unlink=1
+
+    _zapp_heading "Config"
+    if (( config_auto )); then
+        _zapp_kv "Directory" "$config_dir"
+        _zapp_kv "GHCONFDIR" "$ghconf_state"
+
+        if [[ "$ghconf_state" == available ]]; then
+            _zapp_kv "Files" "$config_real_path"
+            _zapp_kv "Link" "$config_link_path -> $config_real_path"
+            _zapp_unlink_status "$config_real_path" "$config_link_path"
+            _zapp_kv "Link state" "${reply[1]}"
+            [[ -n "${reply[3]}" ]] && _zapp_kv "Current link" "$config_link_path -> ${reply[3]}"
+
+            case "${reply[2]}" in
+                "remove symlink")
+                    if (( test_mode )); then
+                        _zapp_kv "Action" "would remove symlink"
+                    else
+                        _zapp_kv "Action" "remove symlink"
+                        _zapp_unlink_expected "$config_real_path" "$config_link_path" || {
+                            printe "Refusing to remove changed or unsafe symlink: ${c}${config_link_path}${x}"
+                            return 1
+                        }
+                    fi
+                    ;;
+                preserve)
+                    _zapp_kv "Action" "preserve unmanaged path"
+                    ;;
+                *)
+                    _zapp_kv "Action" "none"
+                    ;;
+            esac
+        else
+            if (( strict_unlink )); then
+                printe "Cannot unlink configuration safely: ${c}${ghconf_state}${x}."
+                return 1
+            fi
+            _zapp_kv "Action" "skip symlink removal; target cannot be verified safely"
+        fi
+    else
+        _zapp_kv "Auto" "disabled"
+        _zapp_kv "Action" "leave standard configuration path unmanaged"
+    fi
+
+    if (( link_count )); then
+        local i selector source_spec target_spec real_path link_path
+        _zapp_heading "Additional config links"
+
+        for (( i=1; i<=link_count; i++ )); do
+            _zapp_item_selector 'recipe.config.link' "$link_count" "$i"
+            selector="$REPLY"
+            _zapp_get "$recipe_file" "${selector}.source"
+            source_spec="$REPLY"
+            if _zapp_get "$recipe_file" "${selector}.target"; then
+                target_spec="$REPLY"
+            else
+                target_spec="$confdir/$source_spec"
+            fi
+
+            if [[ "$ghconf_state" != available ]]; then
+                if (( strict_unlink )); then
+                    printe "Cannot unlink configuration safely: ${c}${ghconf_state}${x}."
+                    return 1
+                fi
+                _zapp_kv "Link $i" "$target_spec"
+                _zapp_kv "Action" "skip; GHCONFDIR is not available"
+                continue
+            fi
+
+            real_path="$GHCONFDIR/$source_spec"
+            _zapp_expand_path "$target_spec"
+            link_path="$REPLY"
+            _zapp_kv "Files" "$real_path"
+            _zapp_kv "Link" "$link_path -> $real_path"
+
+            _zapp_unlink_status "$real_path" "$link_path"
+            _zapp_kv "Link state" "${reply[1]}"
+            [[ -n "${reply[3]}" ]] && _zapp_kv "Current link" "$link_path -> ${reply[3]}"
+
+            case "${reply[2]}" in
+                "remove symlink")
+                    if (( test_mode )); then
+                        _zapp_kv "Action" "would remove symlink"
+                    else
+                        _zapp_kv "Action" "remove symlink"
+                        _zapp_unlink_expected "$real_path" "$link_path" || {
+                            printe "Refusing to remove changed or unsafe symlink: ${c}${link_path}${x}"
+                            return 1
+                        }
+                    fi
+                    ;;
+                preserve)
+                    _zapp_kv "Action" "preserve unmanaged path"
+                    ;;
+                *)
+                    _zapp_kv "Action" "none"
+                    ;;
+            esac
+        done
+    fi
+fi
+
+# --- Setup: install only ----------------------------------------------------
+
+if [[ "$action" == install ]] && (( mkdir_count || run_count )); then
+    local i selector mkdir_path label cmd item_when
+    _zapp_heading "Setup"
+
+    for (( i=1; i<=mkdir_count; i++ )); do
+        _zapp_item_selector 'recipe.setup.mkdir' "$mkdir_count" "$i"
+        selector="$REPLY"
+        _zapp_get "$recipe_file" "${selector}.path"
+        mkdir_path="$REPLY"
+        _zapp_expand_path "$mkdir_path"
+        mkdir_path="$REPLY"
+        item_when="always"
+        _zapp_get "$recipe_file" "${selector}.when" && item_when="$REPLY"
+
+        if [[ "$item_when" == new && $installed_now -eq 0 ]]; then
+            _zapp_kv "Skip" "mkdir $mkdir_path (when=new)"
+        elif (( test_mode )); then
+            _zapp_kv "mkdir $i" "would create $mkdir_path"
+        else
+            _zapp_kv "mkdir $i" "$mkdir_path"
+            mkdir -p "$mkdir_path" || {
+                printe "Cannot create directory: ${c}${mkdir_path}${x}"
+                return 1
+            }
+        fi
+    done
+
+    for (( i=1; i<=run_count; i++ )); do
+        _zapp_item_selector 'recipe.setup.run' "$run_count" "$i"
+        selector="$REPLY"
+        label=""
+        item_when="always"
+        _zapp_get "$recipe_file" "${selector}.label" && label="$REPLY"
+        _zapp_get "$recipe_file" "${selector}.when" && item_when="$REPLY"
+        _zapp_get "$recipe_file" "${selector}.command"
+        cmd="$REPLY"
+
+        if [[ "$item_when" == new && $installed_now -eq 0 ]]; then
+            _zapp_kv "Skip" "${label:-$cmd} (when=new)"
+            continue
+        fi
+
+        if (( test_mode )); then
+            _zapp_kv "Run $i" "would run: ${label:-$cmd}"
+            [[ -n "$label" ]] && _zapp_kv "Command" "$cmd"
+            [[ "$item_when" != always ]] && _zapp_kv "When" "$item_when"
+        else
+            _zapp_kv "Run $i" "${label:-$cmd}"
+            _zapp_run eval "$cmd" || {
+                printe "Setup action failed: ${c}${label:-$cmd}${x}"
+                return 1
+            }
+        fi
+    done
+fi
+
+# --- Result -----------------------------------------------------------------
+
+_zapp_heading "Result"
+if (( test_mode )); then
+    (( quiet_mode )) || printi "Test complete: no changes were made."
+else
+    case "$action" in
+        install)
+            if [[ -n "$command" && $has_install -eq 1 ]]; then
+                if is_installed "$command"; then
+                    local final_info
+                    final_info=$(zinfo -s "$command" 2>/dev/null)
+                    [[ -n "$final_info" ]] && _zapp_line "$final_info"
+                else
+                    printe "Recipe processing completed, but command '${c}${command}${x}' is not available."
+                    return 1
+                fi
+            fi
+            (( quiet_mode )) || prints "${g}${name}${x}: install completed successfully."
+            ;;
+        remove)
+            (( quiet_mode )) || prints "${g}${name}${x}: remove completed successfully."
+            ;;
+        link)
+            (( quiet_mode )) || prints "${g}${name}${x}: configuration linked successfully."
+            ;;
+        unlink)
+            (( quiet_mode )) || prints "${g}${name}${x}: managed configuration links processed safely."
+            ;;
+    esac
+fi
+
+unset "_zapp_active[$app_id]"
+_zapp_processed[$app_id]=1
+_zapp_stack[-1]=()
+
+return 0

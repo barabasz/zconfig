@@ -1,0 +1,712 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
+# Remove applications using zconfig recipes
+# Use 'zremove --help' for more information.
+
+local -A _fn=(
+    [info]="Remove applications using zconfig recipes"
+    [desc]="Removes applications and safely unlinks configuration symlinks described
+            by zconfig recipes. Bundles are processed recursively.
+
+            Configuration files stored in GHCONFDIR are never removed or modified.
+            Only symlinks outside GHCONFDIR that point exactly to the expected
+            GHCONFDIR location may be removed."
+    [version]="0.1.0"
+    [created]="2026-10-04"
+    [modified]="2026-10-04"
+    [license]="MIT"
+    [author]="Andrzej Barabasz"
+    [required]="dasel"
+    [notes]="Extras installed by a recipe are intentionally preserved.
+            Setup actions are install-only and are never executed during removal.
+            Removing an application that is already absent is considered success."
+)
+
+local -a _fn_args=(
+    "recipe|Recipe or bundle to remove|r"
+)
+
+local -a _fn_opts=(
+    "test|t|Show what would be removed without making changes"
+    "quiet|q|Suppress routine output; show errors only"
+    "brew|b|Force Homebrew for all recipe removals"
+    "apt|a|Force apt for all recipe removals"
+)
+
+local -a _fn_commands=()
+
+local -a _fn_examples=(
+    "zremove mc|Remove Midnight Commander and its managed symlinks"
+    "zremove -t mc|Test removal without making changes"
+    "zremove terminal|Remove all applications included in the terminal bundle"
+    "zremove -q mc|Remove quietly"
+    "zremove --brew terminal|Force Homebrew for all recipes in a bundle"
+    "zremove --apt terminal|Force apt for all recipes in a bundle"
+)
+
+local -A opts=() args=()
+_fn_init "$@" || return $REPLY
+
+setopt localoptions typesetsilent
+
+local recipe_id="${args[recipe]}"
+local test_mode=$(( ${+opts[test]} ))
+local quiet_mode=$(( ${+opts[quiet]} ))
+local force_brew=$(( ${+opts[brew]} ))
+local force_apt=$(( ${+opts[apt]} ))
+local force_method=""
+
+if (( force_brew && force_apt )); then
+    printe "Cannot use both ${c}--brew${x} and ${c}--apt${x} at the same time."
+    return 2
+fi
+(( force_brew )) && force_method="brew"
+(( force_apt )) && force_method="apt"
+
+if [[ "$force_method" == "apt" && "$OSTYPE" == darwin* ]] && (( ! test_mode )); then
+    printe "${c}--apt${x} is not available on macOS."
+    return 2
+fi
+
+if ! whence -w appremove >/dev/null 2>&1; then
+    printe "Required function not found: ${c}appremove${x}"
+    return 1
+fi
+
+local confdir="${CONFDIR:-${XDG_CONFIG_HOME:-$HOME/.config}}"
+local zdotdir="${ZDOTDIR:-$confdir/zsh}"
+local recipes_dir="${ZSH_RECIPES_DIR:-$zdotdir/recipes}"
+local recipe_file="$recipes_dir/$recipe_id.kdl"
+
+# --- Output helpers ----------------------------------------------------------
+
+_zremove_heading() {
+    (( ARGC == 1 )) || return 2
+    (( quiet_mode )) && return 0
+    print
+    printc "$1" "$y"
+}
+
+_zremove_kv() {
+    (( ARGC == 2 )) || return 2
+    (( quiet_mode )) && return 0
+    printkv "  $1" "$2"
+}
+
+_zremove_subkv() {
+    (( ARGC == 2 )) || return 2
+    (( quiet_mode )) && return 0
+    printkv "    $1" "$2"
+}
+
+_zremove_line() {
+    (( ARGC == 1 )) || return 2
+    (( quiet_mode )) && return 0
+    print -- "  $1"
+}
+
+# Child package-manager output is hidden on success so zremove owns the output
+# format. On failure it is replayed verbatim for diagnostics.
+_zremove_run_child() {
+    local tmp="${TMPDIR:-/tmp}/zremove.$$.${RANDOM}.${RANDOM}.log"
+    "$@" >"$tmp" 2>&1
+    local rc=$?
+    if (( rc != 0 )) && [[ -s "$tmp" ]]; then
+        cat "$tmp" >&2
+    fi
+    rm -f "$tmp"
+    return $rc
+}
+
+# --- KDL helpers -------------------------------------------------------------
+
+_zremove_get() {
+    (( ARGC == 2 )) || return 2
+    setopt local_options extended_glob
+
+    local raw
+    raw=$(dasel -i kdl -o json "$2" < "$1" 2>/dev/null) || return 1
+
+    if [[ "$raw" == \"* ]]; then
+        REPLY=$(str_json_decode "$raw") || return 1
+    else
+        REPLY="$raw"
+    fi
+}
+
+_zremove_count() {
+    (( ARGC == 2 )) || return 2
+    local json i=0
+    json=$(dasel -i kdl -o json "$2" < "$1" 2>/dev/null) || {
+        REPLY=0
+        return 0
+    }
+
+    if [[ "$json" == \{* ]]; then
+        REPLY=1
+    elif [[ "$json" == \[* ]]; then
+        while dasel -i kdl -o json "${2}[$i]" < "$1" >/dev/null 2>&1; do
+            (( i++ ))
+        done
+        REPLY=$i
+    else
+        return 1
+    fi
+}
+
+_zremove_item_selector() {
+    (( ARGC == 3 )) || return 2
+    local base="$1" count="$2" index="$3"
+    if (( count == 1 )); then
+        REPLY="$base"
+    else
+        REPLY="${base}[$(( index - 1 ))]"
+    fi
+}
+
+_zremove_expand_path() {
+    (( ARGC == 1 )) || return 2
+    local value="$1"
+    local xdg_config="${XDG_CONFIG_HOME:-$confdir}"
+    local xdg_data="${XDG_DATA_HOME:-$HOME/.local/share}"
+    local xdg_cache="${XDG_CACHE_HOME:-$HOME/.cache}"
+    local xdg_state="${XDG_STATE_HOME:-$HOME/.local/state}"
+    local ghconf="${GHCONFDIR:-}"
+
+    value="${value//\$\{XDG_CONFIG_HOME\}/$xdg_config}"
+    value="${value//\$XDG_CONFIG_HOME/$xdg_config}"
+    value="${value//\$\{XDG_DATA_HOME\}/$xdg_data}"
+    value="${value//\$XDG_DATA_HOME/$xdg_data}"
+    value="${value//\$\{XDG_CACHE_HOME\}/$xdg_cache}"
+    value="${value//\$XDG_CACHE_HOME/$xdg_cache}"
+    value="${value//\$\{XDG_STATE_HOME\}/$xdg_state}"
+    value="${value//\$XDG_STATE_HOME/$xdg_state}"
+    value="${value//\$\{CONFDIR\}/$confdir}"
+    value="${value//\$CONFDIR/$confdir}"
+    value="${value//\$\{GHCONFDIR\}/$ghconf}"
+    value="${value//\$GHCONFDIR/$ghconf}"
+    value="${value//\$\{HOME\}/$HOME}"
+    value="${value//\$HOME/$HOME}"
+
+    REPLY="$value"
+}
+
+# --- Safety helpers ----------------------------------------------------------
+
+# Normalize the location of PATH itself without following the final path
+# component. This matters for a symlink outside GHCONFDIR that points into it:
+# the symlink is removable, its target is not.
+_zremove_path_location() {
+    (( ARGC == 1 )) || return 2
+    local p="$1"
+    REPLY="${p:h:A}/${p:t}"
+}
+
+_zremove_is_inside_ghconf() {
+    (( ARGC == 1 )) || return 2
+    [[ -n ${GHCONFDIR:-} ]] || return 1
+
+    local gh_root="${GHCONFDIR:A}" candidate
+    _zremove_path_location "$1"
+    candidate="$REPLY"
+
+    [[ "$candidate" == "$gh_root" || "$candidate" == "$gh_root/"* ]]
+}
+
+# Source paths in recipes must remain inside GHCONFDIR. This prevents a source
+# such as ../something from escaping the protected configuration repository.
+_zremove_validate_source() {
+    (( ARGC == 1 )) || return 2
+    [[ -n ${GHCONFDIR:-} ]] || return 1
+
+    local gh_root="${GHCONFDIR:A}"
+    local source_abs="${1:A}"
+    [[ "$source_abs" == "$gh_root/"* ]]
+}
+
+# Validate a managed pair before any destructive work starts.
+_zremove_preflight_link() {
+    (( ARGC == 2 )) || return 2
+    local real_path="$1" link_path="$2"
+
+    if ! _zremove_validate_source "$real_path"; then
+        printe "Unsafe recipe source outside GHCONFDIR: ${c}${real_path}${x}"
+        return 1
+    fi
+
+    if _zremove_is_inside_ghconf "$link_path"; then
+        printe "Refusing to remove a link path inside GHCONFDIR: ${c}${link_path}${x}"
+        return 1
+    fi
+
+    return 0
+}
+
+# reply[1] = state, reply[2] = action, reply[3] = current destination.
+_zremove_link_status() {
+    (( ARGC == 2 )) || return 2
+    local real_path="$1" link_path="$2" current=""
+    reply=()
+
+    if [[ -L "$link_path" ]]; then
+        current=$(resolve_link "$link_path" 2>/dev/null)
+        if [[ -n "$current" && "${current:A}" == "${real_path:A}" ]]; then
+            reply=("correctly linked" "remove symlink" "$current")
+        else
+            reply=("symlink points elsewhere" "preserve" "$current")
+        fi
+    elif [[ -e "$link_path" ]]; then
+        if [[ -d "$link_path" ]]; then
+            reply=("directory exists at link path" "preserve" "")
+        elif [[ -f "$link_path" ]]; then
+            reply=("regular file exists at link path" "preserve" "")
+        else
+            reply=("object exists at link path" "preserve" "")
+        fi
+    else
+        reply=("link missing" "none" "")
+    fi
+}
+
+# Remove only a symlink that still points exactly where the recipe expects.
+# Never use rm -r/-R here. The protected target is never passed to rm.
+_zremove_unlink_expected() {
+    (( ARGC == 2 )) || return 2
+    local real_path="$1" link_path="$2" current=""
+
+    _zremove_preflight_link "$real_path" "$link_path" || return $?
+
+    [[ -L "$link_path" ]] || return 1
+    current=$(resolve_link "$link_path" 2>/dev/null) || return 1
+    [[ -n "$current" && "${current:A}" == "${real_path:A}" ]] || return 1
+
+    command rm "$link_path"
+}
+
+# --- Parse and validate ------------------------------------------------------
+
+if [[ ! -f "$recipe_file" ]]; then
+    printe "Recipe not found: ${c}${recipe_file}${x}"
+    return 1
+fi
+
+if ! dasel -i kdl -o json < "$recipe_file" >/dev/null 2>&1; then
+    printe "Invalid KDL syntax: ${c}${recipe_file}${x}"
+    return 1
+fi
+
+local root_type root_id schema
+if _zremove_get "$recipe_file" 'recipe.id'; then
+    root_type="recipe"
+    root_id="$REPLY"
+elif _zremove_get "$recipe_file" 'bundle.id'; then
+    root_type="bundle"
+    root_id="$REPLY"
+else
+    printe "Unsupported recipe root in: ${c}${recipe_file}${x}"
+    return 1
+fi
+
+if [[ "$root_id" != "$recipe_id" ]]; then
+    printe "Entry ID '${c}${root_id}${x}' does not match filename '${c}${recipe_id}.kdl${x}'."
+    return 1
+fi
+
+if ! _zremove_get "$recipe_file" "${root_type}.schema"; then
+    printe "Missing required property: ${c}${root_type}.schema${x}"
+    return 1
+fi
+schema="$REPLY"
+
+if [[ "$schema" != "1" ]]; then
+    printe "Unsupported ${root_type} schema: ${c}${schema}${x}"
+    return 1
+fi
+
+# --- Recursive run state ----------------------------------------------------
+
+if (( ! ${+parameters[_zremove_processed]} )); then
+    local -A _zremove_processed=()
+    local -A _zremove_active=()
+    local -a _zremove_stack=()
+fi
+
+if (( ${+_zremove_processed[$recipe_id]} )); then
+    _zremove_heading "Recipe"
+    _zremove_kv "ID" "$recipe_id"
+    _zremove_kv "State" "already processed in this run"
+    return 0
+fi
+
+if (( ${+_zremove_active[$recipe_id]} )); then
+    local cycle_path="${(j: -> :)_zremove_stack} -> $recipe_id"
+    printe "Circular recipe/bundle dependency detected: ${c}${cycle_path}${x}"
+    return 1
+fi
+
+_zremove_active[$recipe_id]=1
+_zremove_stack+=("$recipe_id")
+
+# --- Bundle -----------------------------------------------------------------
+
+if [[ "$root_type" == "bundle" ]]; then
+    local bundle_name="" include_count=0
+    _zremove_get "$recipe_file" 'bundle.name' && bundle_name="$REPLY"
+    _zremove_count "$recipe_file" 'bundle.include' || return 1
+    include_count=$REPLY
+
+    if (( include_count == 0 )); then
+        printe "Bundle '${c}${recipe_id}${x}' does not contain any ${c}include${x} entries."
+        return 1
+    fi
+
+    _zremove_heading "Bundle"
+    _zremove_kv "ID" "$recipe_id"
+    [[ -n "$bundle_name" ]] && _zremove_kv "Name" "$bundle_name"
+    _zremove_kv "Schema" "$schema"
+
+    _zremove_heading "Includes"
+    local i selector included_id included_file included_type
+    for (( i=1; i<=include_count; i++ )); do
+        _zremove_item_selector 'bundle.include' "$include_count" "$i"
+        selector="$REPLY"
+        _zremove_get "$recipe_file" "${selector}.id" || {
+            printe "Missing required property: ${c}${selector}.id${x}"
+            return 1
+        }
+        included_id="$REPLY"
+        included_file="$recipes_dir/$included_id.kdl"
+
+        _zremove_kv "Include $i" "$included_id"
+
+        if [[ ! -f "$included_file" ]]; then
+            printe "Included recipe or bundle not found: ${c}${included_file}${x}"
+            return 1
+        fi
+
+        if _zremove_get "$included_file" 'bundle.id'; then
+            included_type="bundle"
+        elif _zremove_get "$included_file" 'recipe.id'; then
+            included_type="recipe"
+        else
+            printe "Unsupported root in included file: ${c}${included_file}${x}"
+            return 1
+        fi
+        _zremove_subkv "Type" "$included_type"
+
+        if (( ${+_zremove_processed[$included_id]} )); then
+            _zremove_subkv "Action" "none"
+            _zremove_subkv "State" "already processed in this run"
+            continue
+        fi
+
+        if (( ${+_zremove_active[$included_id]} )); then
+            local cycle_path="${(j: -> :)_zremove_stack} -> $included_id"
+            printe "Circular recipe/bundle dependency detected: ${c}${cycle_path}${x}"
+            return 1
+        fi
+
+        if (( test_mode )); then
+            _zremove_subkv "Action" "test $included_type removal"
+        else
+            _zremove_subkv "Action" "remove $included_type"
+        fi
+
+        local -a nested_args=(--quiet)
+        [[ "$force_method" == "brew" ]] && nested_args+=(--brew)
+        [[ "$force_method" == "apt" ]] && nested_args+=(--apt)
+        (( test_mode )) && nested_args+=(--test)
+        zremove "${nested_args[@]}" "$included_id" || return $?
+        _zremove_subkv "State" "processed"
+    done
+
+    unset "_zremove_active[$recipe_id]"
+    _zremove_processed[$recipe_id]=1
+    _zremove_stack[-1]=()
+
+    _zremove_heading "Result"
+    if (( test_mode )); then
+        (( quiet_mode )) || printi "Bundle removal test complete: no changes were made."
+    else
+        (( quiet_mode )) || prints "Bundle ${g}${bundle_name:-$recipe_id}${x} removed successfully."
+    fi
+    return 0
+fi
+
+# --- Recipe -----------------------------------------------------------------
+
+local name command="" package recipe_method="brew" method="brew" install_type=""
+local config_dir="$recipe_id" config_auto=1 config_auto_raw=""
+local link_count=0 extra_count=0
+
+_zremove_get "$recipe_file" 'recipe.name' || {
+    printe "Missing required field: ${c}recipe.name${x}"
+    return 1
+}
+name="$REPLY"
+
+_zremove_get "$recipe_file" 'recipe.command' && command="$REPLY"
+
+_zremove_get "$recipe_file" 'recipe.install.package' || {
+    printe "Missing required property: ${c}recipe.install.package${x}"
+    return 1
+}
+package="$REPLY"
+
+_zremove_get "$recipe_file" 'recipe.install.method' && recipe_method="$REPLY"
+method="${force_method:-$recipe_method}"
+_zremove_get "$recipe_file" 'recipe.install.type' && install_type="$REPLY"
+_zremove_get "$recipe_file" 'recipe.config.dir' && config_dir="$REPLY"
+
+if _zremove_get "$recipe_file" 'recipe.config.auto'; then
+    config_auto_raw="$REPLY"
+    case "$config_auto_raw" in
+        true)  config_auto=1 ;;
+        false) config_auto=0 ;;
+        *)
+            printe "Invalid ${c}recipe.config.auto${x}: expected ${c}true${x} or ${c}false${x}."
+            return 1
+            ;;
+    esac
+fi
+
+case "$recipe_method" in
+    brew|apt) ;;
+    *)
+        printe "Unsupported installation method in schema 1: ${c}${recipe_method}${x}"
+        return 1
+        ;;
+esac
+
+if [[ -n "$install_type" && "$install_type" != "cask" ]]; then
+    printe "Unsupported Homebrew install type: ${c}${install_type}${x}"
+    return 1
+fi
+if [[ -n "$install_type" && "$recipe_method" != "brew" ]]; then
+    printe "Install type '${c}${install_type}${x}' is only supported with Homebrew recipes."
+    return 1
+fi
+if [[ -n "$install_type" && "$method" != "brew" ]]; then
+    printe "Cannot override Homebrew cask recipe '${c}${recipe_id}${x}' with ${c}--apt${x}."
+    return 2
+fi
+
+_zremove_count "$recipe_file" 'recipe.config.link' || return 1
+link_count=$REPLY
+_zremove_count "$recipe_file" 'recipe.extras.install' || return 1
+extra_count=$REPLY
+
+# Validate explicit links and perform the safety preflight before uninstalling
+# anything. If GHCONFDIR is unavailable, links cannot be verified and are left
+# untouched; package removal may still proceed.
+local ghconf_state config_real_path="" config_link_path="$confdir/$config_dir"
+if [[ -z ${GHCONFDIR:-} ]]; then
+    ghconf_state="GHCONFDIR is not set"
+elif [[ ! -d "$GHCONFDIR" ]]; then
+    ghconf_state="GHCONFDIR directory does not exist"
+else
+    ghconf_state="available"
+    config_real_path="$GHCONFDIR/$config_dir"
+fi
+
+if [[ "$ghconf_state" == "available" ]]; then
+    if (( config_auto )); then
+        _zremove_preflight_link "$config_real_path" "$config_link_path" || return $?
+    fi
+
+    local i selector source_spec target_spec real_path link_path
+    for (( i=1; i<=link_count; i++ )); do
+        _zremove_item_selector 'recipe.config.link' "$link_count" "$i"
+        selector="$REPLY"
+        _zremove_get "$recipe_file" "${selector}.source" || {
+            printe "Missing required property: ${c}${selector}.source${x}"
+            return 1
+        }
+        source_spec="$REPLY"
+
+        if _zremove_get "$recipe_file" "${selector}.target"; then
+            target_spec="$REPLY"
+        else
+            target_spec="$confdir/$source_spec"
+        fi
+
+        real_path="$GHCONFDIR/$source_spec"
+        _zremove_expand_path "$target_spec"
+        link_path="$REPLY"
+        _zremove_preflight_link "$real_path" "$link_path" || return $?
+    done
+fi
+
+# --- Application ------------------------------------------------------------
+
+_zremove_heading "Recipe"
+_zremove_kv "ID" "$recipe_id"
+_zremove_kv "Name" "$name"
+_zremove_kv "Schema" "$schema"
+
+_zremove_heading "Application"
+[[ -n "$command" ]] && _zremove_kv "Command" "$command"
+
+local application_installed=0
+[[ -n "$command" ]] && is_installed "$command" && application_installed=1
+
+if (( application_installed )); then
+    _zremove_kv "State" "installed"
+    local app_info
+    app_info=$(zinfo -s "$command" 2>/dev/null)
+    [[ -n "$app_info" ]] && _zremove_line "$app_info"
+else
+    _zremove_kv "State" "not installed"
+fi
+
+if (( test_mode )); then
+    if (( application_installed )); then
+        if [[ "$method" == "brew" && "$install_type" == "cask" ]]; then
+            _zremove_kv "Action" "would remove with brew cask: $package"
+        else
+            _zremove_kv "Action" "would remove with $method: $package"
+        fi
+    else
+        _zremove_kv "Action" "none"
+    fi
+else
+    if (( application_installed )); then
+        _zremove_kv "Action" "remove with $method: $package"
+    else
+        _zremove_kv "Action" "ensure package is absent"
+    fi
+
+    local -a appremove_args=(--quiet --yes)
+    [[ "$method" == "brew" ]] && appremove_args+=(--brew)
+    [[ "$method" == "apt" ]] && appremove_args+=(--apt)
+    [[ "$install_type" == "cask" ]] && appremove_args+=(--cask)
+
+    _zremove_run_child appremove "${appremove_args[@]}" "$package" || return $?
+    rehash
+
+    if [[ -n "$command" ]] && is_installed "$command"; then
+        printe "Removal completed, but command '${c}${command}${x}' is still available."
+        return 1
+    fi
+fi
+
+# --- Standard config symlink ------------------------------------------------
+
+_zremove_heading "Config"
+if (( config_auto )); then
+    _zremove_kv "Directory" "$config_dir"
+    _zremove_kv "GHCONFDIR" "$ghconf_state"
+
+    if [[ "$ghconf_state" == "available" ]]; then
+        _zremove_kv "Files" "$config_real_path"
+        _zremove_kv "Link" "$config_link_path -> $config_real_path"
+
+        local -a reply=()
+        _zremove_link_status "$config_real_path" "$config_link_path"
+        _zremove_kv "Link state" "${reply[1]}"
+        [[ -n "${reply[3]}" ]] && _zremove_kv "Current link" "$config_link_path -> ${reply[3]}"
+
+        case "${reply[2]}" in
+            "remove symlink")
+                if (( test_mode )); then
+                    _zremove_kv "Action" "would remove symlink"
+                else
+                    _zremove_kv "Action" "remove symlink"
+                    _zremove_unlink_expected "$config_real_path" "$config_link_path" || {
+                        printe "Refusing to remove changed or unsafe symlink: ${c}${config_link_path}${x}"
+                        return 1
+                    }
+                fi
+                ;;
+            preserve)
+                _zremove_kv "Action" "preserve unmanaged path"
+                ;;
+            *)
+                _zremove_kv "Action" "none"
+                ;;
+        esac
+    else
+        _zremove_kv "Action" "skip symlink removal; target cannot be verified safely"
+    fi
+else
+    _zremove_kv "Auto" "disabled"
+    _zremove_kv "Action" "leave standard configuration path unmanaged"
+fi
+
+# --- Additional config symlinks --------------------------------------------
+
+if (( link_count )); then
+    _zremove_heading "Additional config links"
+    local i selector source_spec target_spec real_path link_path
+
+    for (( i=1; i<=link_count; i++ )); do
+        _zremove_item_selector 'recipe.config.link' "$link_count" "$i"
+        selector="$REPLY"
+        _zremove_get "$recipe_file" "${selector}.source"
+        source_spec="$REPLY"
+
+        if _zremove_get "$recipe_file" "${selector}.target"; then
+            target_spec="$REPLY"
+        else
+            target_spec="$confdir/$source_spec"
+        fi
+
+        if [[ "$ghconf_state" != "available" ]]; then
+            _zremove_kv "Link $i" "$target_spec"
+            _zremove_kv "Action" "skip; GHCONFDIR is not available"
+            continue
+        fi
+
+        real_path="$GHCONFDIR/$source_spec"
+        _zremove_expand_path "$target_spec"
+        link_path="$REPLY"
+
+        _zremove_kv "Files" "$real_path"
+        _zremove_kv "Link" "$link_path -> $real_path"
+
+        local -a reply=()
+        _zremove_link_status "$real_path" "$link_path"
+        _zremove_kv "Link state" "${reply[1]}"
+        [[ -n "${reply[3]}" ]] && _zremove_kv "Current link" "$link_path -> ${reply[3]}"
+
+        case "${reply[2]}" in
+            "remove symlink")
+                if (( test_mode )); then
+                    _zremove_kv "Action" "would remove symlink"
+                else
+                    _zremove_kv "Action" "remove symlink"
+                    _zremove_unlink_expected "$real_path" "$link_path" || {
+                        printe "Refusing to remove changed or unsafe symlink: ${c}${link_path}${x}"
+                        return 1
+                    }
+                fi
+                ;;
+            preserve)
+                _zremove_kv "Action" "preserve unmanaged path"
+                ;;
+            *)
+                _zremove_kv "Action" "none"
+                ;;
+        esac
+    done
+fi
+
+if (( extra_count )); then
+    _zremove_heading "Extras"
+    _zremove_kv "Action" "preserve; extras are not removed automatically"
+fi
+
+# --- Result -----------------------------------------------------------------
+
+_zremove_heading "Result"
+if (( test_mode )); then
+    (( quiet_mode )) || printi "Removal test complete: no changes were made."
+else
+    (( quiet_mode )) || prints "${g}${name}${x} is removed and managed symlinks were processed safely."
+fi
+
+unset "_zremove_active[$recipe_id]"
+_zremove_processed[$recipe_id]=1
+_zremove_stack[-1]=()
+
+return 0
