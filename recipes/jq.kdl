@@ -1,0 +1,12 @@
+/- kdl-version 2
+
+recipe id="jq" schema=1 {
+    name "jq"
+    description "Lightweight and flexible command-line JSON processor"
+    homepage "https://jqlang.org/"
+    command "jq"
+
+    install package="jq"
+
+    config auto=false
+}

@@ -6,24 +6,20 @@
 local -A _fn=(
     [info]="Manage applications using zconfig recipes"
     [desc]="Installs, removes, links, and unlinks applications using one recipe format.
-            Recipes may manage a package, configuration symlinks, setup actions, or any
-            combination of them. Bundles are processed recursively.
+            Recipes may manage a package, dependencies, configuration symlinks, setup actions,
+            or any combination of them. Dependencies and bundles are processed recursively.
 
             remove/unlink never remove or modify real files stored in GHCONFDIR."
-    [version]="0.1.0"
+    [version]="0.1.2"
     [created]="2026-10-04"
     [modified]="2026-10-04"
     [license]="MIT"
     [author]="Andrzej Barabasz"
     [required]="dasel"
-    [notes]="install: install package, extras, link config, run setup
-            remove: remove package and safely unlink managed config; extras are preserved
-            link: link managed config only
-            unlink: safely unlink managed config only
-            show: display parsed recipe or bundle
-            verify: validate KDL syntax and schema 1
+    [notes]="Dependencies and extras are preserved during remove.
+            verify validates KDL syntax and recipe schema 1.
 
-            unlink/remove never delete real files. Only a verified symlink outside
+            remove/unlink never delete real files. Only a verified symlink outside
             GHCONFDIR may be removed."
 )
 
@@ -35,8 +31,8 @@ local -a _fn_args=(
 local -a _fn_opts=(
     "test|t|Show what would be done without making changes"
     "quiet|q|Suppress routine output; show errors only"
-    "brew|b|Force Homebrew for managed package operations"
-    "apt|a|Force apt for managed package operations"
+    "brew|b|Force Homebrew for system package operations"
+    "apt|a|Force apt for system package operations"
 )
 
 local -a _fn_commands=(
@@ -236,6 +232,7 @@ _zapp_expand_path() {
     local xdg_data="${XDG_DATA_HOME:-$HOME/.local/share}"
     local xdg_cache="${XDG_CACHE_HOME:-$HOME/.cache}"
     local xdg_state="${XDG_STATE_HOME:-$HOME/.local/state}"
+    local venvdir="${VENVDIR:-$HOME/.local/venv}"
     local ghconf="${GHCONFDIR:-}"
 
     value="${value//\$\{XDG_CONFIG_HOME\}/$xdg_config}"
@@ -246,6 +243,8 @@ _zapp_expand_path() {
     value="${value//\$XDG_CACHE_HOME/$xdg_cache}"
     value="${value//\$\{XDG_STATE_HOME\}/$xdg_state}"
     value="${value//\$XDG_STATE_HOME/$xdg_state}"
+    value="${value//\$\{VENVDIR\}/$venvdir}"
+    value="${value//\$VENVDIR/$venvdir}"
     value="${value//\$\{CONFDIR\}/$confdir}"
     value="${value//\$CONFDIR/$confdir}"
     value="${value//\$\{GHCONFDIR\}/$ghconf}"
@@ -464,7 +463,7 @@ fi
 local name="" command="" description="" homepage=""
 local has_install=0 package="" recipe_method="brew" method="brew" install_type=""
 local config_dir="$app_id" config_auto=1 config_auto_raw=""
-local link_count=0 extra_count=0 run_count=0 mkdir_count=0
+local link_count=0 dependency_count=0 extra_count=0 run_count=0 mkdir_count=0
 
 if [[ "$root_type" == recipe ]]; then
     _zapp_get "$recipe_file" 'recipe.name' || {
@@ -498,11 +497,17 @@ if [[ "$root_type" == recipe ]]; then
         install_type="$REPLY"
     fi
 
-    method="${force_method:-$recipe_method}"
+    if [[ "$recipe_method" == pipx ]]; then
+        # pipx identifies a different package ecosystem; --brew/--apt only
+        # override system-package recipes and are still propagated to dependencies.
+        method="pipx"
+    else
+        method="${force_method:-$recipe_method}"
+    fi
 
     if (( has_install )); then
         case "$recipe_method" in
-            brew|apt) ;;
+            brew|apt|pipx) ;;
             *)
                 printe "Unsupported installation method in schema 1: ${c}${recipe_method}${x}"
                 return 1
@@ -538,6 +543,8 @@ if [[ "$root_type" == recipe ]]; then
 
     _zapp_count "$recipe_file" 'recipe.config.link' || return 1
     link_count=$REPLY
+    _zapp_count "$recipe_file" 'recipe.dependencies.install' || return 1
+    dependency_count=$REPLY
     _zapp_count "$recipe_file" 'recipe.extras.install' || return 1
     extra_count=$REPLY
     _zapp_count "$recipe_file" 'recipe.setup.run' || return 1
@@ -551,6 +558,15 @@ if [[ "$root_type" == recipe ]]; then
         selector="$REPLY"
         _zapp_get "$recipe_file" "${selector}.source" || {
             printe "Missing required property: ${c}${selector}.source${x}"
+            return 1
+        }
+    done
+
+    for (( i=1; i<=dependency_count; i++ )); do
+        _zapp_item_selector 'recipe.dependencies.install' "$dependency_count" "$i"
+        selector="$REPLY"
+        _zapp_get "$recipe_file" "${selector}.id" || {
+            printe "Missing required property: ${c}${selector}.id${x}"
             return 1
         }
     done
@@ -605,6 +621,16 @@ if [[ "$root_type" == recipe ]]; then
         [[ -n "$description" ]] && _zapp_kv "Description" "$description"
         [[ -n "$homepage" ]] && _zapp_kv "Homepage" "$homepage"
         [[ -n "$command" ]] && _zapp_kv "Command" "$command"
+
+        if (( dependency_count )); then
+            _zapp_heading "Dependencies"
+            for (( j=1; j<=dependency_count; j++ )); do
+                _zapp_item_selector 'recipe.dependencies.install' "$dependency_count" "$j"
+                sel="$REPLY"
+                _zapp_get "$recipe_file" "${sel}.id"
+                _zapp_kv "Install $j" "$REPLY"
+            done
+        fi
 
         if (( has_install )); then
             _zapp_heading "Install"
@@ -817,6 +843,75 @@ if [[ "$action" == install || "$action" == remove || "$action" == link || "$acti
         _zapp_expand_path "$pre_target"
         pre_link="$REPLY"
         _zapp_preflight_managed_link "$pre_real" "$pre_link" || return $?
+    done
+fi
+
+# --- Dependencies: install before the application ---------------------------
+
+if [[ "$action" == install ]] && (( dependency_count )); then
+    local dep_i dep_selector dependency dep_file dep_type cycle_path
+    _zapp_heading "Dependencies"
+
+    for (( dep_i=1; dep_i<=dependency_count; dep_i++ )); do
+        _zapp_item_selector 'recipe.dependencies.install' "$dependency_count" "$dep_i"
+        dep_selector="$REPLY"
+        _zapp_get "$recipe_file" "${dep_selector}.id"
+        dependency="$REPLY"
+        dep_file="$recipes_dir/$dependency.kdl"
+        _zapp_kv "Dependency $dep_i" "$dependency"
+
+        if (( ${+_zapp_processed[$dependency]} )); then
+            _zapp_subkv "Action" "none"
+            _zapp_subkv "State" "already processed in this run"
+            continue
+        fi
+
+        if (( ${+_zapp_active[$dependency]} )); then
+            cycle_path="${(j: -> :)_zapp_stack} -> $dependency"
+            printe "Circular recipe/bundle dependency detected: ${c}${cycle_path}${x}"
+            return 1
+        fi
+
+        if [[ ! -f "$dep_file" ]]; then
+            printe "Dependency recipe or bundle not found: ${c}${dep_file}${x}"
+            return 1
+        fi
+
+        if _zapp_get "$dep_file" 'bundle.id'; then
+            dep_type="bundle"
+        elif _zapp_get "$dep_file" 'recipe.id'; then
+            dep_type="recipe"
+        else
+            printe "Unsupported root in dependency file: ${c}${dep_file}${x}"
+            return 1
+        fi
+        _zapp_subkv "Type" "$dep_type"
+
+        if (( test_mode )); then
+            _zapp_subkv "Action" "would install $dep_type"
+        else
+            _zapp_subkv "Action" "install $dep_type"
+        fi
+
+        local -a dep_opts=(--quiet)
+        [[ "$force_method" == brew ]] && dep_opts+=(--brew)
+        [[ "$force_method" == apt ]] && dep_opts+=(--apt)
+        (( test_mode )) && dep_opts+=(--test)
+        zapp "${dep_opts[@]}" install "$dependency" || return $?
+        _zapp_subkv "State" "processed"
+    done
+fi
+
+if [[ "$action" == remove ]] && (( dependency_count )); then
+    _zapp_heading "Dependencies"
+    local dep_i dep_selector dependency
+    for (( dep_i=1; dep_i<=dependency_count; dep_i++ )); do
+        _zapp_item_selector 'recipe.dependencies.install' "$dependency_count" "$dep_i"
+        dep_selector="$REPLY"
+        _zapp_get "$recipe_file" "${dep_selector}.id"
+        dependency="$REPLY"
+        _zapp_kv "Dependency $dep_i" "$dependency"
+        _zapp_subkv "Action" "preserve"
     done
 fi
 

@@ -1,0 +1,17 @@
+/- kdl-version 2
+
+recipe id="yq" schema=1 {
+    name "yq"
+    description "Command-line YAML, XML, and TOML processor based on jq"
+    homepage "https://github.com/kislyuk/yq"
+    command "yq"
+
+    dependencies {
+        install id="python"
+        install id="jq"
+    }
+
+    install method="pipx" package="yq"
+
+    config auto=false
+}

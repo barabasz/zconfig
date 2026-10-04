@@ -1,0 +1,29 @@
+/- kdl-version 2
+
+recipe id="python" schema=1 {
+    name "Python 3"
+    description "Python programming language runtime with zconfig virtual environment"
+    homepage "https://www.python.org/"
+    command "python3"
+
+    install package="python3"
+
+    config auto=false
+
+    setup {
+        mkdir path="$VENVDIR"
+
+        run label="Create Python virtual environment" command=#"""
+            if [[ ! -f "$VENVDIR/python/bin/activate" ]]; then
+                python3 -m venv "$VENVDIR/python"
+            fi
+            """#
+
+        run label="Install pipx in Python virtual environment" command=#"""
+            if [[ ! -x "$VENVDIR/python/bin/pipx" ]]; then
+                "$VENVDIR/python/bin/python" -m pip install --quiet --upgrade pip
+                "$VENVDIR/python/bin/python" -m pip install --quiet pipx
+            fi
+            """#
+    }
+}

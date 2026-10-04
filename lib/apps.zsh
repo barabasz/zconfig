@@ -8,8 +8,31 @@ zfile_track_start ${0:A}
 # These functions are intentionally non-interactive and do not provide user UX.
 # Configuration files and symlinks are outside their scope.
 
+# Resolve pipx executable.
+# pipx is installed inside zconfig's main Python virtual environment, so it may
+# exist before that venv has been added to PATH in the current shell.
+# Usage: _app_pipx_path
+# Returns: 0 found (REPLY=path), 1 not found, 2 invalid usage
+_app_pipx_path() {
+    (( ARGC == 0 )) || return 2
+
+    if (( ${+commands[pipx]} )); then
+        REPLY="$commands[pipx]"
+        return 0
+    fi
+
+    local venvdir="${VENVDIR:-$HOME/.local/venv}"
+    local candidate="$venvdir/python/bin/pipx"
+    if [[ -x "$candidate" ]]; then
+        REPLY="$candidate"
+        return 0
+    fi
+
+    return 1
+}
+
 # Check whether a package manager required by zapp is available.
-# Usage: app_manager_available <brew|apt>
+# Usage: app_manager_available <brew|apt|pipx>
 # Returns: 0 available, 1 unavailable, 2 invalid usage
 app_manager_available() {
     (( ARGC == 1 )) || return 2
@@ -21,6 +44,9 @@ app_manager_available() {
         apt)
             (( ${+commands[apt-get]} && ${+commands[dpkg-query]} ))
             ;;
+        pipx)
+            _app_pipx_path >/dev/null
+            ;;
         *)
             return 2
             ;;
@@ -28,7 +54,7 @@ app_manager_available() {
 }
 
 # Check whether a package is installed by a specific package manager.
-# Usage: app_is_installed <brew|apt> <package> [cask]
+# Usage: app_is_installed <brew|apt|pipx> <package> [cask]
 # Returns: 0 installed, 1 not installed/unavailable, 2 invalid usage
 app_is_installed() {
     (( ARGC >= 2 && ARGC <= 3 )) || return 2
@@ -53,6 +79,20 @@ app_is_installed() {
             [[ "$(dpkg-query -W -f='${Status}' "$package" 2>/dev/null)" == "install ok installed" ]]
             ;;
 
+        pipx)
+            [[ -z "$type" ]] || return 2
+
+            local pipx_cmd output line
+            _app_pipx_path || return 1
+            pipx_cmd="$REPLY"
+
+            output=$("$pipx_cmd" list --short 2>/dev/null) || return 1
+            for line in "${(@f)output}"; do
+                [[ "${line%% *}" == "$package" ]] && return 0
+            done
+            return 1
+            ;;
+
         *)
             return 2
             ;;
@@ -60,7 +100,7 @@ app_is_installed() {
 }
 
 # Install a package non-interactively.
-# Usage: app_install <brew|apt> <package> [cask]
+# Usage: app_install <brew|apt|pipx> <package> [cask]
 # Returns: 0 success/already installed, 1 execution error, 2 invalid usage
 app_install() {
     (( ARGC >= 2 && ARGC <= 3 )) || return 2
@@ -76,6 +116,10 @@ app_install() {
             ;;
         apt)
             app_manager_available apt || return 1
+            [[ -z "$type" ]] || return 2
+            ;;
+        pipx)
+            app_manager_available pipx || return 1
             [[ -z "$type" ]] || return 2
             ;;
         *)
@@ -104,6 +148,29 @@ app_install() {
             rc=$?
             ;;
 
+        pipx)
+            local pipx_cmd pipx_bin
+            _app_pipx_path || return 1
+            pipx_cmd="$REPLY"
+            pipx_bin="${BINDIR:-$HOME/.local/bin}"
+            mkdir -p "$pipx_bin" || return 1
+
+            PIPX_BIN_DIR="$pipx_bin" "$pipx_cmd" install --quiet "$package"
+            rc=$?
+
+            # Make newly exposed pipx applications available immediately in
+            # the current shell, even if the bin directory did not exist when
+            # the shell started.
+            if (( rc == 0 )); then
+                if (( ${+functions[path_prepend]} )); then
+                    (( ${+functions[path_remove]} )) && path_remove "$pipx_bin"
+                    path_prepend "$pipx_bin"
+                elif [[ ":$PATH:" != *":$pipx_bin:"* ]]; then
+                    export PATH="$pipx_bin:$PATH"
+                fi
+            fi
+            ;;
+
         *)
             return 2
             ;;
@@ -115,7 +182,7 @@ app_install() {
 }
 
 # Remove a package non-interactively.
-# Usage: app_remove <brew|apt> <package> [cask]
+# Usage: app_remove <brew|apt|pipx> <package> [cask]
 # Returns: 0 success/already absent, 1 execution error, 2 invalid usage
 app_remove() {
     (( ARGC >= 2 && ARGC <= 3 )) || return 2
@@ -131,6 +198,10 @@ app_remove() {
             ;;
         apt)
             app_manager_available apt || return 1
+            [[ -z "$type" ]] || return 2
+            ;;
+        pipx)
+            app_manager_available pipx || return 1
             [[ -z "$type" ]] || return 2
             ;;
         *)
@@ -156,6 +227,15 @@ app_remove() {
 
         apt)
             sudo apt-get remove -y -qq "$package"
+            rc=$?
+            ;;
+
+        pipx)
+            local pipx_cmd pipx_bin
+            _app_pipx_path || return 1
+            pipx_cmd="$REPLY"
+            pipx_bin="${BINDIR:-$HOME/.local/bin}"
+            PIPX_BIN_DIR="$pipx_bin" "$pipx_cmd" uninstall --quiet "$package"
             rc=$?
             ;;
 
