@@ -26,7 +26,7 @@
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.8.12"
+SCRIPT_VERSION="0.8.13"
 SCRIPT_DATE="2026-10-05"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
@@ -71,6 +71,12 @@ if [[ "$(uname -s)" == "Linux" ]]; then
 else
     export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 fi
+
+# Make installer-managed user executables available before installing them.
+case ":$PATH:" in
+    *":$XDG_BIN_HOME:"*) ;;
+    *) export PATH="$XDG_BIN_HOME:$PATH" ;;
+esac
 
 # Homebrew environment - cleaner output
 export HOMEBREW_NO_ENV_HINTS=1
@@ -133,15 +139,14 @@ get_elapsed_time() {
 }
 
 # Log message to file only (not displayed to user)
-# Strips ANSI color codes before writing
+# Strips installer color codes before writing
 # Usage: print_log "message"
 print_log() {
-    local clean="${1//$'\033['[0-9]m/}"
-    clean="${clean//$'\033['[0-9][0-9]m/}"
-    clean="${clean//$'\033['[0-9];[0-9]m/}"
-    clean="${clean//$'\033['[0-9];[0-9][0-9]m/}"
-    clean="${clean//$'\033['[0-9];[0-9];[0-9]*m/}"
-    echo "$clean" >> "$LOGFILE"
+    local clean="$1" color
+    for color in "$r" "$g" "$y" "$b" "$c" "$w" "$d" "$x"; do
+        [[ -n "$color" ]] && clean="${clean//"$color"/}"
+    done
+    printf '%s\n' "$clean" >> "$LOGFILE"
 }
 
 # Print title in a box (used at script start)
@@ -159,7 +164,7 @@ print_title() {
         echo ""
         echo "$(repeat_char '=' 60)"
         echo "$text"
-        echo "Date: $(date '+%Y-%m-%d %H:%M:%S')"
+        echo "Date: $(date '+%Y-%m-%d %H:%M:%S %Z %z')"
         echo "$(repeat_char '=' 60)"
     } >> "$LOGFILE"
 }
@@ -181,8 +186,8 @@ print_header() {
     # Log section to file
     {
         echo ""
-        echo "█ SECTION $text"
-        echo "█ Time: $(date '+%Y-%m-%d %H:%M:%S')"
+        print_log "█ SECTION $text"
+        echo "█ Time: $(date '+%Y-%m-%d %H:%M:%S %Z %z')"
         echo "█ Elapsed: $elapsed"
         echo "$(repeat_char '▔' 40)"
     } >> "$LOGFILE"
@@ -740,7 +745,7 @@ install_utils() {
 # Print installation header
 install_header() {
     print_title "zconfig installer v${SCRIPT_VERSION}"
-    print_comment "Date: $(date '+%Y-%m-%d %H:%M:%S')"
+    print_comment "Date: $(date '+%Y-%m-%d %H:%M:%S %Z %z')"
     print_comment "Log file: $LOGFILE"
     print_comment "Debug log: $DEBUGLOG"
     print_info "This will install $ZCONFIG to ${c}$ZCONFIG_DIR${x}"
@@ -866,7 +871,10 @@ bootstrap_sudo() {
     fi
 
     local root_script
-    root_script="username='$username'"$'\n'"$(cat <<'ROOT_SCRIPT'
+    # Avoid a heredoc inside quoted $(...): Bash 3.2 parses apostrophes in
+    # that body incorrectly, even on macOS where bootstrap_sudo is not run.
+    # read returns 1 at EOF because there is no NUL delimiter; data is retained.
+    IFS= read -r -d '' root_script <<'ROOT_SCRIPT' || true
 set -e
 # su -c may retain the user's PATH, which omits /usr/sbin on Debian.
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
@@ -898,7 +906,7 @@ if ! /usr/sbin/visudo -c; then
     exit 1
 fi
 ROOT_SCRIPT
-)"
+    root_script="username='$username'"$'\n'"$root_script"
 
     # Only output is piped: su still reads authentication from the terminal.
     # Capture su's status rather than tee's status, without enabling pipefail.
@@ -981,17 +989,24 @@ configure_locales() {
     done
 
     if [[ "$needs_generation" -eq 1 ]]; then
-        # Preserve other locales and enable only the two required entries.
-        if ! do_sudo sed -i -E '/^[[:space:]]*#[[:space:]]*(en_US|pl_PL)\.UTF-8[[:space:]]+UTF-8[[:space:]]*$/s/^[[:space:]]*#[[:space:]]*//' /etc/locale.gen; then
-            print_error "Failed to enable required locales in /etc/locale.gen"
-            return 1
-        fi
+        # Debian can already have an active entry below a commented template.
+        # Do not uncomment that template if the locale is already enabled.
+        local locale_pattern commented_pattern
         for loc in "${required[@]}"; do
-            if ! grep -Eq "^[[:space:]]*${loc/./\\.}[[:space:]]+UTF-8[[:space:]]*$" /etc/locale.gen; then
-                if ! printf '\n%s UTF-8\n' "$loc" | do_sudo tee -a /etc/locale.gen >/dev/null; then
-                    print_error "Failed to add $loc to /etc/locale.gen"
+            locale_pattern="${loc/./\\.}"
+            if grep -Eq "^[[:space:]]*${locale_pattern}[[:space:]]+UTF-8[[:space:]]*$" /etc/locale.gen; then
+                continue
+            fi
+            commented_pattern="^[[:space:]]*#[[:space:]]*${locale_pattern}[[:space:]]+UTF-8[[:space:]]*$"
+            if grep -Eq "$commented_pattern" /etc/locale.gen; then
+                # GNU sed's 0,address range enables only the first matching line.
+                if ! do_sudo sed -i -E "0,/${commented_pattern}/s/${commented_pattern}/${loc} UTF-8/" /etc/locale.gen; then
+                    print_error "Failed to enable $loc in /etc/locale.gen"
                     return 1
                 fi
+            elif ! printf '\n%s UTF-8\n' "$loc" | do_sudo tee -a /etc/locale.gen >/dev/null; then
+                print_error "Failed to add $loc to /etc/locale.gen"
+                return 1
             fi
         done
         if ! spin "Generating en_US.UTF-8 and pl_PL.UTF-8..." do_sudo env LC_ALL=C locale-gen; then
