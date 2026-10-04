@@ -7,7 +7,7 @@
 # This script installs zconfig by:
 #  1. Checking system requirements (macOS or Debian-based Linux)
 #  2. Installing sudo and updating system packages (Linux only)
-#  3. Installing core utilities (Linux only)
+#  3. Generating English and Polish locales, then installing core utilities (Linux only)
 #  4. Installing git (xcode-select on macOS, apt on Linux)
 #  5. Installing Homebrew (if not present)
 #  6. Installing extra utilities like 7-Zip, eza, fzf, etc.
@@ -26,7 +26,7 @@
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.8.10"
+SCRIPT_VERSION="0.8.11"
 SCRIPT_DATE="2026-10-04"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
@@ -49,7 +49,7 @@ LOGFILE="$XDG_TMP_HOME/zconfig_$(date +%Y%m%d_%H%M%S).log"
 DEBUGLOG="${LOGFILE%.log}.debug.log"
 
 # Step counter - UPDATE THIS when adding/removing installation steps!
-# macOS: 10 steps, Linux: 14 steps (set dynamically after OS detection)
+# macOS: 10 steps, Linux: 15 steps (set dynamically after OS detection)
 TOTAL_STEPS=10
 STEP_NUM=0
 
@@ -59,9 +59,13 @@ URL_OHMYPOSH="https://ohmyposh.dev/install.sh"
 # Interactive mode (0 = automatic, 1 = ask questions)
 INTERACTIVE=${INTERACTIVE:-0}
 
-# Force English locale during installation to avoid parsing issues
-export LANG=en_US.UTF-8
-export LC_ALL=en_US.UTF-8
+# Bootstrap Linux with the always-available C locale. Requested UTF-8 locales
+# may not exist yet on a minimal installation; configure_locales generates them.
+if [[ "$(uname -s)" == "Linux" ]]; then
+    export LANG=C LC_ALL=C LANGUAGE=C
+else
+    export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
+fi
 
 # Homebrew environment - cleaner output
 export HOMEBREW_NO_ENV_HINTS=1
@@ -231,7 +235,7 @@ detect_os() {
                 . /etc/os-release
                 if [[ "$ID" == "debian" || "$ID_LIKE" == *"debian"* ]]; then
                     OS_TYPE="debian"
-                    TOTAL_STEPS=14  # Linux has additional steps
+                    TOTAL_STEPS=15  # Linux has additional steps
                 else
                     OS_TYPE="linux-other"
                 fi
@@ -258,10 +262,15 @@ get_version() {
     cmd_exists "$cmd" || { echo "unknown"; return 1; }
 
     local output
-    output=$("$cmd" --version 2>/dev/null) || \
-    output=$("$cmd" -v 2>/dev/null) || \
-    output=$("$cmd" -V 2>/dev/null) || \
-    { echo "unknown"; return 1; }
+    if [[ "$cmd" == "7zz" || "$cmd" == "7z" ]]; then
+        # 7-Zip has no --version flag; its info command prints the banner.
+        output=$("$cmd" i 2>/dev/null) || { echo "unknown"; return 1; }
+    else
+        output=$("$cmd" --version 2>/dev/null) || \
+        output=$("$cmd" -v 2>/dev/null) || \
+        output=$("$cmd" -V 2>/dev/null) || \
+        { echo "unknown"; return 1; }
+    fi
 
     # Extract version number from any line
     local version
@@ -871,11 +880,24 @@ update_system() {
 
     print_header "Updating system packages"
 
-    # Sync timezone and clock before apt update (avoids SSL cert failures)
-    do_sudo timedatectl set-timezone Europe/Warsaw 2>/dev/null
-    do_sudo systemctl restart systemd-timesyncd 2>/dev/null
-    sleep 1  # give timesyncd a moment to sync
-    print_info "Set timezone to ${c}Europe/Warsaw${x} and synced clock"
+    # Let systemd choose the installed NTP provider (e.g. chrony or timesyncd).
+    # Enabling NTP does not mean synchronization has already completed.
+    if do_sudo timedatectl set-timezone Europe/Warsaw; then
+        print_info "Set timezone to ${c}Europe/Warsaw${x}"
+    else
+        print_warning "Could not set timezone to Europe/Warsaw (see $DEBUGLOG)"
+    fi
+    if do_sudo timedatectl set-ntp true; then
+        local synced
+        synced=$(timedatectl show --property=NTPSynchronized --value 2>>"$DEBUGLOG")
+        case "$synced" in
+            yes) print_info "System clock is synchronized" ;;
+            no) print_info "Network time synchronization enabled; clock synchronization is pending" ;;
+            *) print_warning "Network time synchronization enabled; could not read clock synchronization status" ;;
+        esac
+    else
+        print_warning "Could not enable network time synchronization (see $DEBUGLOG)"
+    fi
     print_info "Current time: ${c}$(date '+%Y-%m-%d %H:%M:%S %Z')${x}"
 
     # Treat partial repository download failures as errors as well.
@@ -892,6 +914,62 @@ update_system() {
     return 0
 }
 
+# zconfig uses English messages and Polish formatting in inc/locales.zsh.
+# Generate both before starting zsh: its sudo-based repair cannot run after
+# cleanup_sudo has invalidated the installer credentials.
+configure_locales() {
+    is_debian || return 0
+    print_header "Configuring English and Polish locales"
+
+    if [[ "$(dpkg-query -W -f='${Status}' locales 2>/dev/null)" != "install ok installed" ]]; then
+        if ! spin "Installing locales via apt..." apt_install locales; then
+            print_error "Failed to install locales (see $DEBUGLOG)"
+            return 1
+        fi
+        track_install "locales"
+    fi
+
+    local required=(en_US.UTF-8 pl_PL.UTF-8)
+    local loc available needs_generation=0
+    available=$(LC_ALL=C locale -a 2>>"$DEBUGLOG") || return 1
+    for loc in "${required[@]}"; do
+        if ! printf '%s\n' "$available" | grep -Fqix "${loc/UTF-8/utf8}"; then
+            needs_generation=1
+        fi
+    done
+
+    if [[ "$needs_generation" -eq 1 ]]; then
+        # Preserve other locales and enable only the two required entries.
+        if ! do_sudo sed -i -E '/^[[:space:]]*#[[:space:]]*(en_US|pl_PL)\.UTF-8[[:space:]]+UTF-8[[:space:]]*$/s/^[[:space:]]*#[[:space:]]*//' /etc/locale.gen; then
+            print_error "Failed to enable required locales in /etc/locale.gen"
+            return 1
+        fi
+        for loc in "${required[@]}"; do
+            if ! grep -Eq "^[[:space:]]*${loc/./\\.}[[:space:]]+UTF-8[[:space:]]*$" /etc/locale.gen; then
+                if ! printf '\n%s UTF-8\n' "$loc" | do_sudo tee -a /etc/locale.gen >/dev/null; then
+                    print_error "Failed to add $loc to /etc/locale.gen"
+                    return 1
+                fi
+            fi
+        done
+        if ! spin "Generating en_US.UTF-8 and pl_PL.UTF-8..." do_sudo env LC_ALL=C locale-gen; then
+            print_error "Failed to generate required locales (see $DEBUGLOG)"
+            return 1
+        fi
+    fi
+
+    available=$(LC_ALL=C locale -a 2>>"$DEBUGLOG") || return 1
+    for loc in "${required[@]}"; do
+        if ! printf '%s\n' "$available" | grep -Fqix "${loc/UTF-8/utf8}"; then
+            print_error "Required locale $loc is still unavailable (see $DEBUGLOG)"
+            return 1
+        fi
+    done
+    export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 LANGUAGE=en_US:en:C
+    print_success "Locales available: en_US.UTF-8, pl_PL.UTF-8"
+    return 0
+}
+
 install_core_utils() {
     is_debian || return 0
 
@@ -903,8 +981,11 @@ install_core_utils() {
 }
 
 install_extra_utils() {
+    # Current apt packages provide 7z; Homebrew sevenzip provides 7zz.
+    local sevenzip_cmd=7z
+    [[ "$OS_TYPE" == "macos" ]] && sevenzip_cmd=7zz
     local utils=(
-        "7zz:sevenzip:"  # Official 7-Zip, installed via Homebrew on both platforms
+        "$sevenzip_cmd:sevenzip:7zip" # Official 7-Zip: apt on Linux, Homebrew on macOS
         "bat:bat:"       # cat replacement with syntax highlighting
         "curl::curl"     # URL transfers - used by network.zsh, wanip
         "dig::dnsutils"  # DNS lookup - used by network.zsh, mdig, wanip
@@ -1302,6 +1383,7 @@ main() {
         init_sudo || return 1
     fi
     update_system || return 1
+    configure_locales || return 1
 
     # Installation steps
     install_core_utils || return 1
