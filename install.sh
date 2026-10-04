@@ -26,7 +26,7 @@
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.8.13"
+SCRIPT_VERSION="0.8.14"
 SCRIPT_DATE="2026-10-05"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
@@ -276,6 +276,9 @@ get_version() {
     if [[ "$cmd" == "7zz" || "$cmd" == "7z" ]]; then
         # 7-Zip has no --version flag; its info command prints the banner.
         output=$("$cmd" i 2>/dev/null) || { echo "unknown"; return 1; }
+    elif [[ "$cmd" == "tmux" ]]; then
+        # -v enables verbose logging; only -V reports tmux's version.
+        output=$("$cmd" -V 2>/dev/null) || { echo "unknown"; return 1; }
     else
         output=$("$cmd" --version 2>/dev/null) || \
         output=$("$cmd" -v 2>/dev/null) || \
@@ -285,7 +288,7 @@ get_version() {
 
     # Extract version number from any line
     local version
-    version=$(echo "$output" | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
+    version=$(echo "$output" | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?[[:alpha:]]?' | head -1)
     echo "${version:-unknown}"
 }
 
@@ -438,7 +441,7 @@ sudo_refresh() {
     sudo -n -v >> "$DEBUGLOG" 2>&1 || status=$?
     [[ "$status" -eq 0 ]] && return 0
 
-    print_log "Sudo cache unavailable (exit: $status, shell PID: ${BASHPID:-$$}, elapsed: $(get_elapsed_time)); restoring authentication"
+    print_log "Sudo cache unavailable (exit: $status, shell PID: ${BASHPID:-$$}, elapsed: $(get_elapsed_time))"
     if is_debian && [[ "$SUDO_PASSWORD_READY" -eq 1 ]]; then
         if sudo_validate_password; then
             print_log "Sudo authentication restored from retained password"
@@ -463,16 +466,18 @@ sudo_checkpoint() {
     [[ "$SUDO_INITIALIZED" -eq 1 ]] || return 0
     sudo_keepalive_stop
 
+    if [[ "$OS_TYPE" == "macos" ]]; then
+        # Homebrew can invalidate credentials on exit. Formula installation
+        # needs no root access; renew natively only for a later privileged call.
+        print_log "Sudo keep-alive stopped after $stage; macOS authentication will be renewed only if a privileged command needs it"
+        return 0
+    fi
+
     sudo -n true >> "$DEBUGLOG" 2>&1 || status=$?
     print_log "Sudo checkpoint [$stage]: cached command exit=$status"
     if ! sudo_refresh; then
-        if [[ "$OS_TYPE" == "macos" ]]; then
-            print_info "Sudo credentials need renewal after $stage"
-            sudo -v || { print_error "Cannot renew sudo access"; return 1; }
-        else
-            print_error "Cannot restore sudo access after $stage (see $DEBUGLOG)"
-            return 1
-        fi
+        print_error "Cannot restore sudo access after $stage (see $DEBUGLOG)"
+        return 1
     fi
     if ! spin "Checking sudo access after $stage..." sudo_background_check; then
         print_error "Sudo background check failed after $stage (see $DEBUGLOG)"
@@ -490,8 +495,13 @@ do_sudo() {
         init_sudo || return 1
     fi
     if ! sudo_refresh; then
-        print_error "Cannot authenticate before privileged command: ${1:-unknown} (see $DEBUGLOG)"
-        return 1
+        if [[ "$OS_TYPE" == "macos" ]]; then
+            print_info "Administrator access required for ${1:-command} (sudo may ask for your password):"
+            sudo -v || { print_error "Cannot renew sudo access"; return 1; }
+        else
+            print_error "Cannot authenticate before privileged command: ${1:-unknown} (see $DEBUGLOG)"
+            return 1
+        fi
     fi
     sudo -n "$@" 2>> "$DEBUGLOG"
     local status=$?
@@ -1115,21 +1125,31 @@ install_omp() {
     # Not found - install it
     print_warning "${g}oh-my-posh${x} is not installed"
 
-    # Download and run installer with spinner
-    local omp_script
-    omp_script=$(curl -fsSL "$URL_OHMYPOSH") || {
-        print_warning "Failed to download ${g}oh-my-posh${x} installer (non-critical)"
+    # Keep downloaded code out of the debug log; preserve download failures.
+    local omp_installer omp_status=0
+    omp_installer=$(mktemp "${TMPDIR:-/tmp}/omp-install.XXXXXX") || {
+        print_warning "Failed to create ${g}oh-my-posh${x} installer file (non-critical)"
+        FAILED_TOOLS+=("oh-my-posh")
         return 0
     }
+    if ! curl -fsSL "$URL_OHMYPOSH" -o "$omp_installer"; then
+        rm -f "$omp_installer"
+        print_warning "Failed to download ${g}oh-my-posh${x} installer (non-critical)"
+        FAILED_TOOLS+=("oh-my-posh")
+        return 0
+    fi
 
-    if spin "Installing oh-my-posh..." bash -c "$omp_script" -- -d "$XDG_BIN_HOME"; then
+    spin "Installing oh-my-posh..." bash "$omp_installer" -d "$XDG_BIN_HOME" || omp_status=$?
+    rm -f "$omp_installer"
+    if [[ "$omp_status" -eq 0 && -x "$XDG_BIN_HOME/oh-my-posh" ]]; then
         local omp_ver
         omp_ver=$("$XDG_BIN_HOME/oh-my-posh" --version 2>/dev/null)
         print_success "${g}oh-my-posh${x} installed${omp_ver:+ (${c}${omp_ver}${x})}"
         track_install "oh-my-posh"
         return 0
     else
-        print_warning "Failed to install ${g}oh-my-posh${x} (non-critical)"
+        print_warning "Failed to install ${g}oh-my-posh${x} (non-critical; see $DEBUGLOG)"
+        FAILED_TOOLS+=("oh-my-posh")
         return 0
     fi
 }
