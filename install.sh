@@ -26,7 +26,7 @@
 # Configuration
 # =============================================================================
 
-SCRIPT_VERSION="0.8.9"
+SCRIPT_VERSION="0.8.10"
 SCRIPT_DATE="2026-10-04"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
@@ -91,8 +91,13 @@ ZCONFIG="${g}zconfig${x}"
 # Installation tracking
 INSTALLED=()
 SKIPPED=()
+FAILED_TOOLS=()
 
-# No password is stored: sudo manages authentication and its timestamp cache.
+# Linux retains the password only in shell memory until cleanup. It is used
+# solely by sudo -S -v (authentication), never as the stdin of a command.
+SUDO_PASS=""
+export -n SUDO_PASS
+SUDO_PASSWORD_READY=0
 SUDO_INITIALIZED=0
 
 # PID of background sudo keep-alive loop (both platforms)
@@ -323,8 +328,8 @@ abort_missing() {
 }
 
 # =============================================================================
-# Sudo wrapper functions - authenticate in the foreground, then use sudo -n
-# Keep the timestamp alive without changing the system's sudoers timeout.
+# Sudo wrapper functions - separate authentication from command input
+# Recover Linux credentials after cache invalidation without another prompt.
 # =============================================================================
 
 # Initialize sudo in the foreground, before any privileged background command.
@@ -334,10 +339,23 @@ init_sudo() {
 
     print_log "Sudo implementation: $(sudo --version 2>/dev/null | head -n 1)"
     print_log "Sudo terminal: $(tty 2>/dev/null)"
-    print_info "Administrator access required (sudo may ask for your password):"
-    if ! sudo -v; then
-        print_error "Cannot obtain sudo access"
-        return 1
+    if is_debian; then
+        print_info "Sudo password required once; authentication can be restored during installation:"
+        read_sudo_password || return 1
+        # Ensure the supplied password is really checked even if sudo was used
+        # earlier in this terminal. Do not combine -k with -v: cache it normally.
+        sudo -k >> "$DEBUGLOG" 2>&1 || return 1
+        if ! sudo_validate_password; then
+            print_error "Cannot authenticate with sudo (see $DEBUGLOG)"
+            return 1
+        fi
+    else
+        # Keep native macOS authentication, including its PAM/Touch ID setup.
+        print_info "Administrator access required (sudo may ask for your password):"
+        if ! sudo -v; then
+            print_error "Cannot obtain sudo access"
+            return 1
+        fi
     fi
 
     SUDO_INITIALIZED=1
@@ -345,21 +363,90 @@ init_sudo() {
     # Check the same background context that spin uses. Some sudo policies
     # cache credentials by parent PID rather than by terminal session.
     if ! spin "Checking cached sudo access in background..." sudo_background_check; then
-        print_error "Cached sudo access is unavailable in background commands"
+        print_error "Sudo access is unavailable in background commands"
         print_info "Run from an interactive terminal (SSH: use ssh -t) and check $DEBUGLOG"
         return 1
     fi
 
     sudo_keepalive_start
-    print_success "Sudo access ready; keeping credentials cached during installation"
+    print_success "Sudo access ready; authentication is separate from command stdin"
     return 0
+}
+
+# Read from the terminal even when the installer itself receives piped input.
+read_sudo_password() {
+    if ! IFS= read -r -s -p "[sudo] password for $(whoami): " SUDO_PASS </dev/tty; then
+        printf '\n'
+        print_error "Cannot read sudo password; run from an interactive terminal"
+        return 1
+    fi
+    printf '\n'
+    SUDO_PASSWORD_READY=1
+}
+
+# This sudo invocation validates credentials only: it executes no child command.
+# Suppress xtrace locally so bash -x cannot print the password expansion.
+sudo_validate_password() {
+    local tracing=0 status
+    if [[ "$-" == *x* ]]; then
+        tracing=1
+        set +x
+    fi
+    printf '%s\n' "$SUDO_PASS" | sudo -S -p '' -v >> "$DEBUGLOG" 2>&1
+    status=$?
+    [[ "$tracing" -eq 1 ]] && set -x
+    return "$status"
+}
+
+# Refresh a usable cache or restore it from the retained Linux password.
+sudo_refresh() {
+    local status=0
+    sudo -n -v >> "$DEBUGLOG" 2>&1 || status=$?
+    [[ "$status" -eq 0 ]] && return 0
+
+    print_log "Sudo cache unavailable (exit: $status, shell PID: ${BASHPID:-$$}, elapsed: $(get_elapsed_time)); restoring authentication"
+    if is_debian && [[ "$SUDO_PASSWORD_READY" -eq 1 ]]; then
+        if sudo_validate_password; then
+            print_log "Sudo authentication restored from retained password"
+            return 0
+        fi
+    fi
+    return 1
 }
 
 # Keep a shell parent alive, as apt_run/do_sudo do inside the spinner.
 sudo_background_check() {
+    sudo_refresh || return 1
     sudo -n true
     local status=$?
     return "$status"
+}
+
+# Check privileges after an external installer may have invalidated its cache.
+# This runs in the foreground, before more apt or chsh operations are started.
+sudo_checkpoint() {
+    local stage="$1" status=0
+    [[ "$SUDO_INITIALIZED" -eq 1 ]] || return 0
+    sudo_keepalive_stop
+
+    sudo -n true >> "$DEBUGLOG" 2>&1 || status=$?
+    print_log "Sudo checkpoint [$stage]: cached command exit=$status"
+    if ! sudo_refresh; then
+        if [[ "$OS_TYPE" == "macos" ]]; then
+            print_info "Sudo credentials need renewal after $stage"
+            sudo -v || { print_error "Cannot renew sudo access"; return 1; }
+        else
+            print_error "Cannot restore sudo access after $stage (see $DEBUGLOG)"
+            return 1
+        fi
+    fi
+    if ! spin "Checking sudo access after $stage..." sudo_background_check; then
+        print_error "Sudo background check failed after $stage (see $DEBUGLOG)"
+        return 1
+    fi
+    sudo_keepalive_start
+    print_success "Sudo access verified after $stage"
+    return 0
 }
 
 # Preserve the command's stdin; never pipe a password into its input.
@@ -368,7 +455,14 @@ do_sudo() {
     if [[ "$SUDO_INITIALIZED" -ne 1 ]]; then
         init_sudo || return 1
     fi
-    sudo -n "$@"
+    if ! sudo_refresh; then
+        print_error "Cannot authenticate before privileged command: ${1:-unknown} (see $DEBUGLOG)"
+        return 1
+    fi
+    sudo -n "$@" 2>> "$DEBUGLOG"
+    local status=$?
+    [[ "$status" -ne 0 ]] && print_log "Privileged command failed: ${1:-unknown}, exit=$status"
+    return "$status"
 }
 
 # Silent apt-get wrapper (no warnings, no needrestart prompts)
@@ -390,6 +484,9 @@ cleanup_sudo() {
         sudo -k 2>/dev/null || true
         SUDO_INITIALIZED=0
     fi
+    SUDO_PASS=""
+    unset SUDO_PASS
+    SUDO_PASSWORD_READY=0
 }
 
 # Keep sudo credentials cached while a long non-interactive command runs
@@ -400,8 +497,8 @@ sudo_keepalive_start() {
         local sleeper=""
         trap '[[ -n "$sleeper" ]] && kill "$sleeper" 2>/dev/null; exit 0' TERM INT
         while kill -0 "$$" 2>/dev/null; do
-            if ! sudo -n -v >> "$DEBUGLOG" 2>&1; then
-                print_log "WARNING: Sudo keep-alive failed; later sudo commands may fail"
+            if ! sudo_refresh; then
+                print_log "WARNING: Sudo keep-alive cannot restore authentication"
                 break
             fi
             sleep 20 &
@@ -538,7 +635,7 @@ install_utils() {
 
         # For apt-only packages without a command, check via dpkg
         if [[ "$OS_TYPE" != "macos" && -n "$apt_pkg" && -z "$brew_pkg" ]]; then
-            if dpkg -l "$apt_pkg" &>/dev/null 2>&1; then
+            if [[ "$(dpkg-query -W -f='${Status}' "$apt_pkg" 2>/dev/null)" == "install ok installed" ]]; then
                 track_skip "$apt_pkg"
                 continue
             fi
@@ -582,6 +679,7 @@ install_utils() {
         else
             print_warning "Failed to install ${g}$pkg_name${x}"
             failed+=("$cmd_name")
+            FAILED_TOOLS+=("$cmd_name")
         fi
     done
 
@@ -595,6 +693,7 @@ install_utils() {
         else
             print_warning "Failed to install ${g}$pkg_name${x}"
             failed+=("$cmd_name")
+            FAILED_TOOLS+=("$cmd_name")
         fi
     done
 
@@ -628,6 +727,9 @@ print_summary() {
     if [[ ${#SKIPPED[@]} -gt 0 ]]; then
         print_info "Already present: ${d}${SKIPPED[*]}${x}"
     fi
+    if [[ ${#FAILED_TOOLS[@]} -gt 0 ]]; then
+        print_warning "Utilities not installed: ${FAILED_TOOLS[*]}"
+    fi
 }
 
 # Print installation successful message
@@ -641,7 +743,13 @@ installation_successful() {
         export COLORTERM=truecolor
     fi
 
-    print_end_header "Installation complete!"
+    if [[ ${#FAILED_TOOLS[@]} -gt 0 ]]; then
+        print_end_header "Installation finished with missing utilities"
+        print_log "Installation result: completed with missing utilities"
+    else
+        print_end_header "Installation complete!"
+        print_log "Installation result: completed successfully"
+    fi
     print_summary
     printf "\n"
     print_info "$ZCONFIG installed to: ${c}$ZCONFIG_DIR${x}"
@@ -800,7 +908,7 @@ install_extra_utils() {
         "bat:bat:"       # cat replacement with syntax highlighting
         "curl::curl"     # URL transfers - used by network.zsh, wanip
         "dig::dnsutils"  # DNS lookup - used by network.zsh, mdig, wanip
-        "eza:eza:eza"    # ls replacement with git status and icons
+        "eza:eza:"       # ls replacement; Homebrew on both platforms
         "fzf:fzf:"       # fuzzy finder
         "glow:glow:"     # markdown viewer
         "gh:gh:"         # GitHub CLI
@@ -1068,6 +1176,7 @@ install_homebrew() {
             print_success "${g}Homebrew${x} is available$(fmt_version brew)"
             track_skip "Homebrew"
             brew analytics off &>/dev/null
+            sudo_checkpoint "Homebrew detection" || return 1
             return 0
         fi
     done
@@ -1111,6 +1220,7 @@ install_homebrew() {
 
     if [[ $brew_status -eq 0 ]]; then
         init_brew_shellenv || { print_error "Failed to initialize Homebrew environment"; return 1; }
+        sudo_checkpoint "Homebrew installation" || return 1
         print_success "${g}Homebrew${x} installed$(fmt_version brew)"
         track_install "Homebrew"
         brew analytics off &>/dev/null
@@ -1125,7 +1235,7 @@ set_default_shell() {
     print_header "Setting default shell"
 
     local zsh_path
-    zsh_path=$(command -v zsh)
+    zsh_path=$(command -v zsh) || { print_error "Cannot find zsh"; return 1; }
     local current_shell="${SHELL##*/}"
 
     if [[ "$current_shell" == "zsh" ]]; then
@@ -1155,9 +1265,9 @@ set_default_shell() {
         print_success "Default shell changed to ${g}zsh${x}"
         return 0
     else
-        print_warning "Failed to change default shell"
+        print_error "Failed to change default shell"
         print_info "You can change it manually with: ${g}chsh -s ${c}$zsh_path${x}"
-        return 0
+        return 1
     fi
 }
 
