@@ -25,7 +25,9 @@ assert_eq "$(get_file_mode $tmp/one)" 4755 "setuid bit"
 chmod 600 $tmp/one
 assert_eq "$(get_file_mode $tmp/one)" 600 "plain mode"
 
-## path arrays
+## path arrays (the original PATH is restored before running external commands;
+## on macOS rm and mkdir live in /bin, which these tests remove)
+local -a saved_path=($path)
 path=(/usr/bin /bin)
 path_prepend /bin/
 assert_eq "${path[*]}" "/bin /usr/bin" "prepend moves existing entry, trims slash"
@@ -37,6 +39,7 @@ assert_eq "${path[*]}" "/usr/bin" "remove"
 fpath_append $tmp/dir
 assert_eq "${fpath[-1]}" "$tmp/dir" "fpath_append"
 assert_rc 2 path_print nosuch
+path=($saved_path)
 
 command rm -r -- $tmp
 
@@ -44,7 +47,6 @@ command rm -r -- $tmp
 ## (${arr:#$var} does not treat $var as a pattern; only ${arr:#$~var} would)
 tmp=$(mktemp -d)
 mkdir $tmp/a $tmp/b $tmp/'[ab]'
-local -a saved_path=($path)
 path=($tmp/a $tmp/b)
 path_prepend "$tmp/[ab]"
 assert_eq "${path[*]}" "$tmp/[ab] $tmp/a $tmp/b" "prepend with [ab] keeps a and b"
