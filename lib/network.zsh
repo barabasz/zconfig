@@ -4,457 +4,488 @@
 # Shell files tracking - keep at the top
 zfile_track_start ${0:A}
 
-# --- Connectivity Checks ---
+##
+# Network functions: connectivity checks, interface and address info,
+# validation and small utilities (url_encode/url_decode live in strings.zsh)
+# Depends on: system.zsh (is_macos, is_linux), print.zsh (output),
+#             fn.zsh (_FN_TYPES regex patterns, single source for validation),
+#             zsh/net/tcp (ztcp), zsh/zselect
+# TCP checks use a timeout (default ZSH_NET_TIMEOUT=2 seconds), because ztcp
+# itself has none and may hang on filtered ports.
+##
 
-# Check if network is connected (interface check)
+# Default timeout in seconds for TCP checks
+: ${ZSH_NET_TIMEOUT:=2}
+
+## Internal helpers
+
+# Try a TCP connection with a timeout (internal)
+# ztcp runs in a background subshell; the parent polls it with zselect.
+# Usage: _tcp_probe <host> <port> [timeout_seconds]
+# Returns: 0 connected, 1 refused or timed out
+_tcp_probe() {
+    setopt localoptions nomonitor nonotify
+    local host=$1 port=$2
+    local -i timeout_cs=$(( ${3:-$ZSH_NET_TIMEOUT} * 100 )) waited=0
+    ( ztcp "$host" "$port" 2>/dev/null && ztcp -c $REPLY ) &
+    local -i pid=$!
+    while (( waited < timeout_cs )); do
+        if ! kill -0 $pid 2>/dev/null; then
+            wait $pid
+            return
+        fi
+        zselect -t 5
+        (( waited += 5 ))
+    done
+    kill $pid 2>/dev/null
+    wait $pid 2>/dev/null
+    return 1
+}
+
+## Connectivity checks
+
+# Check if network is connected (a default route exists)
 # Usage: is_connected
-# Returns: 0 (true) if connected, 1 (false) otherwise
+# Returns: 0 true, 1 false, 2 invalid usage
 is_connected() {
-    (( ARGC == 0 )) || return 2 # Invalid usage
-    
-    if is_macos; then
-        # Check specific interfaces on macOS
-        local ip
-        # ipconfig getifaddr returns 0 (success) if IP is found
-        command ipconfig getifaddr en0 >/dev/null 2>&1 || \
-        command ipconfig getifaddr en1 >/dev/null 2>&1
-    elif is_linux; then
-        # Check for default route presence using ip route
-        [[ -n "$(command ip route show default 2>/dev/null)" ]]
-    else
-        return 1
-    fi
+    (( ARGC == 0 )) || return 2
+    get_active_interface >/dev/null
 }
 
-# Check if internet is reachable (TCP check to Cloudflare DNS)
-# Usage: is_online
-# Returns: 0 (true) if online, 1 (false) otherwise
+# Check if internet is reachable (TCP check to Cloudflare DNS 1.1.1.1:53)
+# Usage: is_online [timeout_seconds]
+# Returns: 0 true, 1 false, 2 invalid usage
 is_online() {
-    (( ARGC == 0 )) || return 2 # Invalid usage
-    # Optimization: Use ztcp instead of ping (no fork, instant timeout control via system)
-    # 1.1.1.1 is Cloudflare DNS, port 53 is almost always open
-    if ztcp 1.1.1.1 53 2>/dev/null; then
-        local fd=$REPLY
-        ztcp -c $fd
-        return 0
-    fi
-    return 1
+    (( ARGC <= 1 )) || return 2
+    [[ -z $1 || $1 == <1-> ]] || return 2
+    _tcp_probe 1.1.1.1 53 $1
 }
 
-# Check if port is open
-# Usage: is_port_open "localhost" 80
-# Returns: 0 (true) if open, 1 (false) otherwise
+# Check if a TCP port is open
+# Usage: is_port_open <host> <port> [timeout_seconds]
+# Example: is_port_open localhost 80
+# Returns: 0 open, 1 closed or timed out, 2 invalid usage
 is_port_open() {
-    (( ARGC == 2 )) || return 2 # Invalid usage
-    local host=$1
-    local port=$2
+    (( ARGC >= 2 && ARGC <= 3 )) || return 2
+    [[ $2 == <1-65535> && ( -z $3 || $3 == <1-> ) ]] || return 2
+    _tcp_probe "$1" "$2" $3
+}
 
-    # Use native Zsh TCP module
-    if ztcp "$host" "$port" 2>/dev/null; then
-        local fd=$REPLY
-        ztcp -c $fd
-        return 0
-    fi
+# Wait until a TCP port becomes open
+# Usage: wait_for_port <host> <port> [timeout_seconds]   (default: 30)
+# Example: wait_for_port localhost 5432 60 && psql ...
+# Returns: 0 port open, 1 timed out, 2 invalid usage
+wait_for_port() {
+    (( ARGC >= 2 && ARGC <= 3 )) || { _lib_usage "wait_for_port <host> <port> [timeout]"; return }
+    [[ $2 == <1-65535> && ( -z $3 || $3 == <1-> ) ]] || return 2
+    local -i deadline=$(( EPOCHSECONDS + ${3:-30} ))
+    while (( EPOCHSECONDS < deadline )); do
+        _tcp_probe "$1" "$2" 1 && return 0
+        zselect -t 50
+    done
     return 1
 }
 
-# --- Network Info (Getters) ---
+## Host and interface info
 
 # Get hostname (short)
 # Usage: get_hostname
-# Returns: "macbook"
+# Output: e.g. "macbook" (stdout); also sets REPLY
+# Returns: 0 success, 2 invalid usage
 get_hostname() {
-    (( ARGC == 0 )) || return 2 # Invalid usage
-    print -- $HOST
+    (( ARGC == 0 )) || return 2
+    REPLY=${HOST%%.*}
+    print -r -- "$REPLY"
 }
 
-# Get Fully Qualified Domain Name
+# Get fully qualified domain name
 # Usage: get_fqdn
-# Returns: "macbook.local" or "server.example.com"
+# Output: e.g. "macbook.local" or "server.example.com" (stdout); also sets REPLY
+# Returns: 0 success, 2 invalid usage
 get_fqdn() {
-    (( ARGC == 0 )) || return 2 # Invalid usage
-    if is_linux; then
-        command hostname -f
-    else
-        # macOS/BSD often fails with -f, fallback to HOST
-        command hostname -f 2>/dev/null || print -- $HOST
-    fi
+    (( ARGC == 0 )) || return 2
+    # macOS/BSD hostname -f may fail; fall back to $HOST
+    REPLY=$(command hostname -f 2>/dev/null)
+    [[ -n $REPLY ]] || REPLY=$HOST
+    print -r -- "$REPLY"
 }
 
-# Get active network interface (primary)
+# Get active (default route) network interface
 # Usage: get_active_interface
-# Returns: "en0" or "eth0"
+# Output: e.g. "en0" or "eth0" (stdout); also sets REPLY
+# Returns: 0 success, 1 no default route, 2 invalid usage
 get_active_interface() {
-    (( ARGC == 0 )) || return 2 # Invalid usage
+    (( ARGC == 0 )) || return 2
+    REPLY=""
     if is_macos; then
-        # Route get default returns interface name
         local route_info
         route_info=$(command route -n get default 2>/dev/null)
-        # Extract value after "interface: "
-        local iface=${route_info#*interface: }
-        print -- ${iface%%$'\n'*}
-    elif is_linux; then
-        # Parse ip route default line
-        local -a parts
-        parts=( $(command ip -4 route show default 2>/dev/null) )
-        # "default via X dev Y ..." -> Y is usually at index 5 (1-based)
-        local idx
-        idx=${parts[(i)dev]}
-        print -- $parts[idx+1]
+        [[ $route_info =~ 'interface: ([^[:space:]]+)' ]] && REPLY=$match[1]
+    elif (( ${+commands[ip]} )); then
+        # "default via X dev Y ..." -> word after "dev"
+        local -a parts=($(command ip -4 route show default 2>/dev/null))
+        local -i idx=${parts[(i)dev]}
+        (( idx < ${#parts} )) && REPLY=$parts[idx+1]
+    elif [[ -r /proc/net/route ]]; then
+        # Destination 00000000 marks the default route
+        local line
+        for line in "${(@f)$(</proc/net/route)}"; do
+            [[ ${line[(w)2]} == 00000000 ]] && { REPLY=${line[(w)1]}; break }
+        done
     fi
+    [[ -n $REPLY ]] || return 1
+    print -r -- "$REPLY"
 }
 
 # Get list of network interfaces
 # Usage: get_interfaces
-# Returns: list of interfaces (one per line)
+# Output: interface names, one per line (stdout); also sets reply
+# Returns: 0 success, 2 invalid usage
 get_interfaces() {
-    (( ARGC == 0 )) || return 2 # Invalid usage
-    if is_linux; then
-        # Pure Zsh: glob /sys/class/net files
-        print -l /sys/class/net/*(N:t)
+    (( ARGC == 0 )) || return 2
+    if [[ -d /sys/class/net ]]; then
+        reply=(/sys/class/net/*(N:t))
     else
-        # macOS: parsing ifconfig -l (space separated) to newlines
-        print -l ${(s: :)"$(command ifconfig -l)"}
+        reply=(${(s: :)"$(command ifconfig -l 2>/dev/null)"})
     fi
+    print -rl -- $reply
 }
 
 # Get MAC address of an interface
-# Usage: get_mac_address "eth0"
-# Returns: "aa:bb:cc:dd:ee:ff"
+# Usage: get_mac_address <interface>
+# Output: e.g. "aa:bb:cc:dd:ee:ff" (stdout); also sets REPLY
+# Returns: 0 success, 1 unknown interface, 2 invalid usage
 get_mac_address() {
-    (( ARGC == 1 )) || return 2 # Invalid usage
-    local iface=$1
-
-    if is_linux; then
-        # Pure Zsh file read (fastest method on Linux, no external commands)
-        [[ -r "/sys/class/net/$iface/address" ]] && cat "/sys/class/net/$iface/address"
+    (( ARGC == 1 )) || return 2
+    REPLY=""
+    if [[ -r /sys/class/net/$1/address ]]; then
+        # Linux: read sysfs directly (no fork)
+        REPLY=$(</sys/class/net/$1/address)
     elif is_macos; then
-        # Parse ifconfig output safely using Zsh word splitting
-        local out
-        out=$(command ifconfig "$iface" 2>/dev/null)
-        
-        # ${=out} splits the string into an array of words (handling newlines/spaces)
-        local -a words=( ${=out} )
-        
-        # Find the index of the 'ether' keyword using (i) subscript flag
-        local idx=${words[(i)ether]}
-        
-        # If 'ether' was found (idx <= length) and is not the last word
-        if (( idx < ${#words} )); then
-            print -- $words[idx+1]
-        fi
+        local -a words=(${=$(command ifconfig "$1" 2>/dev/null)})
+        local -i idx=${words[(i)ether]}
+        (( idx < ${#words} )) && REPLY=$words[idx+1]
     fi
+    [[ -n $REPLY ]] || return 1
+    print -r -- "$REPLY"
 }
 
-# Get local IP address (LAN)
+# Get local IPv4 address (LAN)
 # Usage: get_local_ip [interface]
-# Returns: IP address
+# Output: IP address (stdout); also sets REPLY
+# Returns: 0 success, 1 not found, 2 invalid usage
 get_local_ip() {
-    (( ARGC <= 1 )) || return 2 # Invalid usage
+    (( ARGC <= 1 )) || return 2
     local iface=$1
-
+    REPLY=""
     if is_macos; then
-        # Optimization from your lanip script
-        if [[ -z "$iface" ]]; then
-            # Try to guess active interface if none provided
-            iface=$(get_active_interface)
-            [[ -z "$iface" ]] && iface="en0"
-        fi
-        
-        # Using ipconfig is faster and cleaner than parsing ifconfig
-        command ipconfig getifaddr "$iface" 2>/dev/null
-        
-    elif is_linux; then
-        # Optimization: hostname -I is the fastest standard method on Linux
-        if [[ -z "$iface" ]]; then
-            local ip
-            ip=$(command hostname -I 2>/dev/null)
-            print -- ${ip%% *} # Return first IP
-        else
-            # If interface specific, use ip command
-            local -a parts
-            parts=( $(command ip -4 -o addr show dev "$iface" 2>/dev/null) )
-            # Format: ... inet 192.168.1.5/24 ...
-            # We want the 4th field (usually) or look for inet
-            local idx=${parts[(i)inet]}
-            if (( idx <= ${#parts} )); then
-                local ip_cidr=$parts[idx+1]
-                print -- ${ip_cidr%%/*}
-            fi
-        fi
+        [[ -n $iface ]] || iface=$(get_active_interface) || iface=en0
+        REPLY=$(command ipconfig getifaddr "$iface" 2>/dev/null)
+    elif [[ -z $iface ]] && (( ${+commands[hostname]} )); then
+        # hostname -I lists all addresses; take the first one
+        local ips=$(command hostname -I 2>/dev/null)
+        REPLY=${ips%% *}
     fi
+    if [[ -z $REPLY ]] && (( ${+commands[ip]} )); then
+        [[ -n $iface ]] || iface=$(get_active_interface)
+        local -a parts=($(command ip -4 -o addr show ${iface:+dev "$iface"} scope global 2>/dev/null))
+        local -i idx=${parts[(i)inet]}
+        (( idx < ${#parts} )) && REPLY=${parts[idx+1]%%/*}
+    fi
+    [[ -n $REPLY ]] || return 1
+    print -r -- "$REPLY"
 }
 
-# Get public IP address (WAN)
+# Get local global-scope IPv6 address
+# Usage: get_local_ip6 [interface]
+# Output: IPv6 address (stdout); also sets REPLY
+# Returns: 0 success, 1 not found, 2 invalid usage
+get_local_ip6() {
+    (( ARGC <= 1 )) || return 2
+    local iface=$1
+    REPLY=""
+    if is_macos; then
+        [[ -n $iface ]] || iface=$(get_active_interface) || iface=en0
+        local line
+        for line in "${(@f)$(command ifconfig "$iface" 2>/dev/null)}"; do
+            # Skip link-local (fe80::) and temporary addresses
+            if [[ $line == *inet6* && $line != *fe80:* && $line != *temporary* ]]; then
+                REPLY=${line[(w)2]}
+                break
+            fi
+        done
+    elif (( ${+commands[ip]} )); then
+        local -a parts=($(command ip -6 -o addr show ${iface:+dev "$iface"} scope global 2>/dev/null))
+        local -i idx=${parts[(i)inet6]}
+        (( idx < ${#parts} )) && REPLY=${parts[idx+1]%%/*}
+    fi
+    [[ -n $REPLY ]] || return 1
+    print -r -- "$REPLY"
+}
+
+# Get public IPv4 address (WAN)
+# DNS (dig) first for speed, then HTTP services as fallback
 # Usage: get_public_ip
-# Returns: IP address
-# Optimization: Uses DNS (dig) first as per 'wanip' script for max speed
+# Output: IP address (stdout); also sets REPLY
+# Returns: 0 success, 1 failure, 2 invalid usage
 get_public_ip() {
-    (( ARGC == 0 )) || return 2 # Invalid usage
-    local ip
-    
-    # Method 1: DNS (Ultra fast, ~20-50ms)
+    (( ARGC == 0 )) || return 2
+    REPLY=""
     if (( ${+commands[dig]} )); then
-        # Try OpenDNS
-        ip=$(command dig +short -4 myip.opendns.com @resolver1.opendns.com 2>/dev/null)
-        if [[ -n "$ip" ]]; then
-            print -- ${ip//\"/} # Remove quotes if any
-            return 0
-        fi
-        
-        # Try Google DNS
-        ip=$(command dig -4 TXT +short o-o.myaddr.l.google.com @ns1.google.com 2>/dev/null)
-        if [[ -n "$ip" ]]; then
-            print -- ${ip//\"/}
-            return 0
+        REPLY=$(command dig +short +time=2 +tries=1 -4 myip.opendns.com @resolver1.opendns.com 2>/dev/null)
+        [[ -z $REPLY ]] && REPLY=$(command dig +short +time=2 +tries=1 -4 TXT o-o.myaddr.l.google.com @ns1.google.com 2>/dev/null)
+        REPLY=${REPLY//\"/}
+    fi
+    if [[ -z $REPLY ]]; then
+        if (( ${+commands[curl]} )); then
+            REPLY=$(command curl -4 -fsS -m 2 https://api.ipify.org 2>/dev/null) ||
+                REPLY=$(command curl -4 -fsS -m 2 https://ifconfig.me/ip 2>/dev/null)
+        elif (( ${+commands[wget]} )); then
+            REPLY=$(command wget -qO- --timeout=2 https://api.ipify.org 2>/dev/null)
         fi
     fi
-    
-    # Method 2: HTTP (Fallback, slower)
-    if (( ${+commands[curl]} )); then
-        command curl -4 -s -m 2 https://api.ipify.org || \
-        command curl -4 -s -m 2 https://ifconfig.me/ip
-    elif (( ${+commands[wget]} )); then
-        command wget -qO- --timeout=2 https://api.ipify.org
-    else
-        return 1
-    fi
+    is_valid_ip "$REPLY" || { REPLY=""; return 1 }
+    print -r -- "$REPLY"
 }
 
 # Get default gateway IP
 # Usage: get_gateway
-# Returns: Gateway IP
+# Output: gateway IP (stdout); also sets REPLY
+# Returns: 0 success, 1 no default route, 2 invalid usage
 get_gateway() {
-    (( ARGC == 0 )) || return 2 # Invalid usage
+    (( ARGC == 0 )) || return 2
+    REPLY=""
     if is_macos; then
         local out
         out=$(command route -n get default 2>/dev/null)
-        local gw=${out#*gateway: }
-        print -- ${gw%%$'\n'*}
-    elif is_linux; then
-        local -a parts
-        parts=( $(command ip -4 route show default 2>/dev/null) )
-        print -- $parts[3]
+        [[ $out =~ 'gateway: ([^[:space:]]+)' ]] && REPLY=$match[1]
+    elif (( ${+commands[ip]} )); then
+        local -a parts=($(command ip -4 route show default 2>/dev/null))
+        local -i idx=${parts[(i)via]}
+        (( idx < ${#parts} )) && REPLY=$parts[idx+1]
+    elif [[ -r /proc/net/route ]]; then
+        # Gateway is a little-endian hex number, e.g. 0101A8C0 = 192.168.1.1
+        local line hex
+        for line in "${(@f)$(</proc/net/route)}"; do
+            [[ ${line[(w)2]} == 00000000 ]] || continue
+            hex=${line[(w)3]}
+            (( 16#$hex )) && REPLY="$(( 16#${hex[7,8]} )).$(( 16#${hex[5,6]} )).$(( 16#${hex[3,4]} )).$(( 16#${hex[1,2]} ))"
+            break
+        done
     fi
+    [[ -n $REPLY ]] || return 1
+    print -r -- "$REPLY"
 }
 
 # Get DNS servers
+# With systemd-resolved, /etc/resolv.conf points to the 127.0.0.53 stub,
+# so resolvectl is asked for the real upstream servers.
 # Usage: get_dns_servers
-# Returns: list of DNS IPs
+# Output: DNS server IPs, one per line (stdout); also sets reply
+# Returns: 0 success, 1 none found, 2 invalid usage
 get_dns_servers() {
-    (( ARGC == 0 )) || return 2 # Invalid usage
+    (( ARGC == 0 )) || return 2
+    reply=()
+    local line key value
     if is_macos; then
-        # Parse scutil output for cleaner results than resolv.conf
-        command scutil --dns | while read -r line; do
-            if [[ $line == *nameserver\[* ]]; then
-                print -- ${line##* : }
-            fi
-        done | sort -u
+        for line in "${(@f)$(command scutil --dns 2>/dev/null)}"; do
+            [[ $line == *nameserver\[* ]] && reply+=("${line##* : }")
+        done
     else
-        # Linux: read /etc/resolv.conf
-        while read -r key value; do
-            [[ $key == "nameserver" ]] && print -- $value
-        done < /etc/resolv.conf
+        if [[ -r /etc/resolv.conf ]]; then
+            while read -r key value; do
+                [[ $key == nameserver ]] && reply+=("$value")
+            done < /etc/resolv.conf
+        fi
+        if [[ ${reply[*]} == 127.0.0.53 ]] && (( ${+commands[resolvectl]} )); then
+            reply=()
+            for line in "${(@f)$(command resolvectl dns 2>/dev/null)}"; do
+                # "Global: 1.1.1.1" or "Link 2 (eth0): 192.168.1.1 1.1.1.1"
+                [[ $line == *": "* ]] && reply+=(${=line#*: })
+            done
+        fi
     fi
+    reply=(${(u)reply})
+    (( ${#reply} )) || return 1
+    print -rl -- $reply
 }
 
 # Get current Wi-Fi SSID
 # Usage: get_wifi_ssid [interface]
-# Returns: "MyWiFiNetwork"
+# Output: SSID (stdout); also sets REPLY
+# Returns: 0 success, 1 not available, 2 invalid usage
 get_wifi_ssid() {
-    (( ARGC <= 1 )) || return 2 # Invalid usage
+    (( ARGC <= 1 )) || return 2
     local iface=$1
-
+    REPLY=""
     if is_macos; then
-        # 1. Resolve interface if not provided
-        if [[ -z "$iface" ]]; then
-            if (( ${+functions[get_active_interface]} )); then
-                iface=$(get_active_interface)
-            fi
-            # Default fallback if detection fails
-            [[ -z "$iface" ]] && iface="en0"
-        fi
-
-        # 2. Get SSID using ipconfig getsummary (User preferred method)
-        local out
-        out=$(command ipconfig getsummary "$iface" 2>/dev/null | grep " SSID :")
-
-        # 3. Parse output: "  SSID : Name"
-        local ssid=""
-        if [[ -n "$out" ]]; then
-            ssid=${out#* : }
-        fi
-
-        # 4. Validate and Return
-        if [[ -n "$ssid" && "$ssid" != *"<redacted>"* && "$ssid" != *"<SSID Redacted>"* ]]; then
-            print -- "$ssid"
-            return 0
-        else
-            # Instruction for the user as requested
+        [[ -n $iface ]] || iface=$(get_active_interface) || iface=en0
+        local line
+        for line in "${(@f)$(command ipconfig getsummary "$iface" 2>/dev/null)}"; do
+            [[ $line == *" SSID : "* ]] && { REPLY=${line#* : }; break }
+        done
+        if [[ -z $REPLY || $REPLY == *[Rr]edacted* ]]; then
+            REPLY=""
             printe "Could not retrieve SSID (result empty or redacted)."
-            printe "Try running: sudo ipconfig sethidewifiinfo 0"
+            printi "Try running: sudo ipconfig sethidewifiinfo 0"
             return 1
         fi
-
-    elif is_linux; then
-        # Linux implementation remains unchanged
-        if (( ${+commands[iwgetid]} )); then
-            command iwgetid -r
-        elif (( ${+commands[nmcli]} )); then
-            command nmcli -t -f active,ssid dev wifi 2>/dev/null | grep '^yes:' | cut -d: -f2
-        fi
+    elif (( ${+commands[iwgetid]} )); then
+        REPLY=$(command iwgetid -r 2>/dev/null)
+    elif (( ${+commands[nmcli]} )); then
+        local line
+        for line in "${(@f)$(command nmcli -t -f active,ssid dev wifi 2>/dev/null)}"; do
+            [[ $line == yes:* ]] && { REPLY=${line#yes:}; break }
+        done
     fi
+    [[ -n $REPLY ]] || return 1
+    print -r -- "$REPLY"
 }
 
-# List all TCP ports currently listening on the system
+# List TCP ports listening on this system
+# Runs without sudo, so process names of other users' sockets may be missing.
 # Usage: get_open_ports
-# Returns: List of "PORT: COMMAND (PID)"
+# Output: "PORT: COMMAND (PID)" lines, sorted by port (stdout); also sets reply
+# Returns: 0 success, 1 no tool available, 2 invalid usage
 get_open_ports() {
-    (( ARGC == 0 )) || return 2 # Invalid usage
-    
-    if is_macos; then
-        # macOS: lsof is the most reliable standard tool
-        # -iTCP -sTCP:LISTEN -n (no host names) -P (no port names)
-        # awk parses output to format: "8080: python3.9 (1234)"
-        command lsof -iTCP -sTCP:LISTEN -n -P 2>/dev/null | \
-        awk 'NR>1 {print $9 ": " $1 " (" $2 ")"}' | \
-        cut -d: -f2- | sort -n -u
-        
-    elif is_linux; then
-        # Method 1: ss (Socket Statistics) - fastest modern Linux tool
-        if (( ${+commands[ss]} )); then
-            # -l (listening), -t (tcp), -n (numeric), -p (processes), -H (no header)
-            # Output format manipulation to match requested style
-            command sudo ss -ltnpH 2>/dev/null | \
-            awk '{print $4 ": " $6}' | \
-            sed 's/users:(("//g; s/",/, /g; s/pid=//g; s/))//g' | \
-            awk -F':' '{print $NF ": " $0}' | cut -d: -f1,3- | sort -n -u
-            
-        # Method 2: netstat (legacy fallback)
-        elif (( ${+commands[netstat]} )); then
-            command sudo netstat -tlnp 2>/dev/null | \
-            awk '/^tcp/ {print $4 "/" $7}' | \
-            awk -F'/' '{print $1 ": " $2}' | \
-            awk -F':' '{print $NF ": " $0}' | cut -d: -f1,3- | sort -n -u
-            
-        # Method 3: lsof (if installed)
-        elif (( ${+commands[lsof]} )); then
-             command sudo lsof -iTCP -sTCP:LISTEN -n -P 2>/dev/null | \
-             awk 'NR>1 {print $9 ": " $1 " (" $2 ")"}' | \
-             cut -d: -f2- | sort -n -u
-        fi
+    (( ARGC == 0 )) || return 2
+    reply=()
+    local line addr port proc pid
+    local -a fields
+    if (( ${+commands[ss]} )); then
+        # ss -ltnpH: State Recv-Q Send-Q Local:Port Peer:Port Process
+        for line in "${(@f)$(command ss -ltnpH 2>/dev/null)}"; do
+            fields=(${=line})
+            addr=${fields[4]}
+            port=${addr##*:}          # works for [::1]:8080 and 0.0.0.0:22
+            proc="?" pid="?"
+            [[ $line =~ 'users:\(\("([^"]+)",pid=([0-9]+)' ]] && { proc=$match[1]; pid=$match[2] }
+            reply+=("$port: $proc ($pid)")
+        done
+    elif (( ${+commands[lsof]} )); then
+        # lsof: COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME (LISTEN)
+        local -a lines=("${(@f)$(command lsof -iTCP -sTCP:LISTEN -n -P 2>/dev/null)}")
+        for line in "${(@)lines[2,-1]}"; do
+            fields=(${=line})
+            addr=${fields[-2]}
+            reply+=("${addr##*:}: ${fields[1]} (${fields[2]})")
+        done
+    else
+        return 1
     fi
+    # (n) numeric sort, (u) unique
+    reply=(${(nu)reply})
+    print -rl -- $reply
 }
 
-# --- Validation ---
+## Validation
 
 # Check if string is a valid IPv4 address
-# Usage: is_valid_ip "192.168.1.1"
+# Usage: is_valid_ip <string>
+# Returns: 0 valid, 1 invalid, 2 invalid usage
 is_valid_ip() {
-    (( ARGC == 1 )) || return 2 # Invalid usage
-    local octet='(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])'
-    # Compose the full pattern: octet.octet.octet.octet
-    [[ $1 =~ ^$octet\.$octet\.$octet\.$octet$ ]]
+    (( ARGC == 1 )) || return 2
+    [[ $1 =~ ${_FN_TYPES[ipv4]} ]]
 }
 
-# Check if domain name is valid format
-# Usage: is_domain_valid "example.com"
-is_domain_valid() {
-    (( ARGC == 1 )) || return 2 # Invalid usage
-    local domain=$1
-    # Basic regex: alphanumeric parts separated by dots, min 2 chars TLD
-    local pattern='^([a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
-    [[ $domain =~ $pattern ]]
+# Check if string is a valid IPv6 address
+# Usage: is_valid_ipv6 <string>
+# Returns: 0 valid, 1 invalid, 2 invalid usage
+is_valid_ipv6() {
+    (( ARGC == 1 )) || return 2
+    [[ $1 =~ ${_FN_TYPES[ipv6]} ]]
 }
 
-# Check if string is a valid URL (supports http, https, ftp, ftps)
-# Usage: is_url_valid "https://example.com:8080/path"
-is_url_valid() {
-    (( ARGC == 1 )) || return 2 # Invalid usage
+# Check if string is a valid domain name
+# Usage: is_valid_domain <string>
+# Returns: 0 valid, 1 invalid, 2 invalid usage
+is_valid_domain() {
+    (( ARGC == 1 )) || return 2
+    [[ $1 =~ ${_FN_TYPES[domain]} ]]
+}
+# Alias: is_domain_valid (old name)
+functions[is_domain_valid]=$functions[is_valid_domain]
 
-    # Scheme: http, https, ftp, ftps
+# Check if string is a valid URL (http, https, ftp, ftps)
+# Usage: is_valid_url <string>
+# Example: is_valid_url "https://example.com:8080/path"
+# Returns: 0 valid, 1 invalid, 2 invalid usage
+is_valid_url() {
+    (( ARGC == 1 )) || return 2
     local scheme='(https?|ftps?)'
-
-    # Host: Alphanumeric, dots, hyphens, and common special chars.
-    # Changed {1,256} to + to avoid "invalid repetition count" errors on some BSD systems.
     local host='[-a-zA-Z0-9@:%._+~#=]+'
-
-    # Port (optional): e.g. :80 or :8080
     local port='(:[0-9]+)?'
-
-    # Resource path/query (optional)
-    local resource='([/?#][-a-zA-Z0-9@:%_+.~#?&//=]*)?'
-
-    # Compose and match
+    local resource='([/?#][-a-zA-Z0-9@:%_+.~#?&/=]*)?'
     [[ $1 =~ ^$scheme://$host$port$resource$ ]]
 }
+# Alias: is_url_valid (old name)
+functions[is_url_valid]=$functions[is_valid_url]
 
-# --- Utilities ---
+## Utilities
 
-# Check HTTP status code
-# Usage: http_status "https://google.com"
-# Returns: 200
+# Get HTTP status code of a URL (GET request, follows redirects)
+# Usage: http_status <url> [timeout_seconds]   (default: 10)
+# Output: status code, e.g. 200 (stdout); also sets REPLY
+# Returns: 0 success, 1 request failed, 2 invalid usage, 127 curl not found
 http_status() {
-    (( ARGC == 1 )) || return 2 # Invalid usage
-    if (( ${+commands[curl]} )); then
-        command curl -I -s -o /dev/null -w "%{http_code}" "$1"
-    else
-        return 1
-    fi
+    (( ARGC >= 1 && ARGC <= 2 )) || return 2
+    (( ${+commands[curl]} )) || return 127
+    REPLY=$(command curl -sL -o /dev/null -m ${2:-10} -w '%{http_code}' -- "$1" 2>/dev/null)
+    [[ $REPLY == <1-> ]] || { REPLY=""; return 1 }
+    print -r -- "$REPLY"
 }
 
-# Download file with progress
-# Usage: download "url" "output"
+# Download a file with a progress bar
+# Usage: download <url> <output_file>
+# Returns: 0 success, 1 failure, 2 invalid usage, 127 no download tool
 download() {
-    (( ARGC == 2 )) || return 2 # Invalid usage
-    local url=$1
-    local out=$2
-    
+    (( ARGC == 2 )) || { _lib_usage "download <url> <output_file>"; return }
     if (( ${+commands[curl]} )); then
-        command curl -L -# -o "$out" "$url"
+        command curl -fL -# -o "$2" -- "$1"
     elif (( ${+commands[wget]} )); then
-        command wget -q --show-progress -O "$out" "$url"
+        command wget -q --show-progress -O "$2" -- "$1"
     else
-        printe "No download tool found"
-        return 1
+        printe "No download tool found (curl or wget)."
+        return 127
     fi
 }
 
-# Scan common ports on a host
-# Usage: scan_ports "192.168.1.1"
+# Scan common TCP ports on a host (each probe uses ZSH_NET_TIMEOUT)
+# Usage: scan_ports <host>
+# Output: open ports (stdout)
+# Returns: 0 at least one port open, 1 none open, 2 invalid usage
 scan_ports() {
-    (( ARGC == 1 )) || return 2 # Invalid usage
-    local host=$1
-    local port
+    (( ARGC == 1 )) || { _lib_usage "scan_ports <host>"; return }
+    local host=$1 port
+    local -i found=0
     local -a common_ports=(21 22 23 25 53 80 443 3000 3306 5432 8000 8080)
-    
-    prints "Scanning $host..."
-    
+    printi "Scanning $host..."
     for port in $common_ports; do
-        if is_port_open "$host" "$port"; then
-            print "Port $port: \e[32mOPEN\e[0m"
+        if _tcp_probe "$host" $port 1; then
+            print -r -- "Port $port: ${g}OPEN${x}"
+            (( found++ ))
         fi
     done
+    (( found ))
 }
 
-# Flush DNS cache
+# Flush the DNS cache (requires sudo)
 # Usage: flush_dns
+# Returns: 0 success, 1 failure, 2 invalid usage
 flush_dns() {
-    (( ARGC == 0 )) || return 2 # Invalid usage
+    (( ARGC == 0 )) || return 2
     if is_macos; then
-        sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder
-        prints "macOS DNS cache flushed"
-    elif is_linux; then
-        if (( ${+commands[resolvectl]} )); then
-            sudo resolvectl flush-caches
-            prints "systemd-resolved cache flushed"
-        elif (( ${+commands[systemd-resolve]} )); then
-            sudo systemd-resolve --flush-caches
-            prints "systemd-resolved cache flushed"
-        else
-            printe "No known DNS flush method found for this Linux"
+        sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder || {
+            printe "Failed to flush macOS DNS cache."
             return 1
-        fi
+        }
+        prints "macOS DNS cache flushed."
+    elif (( ${+commands[resolvectl]} )); then
+        sudo resolvectl flush-caches || return 1
+        prints "systemd-resolved cache flushed."
+    else
+        printe "No known DNS flush method found for this system."
+        return 1
     fi
 }
 

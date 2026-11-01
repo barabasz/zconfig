@@ -98,23 +98,26 @@ Fast utility functions loaded in `.zshrc` (interactive sessions only). See indiv
 
 | File | Category |
 |------|----------|
-| `archive.zsh` | Archive extraction and compression (`extract`, `compress`) |
+| `apps.zsh` | Package-manager helpers used by `zapp` (`app_install`, `app_upgrade`, etc.) |
+| `archive.zsh` | Archive extraction and compression (`extract`, `list_archive`, `compress`) |
 | `arrays.zsh` | Array utilities (`array_contains`, `array_map`, etc.) |
-| `clipboard.zsh` | Clipboard operations (`clip_copy`, `clip_paste`, etc.) |
+| `clipboard.zsh` | Clipboard operations (`clip_copy`, `clip_paste`; also WSL and OSC 52) |
+| `cmdinfo.zsh` | Command information for `zinfo`/`zwhere`/`zver` (`get_cmd_path`, etc.) |
 | `compile.zsh` | Bytecode compilation (`compile_zsh_config`, `compile_dir`, etc.) |
-| `cwg.zsh` | Complementary-multiply-with-carry random number generator |
+| `cwg.zsh` | Collatz-Weyl pseudo-random number generator (`cwg_seed`, `cwg_next`) |
 | `date.zsh` | Date/time functions (`now_iso`, `format_duration`, etc.) |
 | `files.zsh` | File system tests (`is_file`, `is_dir`, `is_link`, etc.) |
+| `fn.zsh` | Option/argument parsing and help for `functions/` (see [FN.md](docs/FN.md)) |
 | `hardware.zsh` | Hardware info (`get_cpu_count`, `get_ram_total`, etc.) |
-| `math.zsh` | Math utilities (`abs`, `round`, `random`, `format_bytes`, etc.) |
+| `math.zsh` | Math utilities (`calc`, `abs`, `round`, `random`, `format_bytes`, etc.) |
 | `network.zsh` | Network utilities (`get_local_ip`, `is_online`, etc.) |
 | `path.zsh` | PATH manipulation (`path_append`, `path_prepend`, etc.) |
 | `plugins.zsh` | Plugin management (`install_plugin`, `load_plugin`, etc.) |
 | `print.zsh` | Print functions for formatted output (`printe`, `printkv`, etc.) |
-| `shell.zsh` | Shell info (`shell_ver`, `is_interactive`, etc.) |
+| `shell.zsh` | Shell info (`shell_version`, `is_interactive`, etc.) |
 | `strings.zsh` | String manipulation (`trim`, `lowercase`, `str_contains`, etc.) |
 | `system.zsh` | OS detection (`is_macos`, `is_linux`, `os_name`, etc.) |
-| `varia.zsh` | Miscellaneous (`is_debug`, `etime`, `is_installed`, `confirm`) |
+| `varia.zsh` | Miscellaneous (`is_debug`, `etime`, `bench`, `retry`, `is_installed`, `confirm`) |
 
 ### Application Integrations (`apps/`)
 

@@ -62,15 +62,44 @@ See also:
 
 2. **Follow naming conventions** (see [NAMING.md](NAMING.md))
 
-3. **Use tracking:**
+3. **Use the file template** (checked by `tests/structure.test.zsh`):
    ```zsh
    #!/bin/zsh
+   # Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+   #
+   # Shell files tracking - keep at the top
    zfile_track_start ${0:A}
 
-   # Your code here
+   ##
+   # Short description of the file
+   # Depends on: other lib files or zsh modules
+   ##
 
+   ## Section name
+
+   # Shell files tracking - keep at the end
    zfile_track_end ${0:A}
    ```
+
+4. **Use the function header template:**
+   ```zsh
+   # One-line description (shown by zman and in docs/FUNCTIONS.md)
+   # Usage: name <required> [optional]
+   # Example: name foo -> bar            (optional)
+   # Output: what is printed; also sets REPLY
+   # Returns: 0 success, 1 failure, 2 invalid usage
+   name() {
+       (( ARGC == 1 )) || return 2
+       ...
+   }
+   ```
+   Getters set `REPLY` (or `reply`) **and** print the value, so both
+   `name x; v=$REPLY` (no subshell) and `v=$(name x)` work.
+
+5. **Add tests** in `tests/*.test.zsh` and run `zsh tests/run.zsh`.
+
+6. **Regenerate the function list:** `zsh scripts/functions-md.zsh`
+   (CI fails when `docs/FUNCTIONS.md` is out of date).
 
 ### App Integrations (`apps/`)
 
@@ -175,7 +204,7 @@ fi
 
 ## Bytecode Compilation
 
-Files in `lib/`, `inc/`, `apps/` are automatically compiled to `.zwc` bytecode on shell startup (when `ZSH_AUTOCOMPILE=1`).
+Files in `lib/`, `inc/`, `apps/` and the startup files (`.zshrc`, `.zshenv`, ...) are automatically compiled to `.zwc` bytecode on shell startup (when `ZSH_AUTOCOMPILE=1`). All `functions/` are compiled into one digest, `functions.zwc`, which zsh uses for autoloading.
 
 **No manual action needed** - after editing any `.zsh` file:
 1. First shell startup uses the source file (newer) and recompiles
@@ -187,6 +216,7 @@ compile_zsh_config      # Compile lib/, inc/, apps/ with output
 compile_zsh_config -q   # Compile quietly
 clean_zsh_config        # Remove all .zwc files
 compile_dir <dir>       # Compile single directory
+compile_functions_dir <dir>  # Compile functions into <dir>.zwc digest
 clean_dir <dir>         # Clean single directory
 ```
 
@@ -216,6 +246,10 @@ source ~/.zshenv
 
 # Syntax check
 zsh -n lib/files.zsh
+
+# Unit tests (all, or only files matching a pattern)
+zsh tests/run.zsh
+zsh tests/run.zsh math
 
 # Test function
 is_file /etc/hosts && print "OK" || print "FAIL"

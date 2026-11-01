@@ -4,21 +4,38 @@
 # Shell files tracking - keep at the top
 zfile_track_start ${0:A}
 
-# Output and Logging helper functions
-# Depends on colors and glyphs defined in inc/bootstrap.zsh
-# (e.g. $r, $g, $x, $ICO_ERROR, $ICO_OK etc.)
+##
+# Output, logging and interactive prompt helper functions
+# Depends on: inc/colors.zsh ($r $g $y $b $c $p $x), inc/icons.zsh ($ICO_*)
+# Note: message functions (printe, printw, ...) interpret print escape
+# sequences in their text argument, like the print builtin does.
+##
 
-export PRINT_ICON_SPACE="  "  # Space between icon and text
+typeset -g PRINT_ICON_SPACE="  "  # Space between icon and text
+
+## Internal helpers
+
+# Print usage line for an invalid call and return 2
+# Usage: _lib_usage "name <arg> [opt]"
+# Output: "Usage: ..." on stderr
+# Returns: always 2 (invalid usage), so callers can do: || { _lib_usage "..."; return }
+_lib_usage() {
+    printe "Usage: $1"
+    return 2
+}
+
+## Demo
 
 # Print demo of available print functions (for testing and demonstration)
 # Usage: printdemo
-# Returns: 0 on success, 2 on invalid usage
+# Returns: 0 success, 2 invalid usage
 printdemo() {
     (( ARGC == 0 )) || {
         printe "${g}printdemo$x does not take any arguments."
         return 2
     }
-    typeset -A print_funcs=(
+    # Ordered list of function/description pairs (assoc arrays have no order)
+    local -a print_funcs=(
         printe Error
         printw Warning
         printi Info
@@ -28,32 +45,31 @@ printdemo() {
     )
     printh "print* demo" $y $r
     local func desc
-    for func desc in ${(kv)print_funcs}; do
+    for func desc in $print_funcs; do
         if (( ${+functions[$func]} )); then
             $func "This is a demo of $c$func$x function ($desc)."
         fi
     done
 }
 
-
-# --- Standard Logging ---
+## Standard logging
 
 # Print error message to stderr
-# Usage: printe "Error text" [text_color] [glyph] [ICO_color]
-# Returns: 0 on success, 2 on invalid usage
+# Usage: printe <text> [text_color] [glyph] [glyph_color]
+# Returns: 0 success, 2 invalid usage
 printe() {
     (( ARGC >= 1 && ARGC <= 4 )) || return 2
     local text="$1"
-    local tc="${2:-$x}"              # Text Color
+    local tc="${2:-$x}"              # Text color
     local glyph="${3:-$ICO_ERROR}"   # Glyph (from global vars)
-    local gc="${4:-$x}"              # Glyph Color
-    
+    local gc="${4:-$x}"              # Glyph color
+
     print -u2 -- "${gc}${glyph}${x}${PRINT_ICON_SPACE}${tc}${text}${x}"
 }
 
 # Print warning message to stderr
-# Usage: printw "Warning text" [text_color] [glyph] [ICO_color]
-# Returns: 0 on success, 2 on invalid usage
+# Usage: printw <text> [text_color] [glyph] [glyph_color]
+# Returns: 0 success, 2 invalid usage
 printw() {
     (( ARGC >= 1 && ARGC <= 4 )) || return 2
     local text="$1"
@@ -65,23 +81,23 @@ printw() {
 }
 
 # Print bell message to stdout (with sound)
-# Usage: printb "Info text" [text_color] [glyph] [ICO_color]
-# Returns: 0 on success, 2 on invalid usage
+# Usage: printb <text> [text_color] [glyph] [glyph_color]
+# Returns: 0 success, 2 invalid usage
 printb() {
     (( ARGC >= 1 && ARGC <= 4 )) || return 2
     local text="$1"
     local tc="${2:-$x}"
     local glyph="${3:-$ICO_BELL}"
     local gc="${4:-$x}"
-    
+
     # \a is the bell character
     print -n -- "\a"
     print -- "${gc}${glyph}${x}${PRINT_ICON_SPACE}${tc}${text}${x}"
 }
 
 # Print info message to stdout
-# Usage: printi "Info text" [text_color] [glyph] [ICO_color]
-# Returns: 0 on success, 2 on invalid usage
+# Usage: printi <text> [text_color] [glyph] [glyph_color]
+# Returns: 0 success, 2 invalid usage
 printi() {
     (( ARGC >= 1 && ARGC <= 4 )) || return 2
     local text="$1"
@@ -93,8 +109,8 @@ printi() {
 }
 
 # Print success message to stdout
-# Usage: prints "Success text" [text_color] [glyph] [ICO_color]
-# Returns: 0 on success, 2 on invalid usage
+# Usage: prints <text> [text_color] [glyph] [glyph_color]
+# Returns: 0 success, 2 invalid usage
 prints() {
     (( ARGC >= 1 && ARGC <= 4 )) || return 2
     local text="$1"
@@ -107,27 +123,27 @@ prints() {
 # Alias: printok
 functions[printok]=$functions[prints]
 
-# Print debug message (only if debug mode is on)
-# Usage: printd "Debug text" [text_color] [glyph] [ICO_color]
-# Returns: 0 on success, 2 on invalid usage
+# Print debug message to stderr (only if debug mode is on)
+# Usage: printd <text> [text_color] [glyph] [glyph_color]
+# Returns: 0 success, 2 invalid usage
 printd() {
     (( ARGC >= 1 && ARGC <= 4 )) || return 2
-    # Check for is_debug function or ZSH_DEBUG variable
-    if (( ${+functions[is_debug]} )) && is_debug || [[ $ZSH_DEBUG == 1 ]]; then
+    # Prefer is_debug (varia.zsh); fall back to ZSH_DEBUG if it is not loaded yet
+    if (( ${+functions[is_debug]} )) && is_debug || (( ${ZSH_DEBUG:-0} == 1 )); then
         local text="$1"
         local tc="${2:-$x}"
         local glyph="${3:-$ICO_DEBUG}"
         local gc="${4:-$x}"
-        
+
         print -u2 -- "${gc}${glyph}${x}${PRINT_ICON_SPACE}${tc}${text}${x}"
     fi
 }
 
-# --- Data Presentation ---
+## Data presentation
 
 # Print a key-value pair
-# Usage: printkv "Key" "Value" [key_color] [value_color]
-# Returns: 0 on success, 2 on invalid usage
+# Usage: printkv <key> <value> [key_color] [value_color]
+# Returns: 0 success, 2 invalid usage
 printkv() {
     (( ARGC >= 2 && ARGC <= 4 )) || return 2
     local key="$1"
@@ -135,146 +151,179 @@ printkv() {
     local kc="${3:-$b}" # Blue default
     local vc="${4:-$x}" # Reset default
 
-    print -- "${kc}${key}${x}: ${vc}${val}${x}"
+    print -r -- "${kc}${key}${x}: ${vc}${val}${x}"
 }
 
 # Print all elements of an array (associative or indexed)
-# Usage: printa array_name [key_color] [value_color]
-# Returns: 0 on success, 1 if not an array, 2 on invalid usage
+# Usage: printa <array_name> [key_color] [value_color]
+# Returns: 0 success, 1 not an array, 2 invalid usage
 printa() {
     (( ARGC >= 1 && ARGC <= 3 )) || return 2
     local arr_name="$1"
     local kc="${2:-$b}"
     local vc="${3:-$x}"
-    
+
     # Get variable type
     local type="${(tP)arr_name}"
 
-    if [[ "$type" == *"association"* ]]; then
-        # Copy to local ref using (@Pkv) expansion for safety and ease
+    if [[ "$type" == *association* ]]; then
         local -A ref=("${(@Pkv)arr_name}")
-        local key val
-        # Iterate over keys sorted alphabetically (ok)
-        for key val in "${(@ok)ref}"; do
-             printkv "$key" "$val" "$kc" "$vc"
+        local key
+        # Iterate over keys sorted alphabetically
+        for key in "${(@ok)ref}"; do
+            printkv "$key" "$ref[$key]" "$kc" "$vc"
         done
-    elif [[ "$type" == *"array"* ]]; then
-        # Indexed array
+    elif [[ "$type" == *array* ]]; then
         local -a ref=("${(@P)arr_name}")
         local i
-        for ((i=1; i<=${#ref}; i++)); do
+        for (( i = 1; i <= ${#ref}; i++ )); do
             printkv "$i" "$ref[i]" "$kc" "$vc"
         done
     else
-        printe "'$arr_name' is not a valid array (Type: $type)"
+        printe "'$arr_name' is not a valid array (Type: ${type:-unset})"
         return 1
     fi
 }
 
 # Print arguments in columns (like ls)
-# Usage: printcol "Item 1" "Item 2" "Item 3"...
-# Returns: 0 on success, 2 on invalid usage
+# Usage: printcol <item> [item...]
+# Returns: 0 success, 2 invalid usage
 printcol() {
     (( ARGC >= 1 )) || return 2
     # -c: print in columns sorted vertically (auto-width based on terminal size)
-    print -c -- "$@"
+    print -rc -- "$@"
 }
 
 # Print unordered list
-# Usage: printul "Item 1" "Item 2"...
-# Returns: 0 on success, 2 on invalid usage
+# Usage: printul <item> [item...]
+# Returns: 0 success, 2 invalid usage
 printul() {
     (( ARGC >= 1 )) || return 2
     local item
     local bullet="$ICO_UL"
-    
+
     for item in "$@"; do
-        print -- " ${b}${bullet}${x} ${item}"
+        print -r -- " ${b}${bullet}${x} ${item}"
     done
 }
 
 # Print colored text (simple wrapper)
-# Usage: printc "Text" [color]
-# Returns: 0 on success, 2 on invalid usage
+# Usage: printc <text> [color]
+# Returns: 0 success, 2 invalid usage
 printc() {
     (( ARGC >= 1 && ARGC <= 2 )) || return 2
     local text="$1"
     local color="${2:-$x}"
-    print -- "${color}${text}${x}"
+    print -r -- "${color}${text}${x}"
 }
 
-# --- Interactive ---
+# Print text with a status label right-aligned to the terminal width
+# Usage: printr <text> <status> [status_color]
+# Example: printr "Checking network" "OK" $g  ->  Checking network ......... [ OK ]
+# Returns: 0 success, 2 invalid usage
+printr() {
+    (( ARGC >= 2 && ARGC <= 3 )) || return 2
+    local text="$1"
+    local label="[ $2 ]"
+    local sc="${3:-$x}"
+    local cols=${COLUMNS:-80}
+    # (m) counts display width (wide chars, emoji); dots fill the gap
+    local -i fill=$(( cols - ${(m)#text} - ${(m)#label} - 2 ))
+    (( fill < 1 )) && fill=1
+    print -r -- "${text} ${(l:fill::.:)} ${sc}${label}${x}"
+}
+
+# Print a progress bar
+# Usage: printp <current> <total> [width] [color]
+# Example: printp 30 100 20  ->  [██████--------------]  30%
+# Output: progress bar on the current line (no newline, uses \r);
+#         a newline is printed when current reaches total
+# Returns: 0 success, 2 invalid usage
+printp() {
+    (( ARGC >= 2 && ARGC <= 4 )) || return 2
+    [[ $1 == <-> && $2 == <-> ]] || return 2
+    local -i current=$1 total=$2 width=${3:-30}
+    local color="${4:-$g}"
+    (( total > 0 && width > 0 )) || return 2
+    (( current > total )) && current=total
+
+    local -i pct=$(( current * 100 / total ))
+    local -i done_len=$(( current * width / total ))
+    local -i todo_len=$(( width - done_len ))
+    local bar_done="${(l:done_len::█:)}" bar_todo="${(l:todo_len::-:)}"
+
+    printf '\r[%s%s%s%s] %3d%%' "$color" "$bar_done" "$x" "$bar_todo" $pct
+    (( current == total )) && print
+    return 0
+}
+
+## Interactive
 
 # Ask user for input with default value
-# Usage: printq "Enter name" [default_value]
-# Returns: 0 on success (prints user input or default), 2 on invalid usage
+# Usage: printq <prompt> [default_value]
+# Output: user input or default (stdout); also sets REPLY
+# Returns: 0 success, 2 invalid usage
 printq() {
     (( ARGC >= 1 && ARGC <= 2 )) || return 2
     local prompt_text="$1"
     local default_val="$2"
     local input
-    
-    # Zsh 'read' handles prompt natively with '?prompt'
-    # -r: raw mode (no backslash escape)
+
+    # Zsh 'read' handles prompt natively with '?prompt' (printed to stderr)
     if read -r "input?${y}${prompt_text}${x} [${default_val}]: "; then
-        print -- "${input:-$default_val}"
+        REPLY="${input:-$default_val}"
     else
-        # Return default if read fails (e.g. Ctrl+D)
-        print -- "$default_val"
+        # Use default if read fails (e.g. Ctrl+D)
+        REPLY="$default_val"
     fi
+    print -r -- "$REPLY"
 }
 
-# Ask user a yes/no question
-# Usage: yesno "Do you want to proceed?"
-# Returns: 0 (true) for Yes, 1 (false) for No, 2 on invalid usage
+# Ask user a yes/no question (default: No)
+# Usage: yesno <question>
+# Returns: 0 yes, 1 no, 2 invalid usage
 yesno() {
     (( ARGC == 1 )) || return 2
-    local prompt_text="$1"
-    # -q: read single char, y/Y returns 0, n/N returns 1
-    # ?...: prompt string
-    if read -q "?${y}${prompt_text}${x} [y/N] "; then
-        print # Print newline after single char input
+    # -q: read single char, y/Y returns 0, anything else returns 1
+    if read -q "?${y}${1}${x} [y/N] "; then
+        print # Newline after single char input
         return 0
-    else
-        print # Print newline
-        return 1
     fi
+    print
+    return 1
 }
 
-# --- Formatting & UI ---
+## Formatting and UI
 
 # Print a separator line
 # Usage: printl [color] [char] [width]
 # Example: printl $r "=" 50%
-# Returns: 0 on success, 2 on invalid usage
+# Returns: 0 success, 2 invalid usage
 printl() {
     (( ARGC <= 3 )) || return 2
     local color="${1:-$x}"
     local char="${2:-─}"
     local width_arg="${3:-100%}"
 
-    local max_cols=${COLUMNS:-$(tput cols 2>/dev/null || print 80)}
-    local cols
+    local -i max_cols=${COLUMNS:-80}
+    local -i cols
 
     # Calculate width
-    if [[ "$width_arg" == *% ]]; then
+    if [[ "$width_arg" == <->% ]]; then
         cols=$(( max_cols * ${width_arg%\%} / 100 ))
-    else
+    elif [[ "$width_arg" == <-> ]]; then
         cols=$width_arg
+    else
+        return 2
     fi
-    (( cols < 0 )) && cols=0
 
-    # Method: Generate a string of spaces of length 'cols', then replace spaces with char.
-    # This is safer than nested variable expansion inside padding flags.
-    local line="${(l:cols:: :)}"
-    
-    # Print with color, replacing spaces with the target char
-    print -- "${color}${line// /${char}}${x}"
+    # (pl:n::str:) repeats str to fill n characters
+    print -r -- "${color}${(pl:cols::$char:)}${x}"
 }
 
 # Print a header with an underline
-# Usage: printh "Text" [text_color] [line_color] [line_char]
-# Returns: 0 on success, 2 on invalid usage
+# Usage: printh <text> [text_color] [line_color] [line_char]
+# Returns: 0 success, 2 invalid usage
 printh() {
     (( ARGC >= 1 && ARGC <= 4 )) || return 2
     local text="$1"
@@ -282,86 +331,90 @@ printh() {
     local lc="${3:-$x}"
     local char="${4:-‾}"
 
-    print -- "${tc}${text}${x}"
-    printl "$lc" "$char" "${#text}"
+    print -r -- "${tc}${text}${x}"
+    # (m) = display width, correct for wide characters and emoji
+    printl "$lc" "$char" "${(m)#text}"
 }
 
 # Print text surrounded by a border
-# Usage: printt "Text" [text_color] [border_color]
-# Returns: 0 on success, 2 on invalid usage
+# Usage: printt <text> [text_color] [border_color]
+# Returns: 0 success, 2 invalid usage
 printt() {
     (( ARGC >= 1 && ARGC <= 3 )) || return 2
     local text="$1"
     local ct="${2:-$x}"
     local cb="${3:-$x}"
 
-    local width=$(( ${#text} + 2 ))
+    local -i width=$(( ${(m)#text} + 2 ))
+    local bar="${(l:width::─:)}"
 
-    # Use expansion padding for the bar
-    local bar="${(l:width::─:):-}"
-
-    print -- "${cb}┌${bar}┐${x}"
-    print -- "${cb}│${x} ${ct}${text}${x} ${cb}│${x}"
-    print -- "${cb}└${bar}┘${x}"
+    print -r -- "${cb}┌${bar}┐${x}"
+    print -r -- "${cb}│${x} ${ct}${text}${x} ${cb}│${x}"
+    print -r -- "${cb}└${bar}┘${x}"
 }
 
 # Execute command with animated spinner
-# Usage: execs "Message text" command [args...]
-# Returns: exit code of the executed command
-# Customizable via: EXECS_SPINNER_FRAMES (array), EXECS_SPINNER_DELAY (float)
+# Usage: execs <message> <command> [args...]
+# Output: command output is captured and printed after it finishes
+# Returns: exit code of the executed command, 2 invalid usage, 127 command not found
+# Customizable via: EXECS_SPINNER_FRAMES (array), EXECS_SPINNER_DELAY (seconds, float)
 execs() {
-    (( ARGC >= 2 )) || { printe "Usage: execs \"Message\" command [args...]"; return 2 }
+    (( ARGC >= 2 )) || { _lib_usage 'execs "Message" command [args...]'; return }
 
     # Suppress job control messages
-    setopt LOCAL_OPTIONS NO_MONITOR NO_NOTIFY
+    setopt localoptions nomonitor nonotify
+    zmodload zsh/zselect 2>/dev/null
 
-    local -a frames=( "${(@)EXECS_SPINNER_FRAMES:-${(@s: :):-| / - \\}}" )
-    local delay=${EXECS_SPINNER_DELAY:-0.16}
+    local -a frames
+    if (( ${#EXECS_SPINNER_FRAMES} )); then
+        frames=("${EXECS_SPINNER_FRAMES[@]}")
+    else
+        frames=('|' '/' '-' '\')
+    fi
+    local -F delay=${EXECS_SPINNER_DELAY:-0.16}
+    local -i delay_cs=$(( delay * 100 ))   # zselect timeout is in 1/100 s
 
-    local message="$1" && shift
-    [[ -z "$message" ]] && message="Processing..."
+    local message="${1:-Processing...}"
+    shift
 
-    # Check if command exists
-    if ! whence "$1" >/dev/null 2>&1; then
+    if ! whence -- "$1" >/dev/null 2>&1; then
         printe "Command not found: $1"
         return 127
     fi
 
-    # Create temporary file for capturing output
-    local tmpfile=${TMPDIR:-/tmp}/execs.$$.$RANDOM
+    local tmpfile="${TMPDIR:-/tmp}/execs.$$.$EPOCHREALTIME"
+    local -i pid exit_code=0
+    local frame
 
-    # Execute command in background
-    "$@" > "$tmpfile" 2>&1 &
-    local pid=$!
+    {
+        "$@" >| "$tmpfile" 2>&1 &
+        pid=$!
 
-    # Hide cursor
-    echotc vi 2>/dev/null
+        echotc vi 2>/dev/null   # hide cursor
 
-    # Animate spinner while process is running
-    while kill -0 $pid 2>/dev/null; do
-        for frame in "${frames[@]}"; do
-            printf "\r\033[K${by}${frame}${x} ${message}"
-            sleep $delay
-            kill -0 $pid 2>/dev/null || break
+        while kill -0 $pid 2>/dev/null; do
+            for frame in $frames; do
+                printf '\r\033[K%s%s%s %s' "$y" "$frame" "$x" "$message"
+                zselect -t $delay_cs 2>/dev/null || sleep $delay
+                kill -0 $pid 2>/dev/null || break
+            done
         done
-    done
 
-    # Wait for process and capture exit code
-    wait $pid
-    local exit_code=$?
-
-    # Clear spinner line and restore cursor
-    printf "\r\033[K"
-    echotc ve 2>/dev/null
-
-    # Display captured output
-    [[ -s "$tmpfile" ]] && cat "$tmpfile"
-
-    # Cleanup
-    rm -f "$tmpfile"
+        wait $pid
+        exit_code=$status
+    } always {
+        # Runs also on Ctrl+C: clear line, restore cursor, show output, clean up
+        printf '\r\033[K'
+        echotc ve 2>/dev/null
+        if [[ -s "$tmpfile" ]]; then
+            print -rn -- "$(<$tmpfile)"
+            print
+        fi
+        rm -f -- "$tmpfile"
+    }
 
     return $exit_code
 }
 
-# shell files tracking - keep at the end
+# Shell files tracking - keep at the end
 zfile_track_end ${0:A}

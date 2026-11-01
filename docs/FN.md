@@ -11,7 +11,7 @@ The `fn.zsh` library provides a declarative way to define function metadata, arg
 
 ## Quick Start
 
-For brevity, this Quick Start example defines only the `_fn_args` array that it actually uses; in production functions, it is recommended to declare `_fn_opts`, `_fn_commands`, and `_fn_examples` locally as empty arrays when they are unused, to prevent accidental reuse of values from another function or the global scope. The local associative arrays `opts=()` and `args=()` must always be defined because `_fn_init` populates them with the parsed options and positional arguments. The `-h/--help` and `-v/--version` options are added automatically from the function metadata.
+For brevity, this Quick Start example defines only the `_fn_args` array that it actually uses; in production functions, it is recommended to declare `_fn_opts`, `_fn_commands`, and `_fn_examples` locally as empty arrays when they are unused, to prevent accidental reuse of values from another function or the global scope. The local associative array `_fn` must always be declared (otherwise `_fn_init` reports a definition error and returns 3), and the local associative arrays `opts=()` and `args=()` must always be defined because `_fn_init` populates them with the parsed options and positional arguments. The `-h/--help` and `-v/--version` options are added automatically from the function metadata; their output goes to stdout, so `fn --help | less` works.
 
 
 ```zsh
@@ -302,8 +302,8 @@ esac
 | `string`   | Any text                       | `^.*$`                       |
 | `char`     | Single character               | `^.$`                        |
 | `digit`    | Single digit (0-9)             | `^[0-9]$`                    |
-| `integer`  | Integer number                 | `^-?[0-9]+$`                 |
-| `float`    | Decimal number                 | `^-?[0-9]+(\.[0-9]+)?$`      |
+| `integer`  | Integer number (optional sign) | `^[-+]?[0-9]+$`              |
+| `float`    | Decimal number (`1`, `-2.5`, `.5`, `+1e3`) | `^[-+]?([0-9]+(\.[0-9]*)?\|\.[0-9]+)([eE][-+]?[0-9]+)?$` |
 | `bool`     | Boolean value                  | `true/false/yes/no/1/0`      |
 
 ### Date/Time Types

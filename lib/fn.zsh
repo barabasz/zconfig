@@ -4,10 +4,13 @@
 # Shell files tracking - keep at the top
 zfile_track_start ${0:A}
 
+##
 # Function metadata and argument parsing library
 # Provides standardized help generation, option parsing, argument validation, and type checking.
-# Dependencies: printe (from print.zsh), color variables ($r, $g, $y, $c, $p, $x)
+# Depends on: print.zsh (printe, printi), color variables ($r, $g, $y, $c, $p, $x),
+#             zsh/parameter (functions_source)
 # Documentation: docs/FN.md
+##
 
 # Type validation patterns (extensible - add custom types here)
 # Each key is a type name, value is an extended regex pattern
@@ -15,8 +18,8 @@ typeset -gA _FN_TYPES=(
     [string]='^.*$'
     [char]='^.$'
     [digit]='^[0-9]$'
-    [integer]='^-?[0-9]+$'
-    [float]='^-?[0-9]+(\.[0-9]+)?$'
+    [integer]='^[-+]?[0-9]+$'
+    [float]='^[-+]?([0-9]+(\.[0-9]*)?|\.[0-9]+)([eE][-+]?[0-9]+)?$'
     [date]='^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$'
     [time]='^([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$'
     [datetime]='^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$'
@@ -25,7 +28,7 @@ typeset -gA _FN_TYPES=(
     [ipv6]='^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$|^::$|^([0-9a-fA-F]{1,4}:){1,7}:$|^:(:([0-9a-fA-F]{1,4})){1,7}$|^([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}$|^([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}$|^([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}$|^([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}$|^([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}$|^[0-9a-fA-F]{1,4}:(:[0-9a-fA-F]{1,4}){1,6}$'
     [email]='^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     [domain]='^([a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
-    [url]='^[a-zA-Z][a-zA-Z0-9+.-]*://[^\s]+$'
+    [url]='^[a-zA-Z][a-zA-Z0-9+.-]*://[^[:space:]]+$'
 )
 
 # Human-readable type descriptions for error messages
@@ -57,42 +60,44 @@ _fn_section() {
 # Usage: _fn_description "Description text"
 # Normalizes whitespace (2+ spaces → 1), trims leading spaces, adds 2-space indent
 _fn_description() {
-    print "$1" | sed 's/  */ /g; s/^ //; s/^/  /'
+    local line
+    for line in "${(@f)1}"; do
+        # Collapse runs of spaces, drop one leading space, indent by two
+        while [[ $line == *"  "* ]]; do line=${line//  / }; done
+        print -r -- "  ${line# }"
+    done
 }
 
 # _fn_parse_url_schemas - Parse url type with optional schema list
 # Usage: _fn_parse_url_schemas "url[http,https,ftp]"
-# Sets: REPLY_BASE ("url"), REPLY_SCHEMAS (comma-separated list or empty)
+# Sets: reply=(base schemas) - base is "url" (or empty), schemas a comma-separated list or empty
 _fn_parse_url_schemas() {
     local type="$1"
-    REPLY_BASE="" REPLY_SCHEMAS=""
+    reply=("" "")
 
     if [[ "$type" =~ '^(url)\[([a-zA-Z0-9,+-]+)\]$' ]]; then
-        REPLY_BASE="${match[1]}"
-        REPLY_SCHEMAS="${match[2]}"
+        reply=("${match[1]}" "${match[2]}")
     elif [[ "$type" == "url" ]]; then
-        REPLY_BASE="url"
+        reply=(url "")
     fi
 }
 
 # _fn_parse_ranged_type - Parse type with optional range
 # Usage: _fn_parse_ranged_type "integer[3;9]" or "float(0;1]"
-# Sets: REPLY_BASE (base type), REPLY_MIN, REPLY_MAX, REPLY_MIN_INC, REPLY_MAX_INC
-# REPLY_MIN_INC/REPLY_MAX_INC: 1 if inclusive ([ or ]), 0 if exclusive (( or ))
+# Sets: reply=(base min max min_inc max_inc)
+#   min_inc/max_inc: 1 if inclusive ([ or ]), 0 if exclusive (( or ))
 _fn_parse_ranged_type() {
     local type="$1"
-    REPLY_BASE="" REPLY_MIN="" REPLY_MAX="" REPLY_MIN_INC=1 REPLY_MAX_INC=1
+    local -i min_inc=1 max_inc=1
 
     # Match: type + bracket + number ; number + bracket
     # Using alternation instead of character class for brackets
     if [[ "$type" =~ '^([a-z]+)(\[|\()(-?[0-9]*\.?[0-9]*);(-?[0-9]*\.?[0-9]*)(\]|\))$' ]]; then
-        REPLY_BASE="${match[1]}"
-        [[ "${match[2]}" == "[" ]] && REPLY_MIN_INC=1 || REPLY_MIN_INC=0
-        REPLY_MIN="${match[3]}"
-        REPLY_MAX="${match[4]}"
-        [[ "${match[5]}" == "]" ]] && REPLY_MAX_INC=1 || REPLY_MAX_INC=0
+        [[ "${match[2]}" == "[" ]] || min_inc=0
+        [[ "${match[5]}" == "]" ]] || max_inc=0
+        reply=("${match[1]}" "${match[3]}" "${match[4]}" $min_inc $max_inc)
     else
-        REPLY_BASE="$type"
+        reply=("$type" "" "" 1 1)
     fi
 }
 
@@ -106,15 +111,15 @@ _fn_validate_type() {
     # Check for URL with schema restrictions first
     if [[ "$type" == url* ]]; then
         _fn_parse_url_schemas "$type"
-        if [[ "$REPLY_BASE" == "url" ]]; then
-            local url_pattern="${_FN_TYPES[url]}"
+        if [[ "${reply[1]}" == "url" ]]; then
+            local url_pattern="${_FN_TYPES[url]}" url_schemas="${reply[2]}"
             [[ -z "$value" ]] && return 1
             [[ "$value" =~ $url_pattern ]] || return 1
 
             # If schemas specified, check if URL uses allowed schema
-            if [[ -n "$REPLY_SCHEMAS" ]]; then
+            if [[ -n "$url_schemas" ]]; then
                 local url_schema="${value%%://*}"
-                local allowed_schemas=",${REPLY_SCHEMAS},"
+                local allowed_schemas=",${url_schemas},"
                 [[ "$allowed_schemas" == *",${url_schema},"* ]] || return 1
             fi
             return 0
@@ -123,8 +128,8 @@ _fn_validate_type() {
 
     # Parse type for range specifier
     _fn_parse_ranged_type "$type"
-    local base_type="$REPLY_BASE" min_val="$REPLY_MIN" max_val="$REPLY_MAX"
-    local min_inc="$REPLY_MIN_INC" max_inc="$REPLY_MAX_INC"
+    local base_type="${reply[1]}" min_val="${reply[2]}" max_val="${reply[3]}"
+    local min_inc="${reply[4]}" max_inc="${reply[5]}"
 
     local pattern="${_FN_TYPES[$base_type]}"
 
@@ -187,9 +192,9 @@ _fn_type_error_msg() {
     # Check for URL with schema restrictions first
     if [[ "$type" == url* ]]; then
         _fn_parse_url_schemas "$type"
-        if [[ "$REPLY_BASE" == "url" ]]; then
-            if [[ -n "$REPLY_SCHEMAS" ]]; then
-                local schemas_readable="${REPLY_SCHEMAS//,/, }"
+        if [[ "${reply[1]}" == "url" ]]; then
+            if [[ -n "${reply[2]}" ]]; then
+                local schemas_readable="${reply[2]//,/, }"
                 desc="URL with schema: ${schemas_readable}"
             else
                 desc="URL"
@@ -205,8 +210,8 @@ _fn_type_error_msg() {
 
     # Parse type for range specifier
     _fn_parse_ranged_type "$type"
-    local base_type="$REPLY_BASE" min_val="$REPLY_MIN" max_val="$REPLY_MAX"
-    local min_inc="$REPLY_MIN_INC" max_inc="$REPLY_MAX_INC"
+    local base_type="${reply[1]}" min_val="${reply[2]}" max_val="${reply[3]}"
+    local min_inc="${reply[4]}" max_inc="${reply[5]}"
 
     desc="${_FN_TYPE_DESC[$base_type]:-$base_type}"
 
@@ -253,7 +258,7 @@ _fn_type_error_msg() {
 # Usage: _fn_type_error "name" "value" "type" ["option"]
 _fn_type_error() {
     _fn_type_error_msg "$@"
-    printe "$REPLY" >&2
+    printe "$REPLY"
 }
 
 # _fn_cmd_error - Print unknown command error
@@ -278,7 +283,7 @@ _fn_check_required() {
     local cmd
 
     for cmd in "${required[@]}"; do
-        command -v "$cmd" &>/dev/null || missing+=( "$cmd" )
+        (( ${+commands[$cmd]} )) || missing+=( "$cmd" )
     done
 
     (( ${#missing} == 0 )) && return 0
@@ -286,17 +291,17 @@ _fn_check_required() {
     # Build error message
     local missing_str="${(j:, :)missing}"
     if (( ${#missing} == 1 )); then
-        printe "Required command not found: ${g}${missing[1]}${x}" >&2
+        printe "Required command not found: ${g}${missing[1]}${x}"
     else
-        printe "Required commands not found: ${g}${missing_str}${x}" >&2
+        printe "Required commands not found: ${g}${missing_str}${x}"
     fi
 
     # Suggest installation
     local install_hint=""
     if [[ -f /opt/homebrew/bin/brew || -f /usr/local/bin/brew || -f /home/linuxbrew/.linuxbrew/bin/brew ]]; then
-        install_hint="brew install ${missing_str// /, }"
+        install_hint="brew install ${(j: :)missing}"
     elif [[ -f /etc/debian_version ]]; then
-        install_hint="sudo apt install ${missing_str// /, }"
+        install_hint="sudo apt install ${(j: :)missing}"
     fi
     [[ -n "$install_hint" ]] && printi "Install with: ${c}${install_hint}${x}" >&2
 
@@ -362,7 +367,7 @@ _fn_has_required_command() {
 # Usage: _fn_def_error "array_name" "index" "message" ["spec"]
 _fn_def_error() {
     local array="$1" idx="$2" msg="$3" spec="$4"
-    printe "Definition error in ${array}[${idx}]: ${msg}" >&2
+    printe "Definition error in ${array}[${idx}]: ${msg}"
     [[ -n "$spec" ]] && print "  → \"${spec}\"" >&2
 }
 
@@ -376,13 +381,13 @@ _fn_validate_type_name() {
     # Check for URL with schema restrictions
     if [[ "$1" == url* ]]; then
         _fn_parse_url_schemas "$1"
-        [[ "$REPLY_BASE" == "url" ]] && return 0
+        [[ "${reply[1]}" == "url" ]] && return 0
         return 1
     fi
 
     # Parse for range specifier
     _fn_parse_ranged_type "$1"
-    local base_type="$REPLY_BASE" min_val="$REPLY_MIN" max_val="$REPLY_MAX"
+    local base_type="${reply[1]}" min_val="${reply[2]}" max_val="${reply[3]}"
 
     # Check if base type exists
     (( ${+_FN_TYPES[$base_type]} )) || return 1
@@ -550,12 +555,11 @@ _fn_validate_opts() {
 # _fn_get_file - Get function source file path
 # Returns path via stdout
 _fn_get_file() {
-    local name=${_fn[name]}
-    local file=""
+    local name=${_fn[name]} dir
+    local file=${functions_source[$name]}
 
-    # Try whence first
-    file=$(whence -v "$name" 2>/dev/null | grep -o '/.*')
-    [[ -n "$file" ]] && { print "$file"; return 0 }
+    # functions_source (zsh/parameter) knows the file of loaded functions
+    [[ -n "$file" && -f "$file" ]] && { print -r -- "$file"; return 0 }
 
     # Try fpath
     for dir in $fpath; do
@@ -648,6 +652,36 @@ _fn_usage_short() {
         print "For more information check source code:"
         print "${c}${file:-unknown}${x}"
     fi
+}
+
+# _fn_color_word - Color a single word of a usage example (internal)
+# Called from _fn_usage; reads its locals name and _ex_valid_opts (dynamic scope)
+# Usage: _fn_color_word <word> <is_first>
+# Sets: REPLY (colored word)
+_fn_color_word() {
+    local word=$1 is_first=${2:-0}
+    if (( is_first )) || [[ "$word" == "${name}" ]]; then
+        REPLY="${g}${word}${x}"
+    elif (( ${+_ex_valid_opts[$word]} )) || [[ "$word" == -[^-] ]] || [[ "$word" == --?* ]]; then
+        REPLY="${p}${word}${x}"
+    elif [[ "$word" == ("|"|"||"|"&&"|"|&"|";"|"&"|"!"|">"*|"<"*|[0-9]">&"*|">&"*) ]]; then
+        REPLY="${word}"
+    else
+        REPLY="${c}${word}${x}"
+    fi
+}
+
+# _fn_color_example - Color an entire usage example command (internal)
+# Usage: _fn_color_example <cmd>
+# Sets: REPLY (colored command)
+_fn_color_example() {
+    local cmd=$1 result="" word is_first=1
+    for word in ${=cmd}; do
+        _fn_color_word "$word" "$is_first"
+        result+="${REPLY} "
+        is_first=0
+    done
+    REPLY="${result% }"
 }
 
 # _fn_usage - Generate and print full usage/help message
@@ -832,39 +866,12 @@ _fn_usage() {
             done
         fi
 
-        # Helper: color a single word based on its type
-        # Usage: _color_word <word> <is_first> → result in REPLY
-        _color_word() {
-            local word=$1 is_first=${2:-0}
-            if (( is_first )) || [[ "$word" == "${name}" ]]; then
-                REPLY="${g}${word}${x}"
-            elif (( ${+_ex_valid_opts[$word]} )) || [[ "$word" == -[^-] ]] || [[ "$word" == --?* ]]; then
-                REPLY="${p}${word}${x}"
-            elif [[ "$word" == ("|"|"||"|"&&"|"|&"|";"|"&"|"!"|">"*|"<"*|[0-9]">&"*|">&"*) ]]; then
-                REPLY="${word}"
-            else
-                REPLY="${c}${word}${x}"
-            fi
-        }
-
-        # Helper: color entire example command
-        # Usage: _color_example <cmd> → result in REPLY
-        _color_example() {
-            local cmd=$1 result="" word is_first=1
-            for word in ${=cmd}; do
-                _color_word "$word" "$is_first"
-                result+="${REPLY} "
-                is_first=0
-            done
-            REPLY="${result% }"
-        }
-
         local _ex_entry _ex_cmd _ex_desc _ex_cmd_colored
         for _ex_entry in "${_fn_examples[@]}"; do
             _ex_cmd="${_ex_entry%|*}"
             _ex_desc="${_ex_entry##*|}"
 
-            _color_example "$_ex_cmd"
+            _fn_color_example "$_ex_cmd"
             _ex_cmd_colored="$REPLY"
 
             if [[ "$_ex_desc" == "$_ex_cmd" ]]; then
@@ -956,12 +963,13 @@ _fn_init() {
     opts=()
     args=()
 
-    # Ensure _fn exists and has defaults
-    # Use funcstack[2] to get the caller's function name (funcstack[1] is _fn_init)
-    if (( ! ${+_fn} )); then
-        # _fn not defined at all - create it in caller's scope
-        typeset -gA _fn=()
+    # _fn must be declared by the caller (local -A _fn=(...)); creating it
+    # here would leave a global _fn behind after the function returns
+    if [[ ${(t)_fn} != association* ]]; then
+        printe "Definition error: declare ${c}local -A _fn=(...)${x} before calling _fn_init."
+        REPLY=3; return 3
     fi
+    # Use funcstack[2] to get the caller's function name (funcstack[1] is _fn_init)
     : ${_fn[name]:=${funcstack[2]:-unknown}}
     if (( ${_fn[info]+1} )) && [[ -z $_fn[info] ]]; then
         unset "_fn[info]"
@@ -1056,12 +1064,12 @@ _fn_init() {
     for _prescan_arg in "$@"; do
         if [[ "$_prescan_arg" == "--help" ]] || { [[ "$_prescan_arg" == "-${_help_short}" ]] && (( _help_has_short )); }; then
             if _fn_has_help; then
-                _fn_usage >&2
+                _fn_usage
                 REPLY=0; return 1
             fi
         elif [[ "$_prescan_arg" == "--version" ]] || { [[ "$_prescan_arg" == "-${_version_short}" ]] && (( _version_has_short )); }; then
             if (( _has_version_val )); then
-                _fn_version >&2
+                _fn_version
                 REPLY=0; return 1
             fi
         fi
@@ -1124,7 +1132,7 @@ _fn_init() {
         # Long option
         if [[ "$arg" == --* ]]; then
             if ! _fn_has_opts; then
-                printe "This function does not accept any options." >&2
+                printe "This function does not accept any options."
                 _fn_usage_short >&2
                 REPLY=2; return 2
             fi
@@ -1141,7 +1149,7 @@ _fn_init() {
         # Short option(s)
         if [[ "$arg" == -? || "$arg" == -??* ]] && [[ "$arg" != -[0-9]* ]]; then
             if ! _fn_has_opts; then
-                printe "This function does not accept any options." >&2
+                printe "This function does not accept any options."
                 _fn_usage_short >&2
                 REPLY=2; return 2
             fi
@@ -1154,7 +1162,7 @@ _fn_init() {
 
                 # Check if known option
                 if (( ! ${+is_known_short[$char]} )); then
-                    printe "Unknown option: -${char}" >&2
+                    printe "Unknown option: -${char}"
                     _fn_usage_short >&2
                     REPLY=2; return 2
                 fi
@@ -1186,18 +1194,19 @@ _fn_init() {
 
     # Parse preprocessed options with zparseopts
     local -A raw_opts=()
-    local zparse_err_file="${TMPDIR:-/tmp}/fn_init_err.$$"
     set -- "${processed_args[@]}"
-    zparseopts -D -E -A raw_opts -- "${zparse_spec[@]}" 2>"$zparse_err_file"
+    zparseopts -D -E -A raw_opts -- "${zparse_spec[@]}" 2>/dev/null
     local zparse_status=$?
     local zparse_err=""
-    [[ -f "$zparse_err_file" ]] && { zparse_err=$(<"$zparse_err_file"); rm -f "$zparse_err_file" }
 
     if (( zparse_status != 0 )); then
+        # Only on failure: repeat the parse in a subshell to capture its message
+        # (no temporary file needed)
+        zparse_err=$(set -- "${processed_args[@]}"; zparseopts -D -E -A raw_opts -- "${zparse_spec[@]}" 2>&1)
         if [[ "$zparse_err" =~ "missing argument for option: (-[a-zA-Z0-9-]+)" ]]; then
-            printe "Option ${match[1]} requires a value." >&2
+            printe "Option ${match[1]} requires a value."
         else
-            printe "Invalid option." >&2
+            printe "Invalid option."
         fi
         _fn_usage_short >&2
         REPLY=2; return 2
@@ -1217,7 +1226,7 @@ _fn_init() {
             clean_args+=( "$arg" )
         elif [[ "$arg" == --* ]]; then
             # Unknown long option (short ones caught in preprocessor)
-            printe "Unknown option: ${arg}" >&2
+            printe "Unknown option: ${arg}"
             _fn_usage_short >&2
             REPLY=2; return 2
         else
@@ -1259,13 +1268,13 @@ _fn_init() {
 
     # Handle -h/--help
     if (( ${+parsed_opts[help]} )); then
-        _fn_usage >&2
+        _fn_usage
         REPLY=0; return 1
     fi
 
     # Handle -v/--version
     if (( ${+parsed_opts[version]} )); then
-        _fn_version >&2
+        _fn_version
         REPLY=0; return 1
     fi
 
@@ -1277,7 +1286,7 @@ _fn_init() {
 
     # Check: no arguments expected but some given
     if (( max_args == 0 && got_args > 0 )); then
-        printe "This function does not accept any arguments." >&2
+        printe "This function does not accept any arguments."
         _fn_usage_short >&2
         REPLY=2; return 2
     fi
@@ -1293,9 +1302,9 @@ _fn_init() {
                     break
                 fi
             done
-            printe "Missing argument: <${missing_name}>" >&2
+            printe "Missing argument: <${missing_name}>"
         else
-            printe "Not enough arguments. Expected ${range_str}, got ${got_args}." >&2
+            printe "Not enough arguments. Expected ${range_str}, got ${got_args}."
         fi
         _fn_usage_short >&2
         REPLY=2; return 2
@@ -1303,7 +1312,7 @@ _fn_init() {
 
     # Check: too many arguments
     if (( got_args > max_args )); then
-        printe "Too many arguments. Expected ${range_str}, got ${got_args}." >&2
+        printe "Too many arguments. Expected ${range_str}, got ${got_args}."
         _fn_usage_short >&2
         REPLY=2; return 2
     fi
@@ -1344,7 +1353,7 @@ _fn_init() {
     if (( ${#_validation_errors} > 0 )); then
         local _err
         for _err in "${_validation_errors[@]}"; do
-            printe "$_err" >&2
+            printe "$_err"
         done
         _fn_usage_short >&2
         REPLY=2; return 2
@@ -1360,4 +1369,5 @@ _fn_init() {
     done
 }
 
+# Shell files tracking - keep at the end
 zfile_track_end ${0:A}

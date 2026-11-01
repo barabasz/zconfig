@@ -8,12 +8,13 @@ local -A _fn=(
     [desc]="Scans the zconfig lib/ and functions/ directories for function definitions
             and displays them with their descriptions. Supports filtering, grouping, and
             markdown export."
-    [version]="0.5.1"
+    [version]="0.6.0"
     [created]="2025"
-    [modified]="2026-02-08"
+    [modified]="2026-11-01"
     [license]="MIT"
     [author]="Andrzej Barabasz"
-    [notes]="Functions starting with _ are excluded from the listing."
+    [notes]="Functions starting with _ are excluded from the listing.
+            Aliases created with functions[new]=\$functions[old] are listed as \"Alias for old\"."
 )
 
 local -a _fn_args=(
@@ -77,11 +78,18 @@ done
 local -a comment_block=()
 for file in "$lib_dir"/*.zsh(.N); do
     local src_name="${file:t}"
-    [[ "$src_name" == "temp.zsh" ]] && continue
     comment_block=()
 
     while IFS= read -r line; do
-        if [[ "$line" =~ '^([a-zA-Z_][a-zA-Z0-9_]*)\s*\(\)' ]]; then
+        # Aliases defined by copying a function: functions[new]=$functions[old]
+        if [[ "$line" =~ 'functions\[([a-zA-Z][a-zA-Z0-9_]*)\]=\$functions\[([a-zA-Z_][a-zA-Z0-9_]*)\]' ]]; then
+            funcs+=("${match[1]}")
+            sources+=("$src_name")
+            descs+=("Alias for ${match[2]}")
+            comment_block=()
+            continue
+        fi
+        if [[ "$line" =~ '^([a-zA-Z_][a-zA-Z0-9_]*)[[:space:]]*\(\)' ]]; then
             fname="${match[1]}"
             [[ "$fname" == _* ]] && continue
             desc=""
@@ -171,7 +179,9 @@ local -a sorted_indices=() sortable=()
 for ((i=1; i<=${#funcs}; i++)); do
     sortable+=("${funcs[i]}:$i")
 done
-sortable=(${(o)sortable})
+# C collation in an anonymous function: same order regardless of the user
+# locale (keeps docs/FUNCTIONS.md stable), without changing the locale elsewhere
+() { local LC_ALL=C; sortable=(${(o)sortable}) }
 for entry in "${sortable[@]}"; do
     sorted_indices+=("${entry##*:}")
 done
@@ -246,4 +256,5 @@ else
     done
 fi
 
-(( ! ${+opts[markdown]} )) && print "\nTotal: $total_count functions"
+(( ${+opts[markdown]} )) || print "\nTotal: $total_count functions"
+return 0

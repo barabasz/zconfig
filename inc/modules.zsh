@@ -53,6 +53,9 @@ zmodload zsh/mathfunc
 # native network operations
 zmodload zsh/net/tcp
 
+# Random numbers: SRANDOM, zrand_int(), zrand_float() (zsh 5.9+, used by random).
+zmodload zsh/random 2>/dev/null
+
 # Access to internal hash tables via special associative arrays.
 zmodload zsh/parameter
 
@@ -77,8 +80,8 @@ zmodload zsh/zle
 # Access to internals of the Zsh Line Editor via parameters.
 zmodload zsh/zleparameter
 
-# Block and return when file descriptors are ready.
-# zmodload zsh/zselect
+# Block and return when file descriptors are ready (used by execs spinner).
+zmodload zsh/zselect
 
 # Some utility builtins, e.g. the one for supporting configuration via styles.
 zmodload zsh/zutil
