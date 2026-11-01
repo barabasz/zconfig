@@ -157,13 +157,20 @@ case "$cmd" in
             printc "$i/$count ${repo:t}" $g
             url=$(git -C "$repo" remote get-url origin 2>/dev/null) && printc "$url" $c
 
-            git -C "$repo" fetch origin
-            # Default branch of origin (main, master, ...); main if unknown
-            branch=$(git -C "$repo" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null)
-            branch=${${branch#origin/}:-main}
-            git -C "$repo" checkout "$branch"
-            git -C "$repo" reset --hard "origin/$branch"
             ((i++))
+            if ! git -C "$repo" fetch origin; then
+                printe "Fetch failed for ${repo:t}, skipped."
+                continue
+            fi
+            # Default branch of origin (main, master, ...), refreshed from the remote
+            git -C "$repo" remote set-head origin --auto >/dev/null 2>&1
+            branch=$(git -C "$repo" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null)
+            branch=${branch#origin/}
+            if [[ -z $branch ]]; then
+                printe "Cannot determine the default branch of origin for ${repo:t}, skipped."
+                continue
+            fi
+            git -C "$repo" checkout "$branch" && git -C "$repo" reset --hard "origin/$branch"
         done
         ;;
 

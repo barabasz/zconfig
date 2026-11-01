@@ -41,8 +41,9 @@ get_git_repos() {
 ## Remote
 
 # Fetch all remotes of many repositories in parallel (quietly, with --prune)
-# Credential prompts are disabled, so a fetch that needs a password fails
-# instead of blocking the shell
+# Password, askpass and ssh prompts are disabled (credential helpers and
+# ssh-agent still work), so a fetch that needs a password fails instead of
+# blocking the shell
 # Usage: fetch_git_repos <repo>...
 # Output: nothing
 # Sets: reply to array of repositories whose fetch failed
@@ -54,7 +55,19 @@ fetch_git_repos() {
     local repo
     local -a pids=()
     for repo in "$@"; do
-        GIT_TERMINAL_PROMPT=0 git -C $repo fetch --all --prune --quiet </dev/null >/dev/null 2>&1 &
+        {
+            # Keep the user's ssh command (env or core.sshCommand), only add BatchMode
+            local ssh_cmd=${GIT_SSH_COMMAND:-$(git -C $repo config --get core.sshCommand 2>/dev/null)}
+            if [[ -n $GIT_SSH ]]; then
+                # Custom ssh wrapper program: leave it untouched
+                GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=true \
+                    git -C $repo fetch --all --prune --quiet
+            else
+                GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=true \
+                GIT_SSH_COMMAND="${ssh_cmd:-ssh} -o BatchMode=yes" \
+                    git -C $repo fetch --all --prune --quiet
+            fi
+        } </dev/null >/dev/null 2>&1 &
         pids+=($!)
     done
     reply=()
