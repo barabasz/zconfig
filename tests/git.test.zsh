@@ -136,6 +136,20 @@ assert_eq "${#${(@M)out_lines:#*broken*}}" 1 "zgit status: broken remote listed"
 out=$(GHDIR=$tmp/gh zgit status 2>&1)
 assert_eq "$?" 1 "zgit status rc when a fetch fails"
 assert_eq "${#${(@M)${(@f)out}:#*broken*fetch failed*}}" 1 "zgit status: fetch failure shown"
+
+## zgit pull: fast-forwards repos that are behind, one line per repository
+out=$(GHDIR=$tmp/gh zgit pull 2>&1)
+assert_eq "$?" 1 "zgit pull rc when a fetch fails"
+out_lines=("${(@f)out}")
+assert_eq "${#${(@M)out_lines:#*/8  *}}" 8 "zgit pull: one line per repository"
+assert_eq "${#${(@M)out_lines:#*behind*updated*"1 commit · 1 file +1 -0"}}" 1 "zgit pull: behind updated"
+assert_eq "${#${(@M)out_lines:#*clean*up to date}}" 1 "zgit pull: clean"
+assert_eq "${#${(@M)out_lines:#*noup*skipped: no upstream branch}}" 1 "zgit pull: no upstream skipped"
+assert_eq "${#${(@M)out_lines:#*broken*fetch failed, skipped}}" 1 "zgit pull: fetch failure"
+assert_eq "${#${(@M)out_lines:#*\\n*}}" 0 "zgit pull: no literal \\n"
+get_git_status $tmp/gh/behind >/dev/null
+assert_eq "$REPLY" up-to-date "behind is up to date after zgit pull"
+
 assert_rc 1 env GHDIR=$tmp/gh/plain zsh -fc "source $REPO_DIR/tests/run.zsh --lib-only; fpath=($REPO_DIR/functions \$fpath); autoload -Uz zgit; zgit status -n"
 
 rm -rf $tmp

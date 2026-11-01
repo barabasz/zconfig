@@ -11,7 +11,7 @@ local -A _fn=(
             ${c}status${x} fetches all remotes first (in parallel), so it shows whether
             each repository is up to date, ahead (not pushed), behind (pull needed)
             or diverged, plus local changes (staged, modified, untracked, conflicts)."
-    [version]="0.6.0"
+    [version]="0.6.1"
     [created]="2025"
     [modified]="2026-11-01"
     [license]="MIT"
@@ -27,13 +27,13 @@ local -a _fn_args=(
 
 local -a _fn_opts=(
     "no-fetch|n|status: use local data only (offline, faster)"
-    "files|f|status: list changed files for each repository"
+    "files|f|status, pull: list changed files for each repository"
 )
 
 local -a _fn_commands=(
     "fetch|Fetch all remotes of all repos (in parallel)"
     "list|List all repositories with branch and remote"
-    "pull|Pull --rebase --autostash all repos"
+    "pull|Fetch, then pull --rebase --autostash repos that are behind"
     "push|Commit and push all repos"
     "push-force|Force push current directory to origin/main"
     "reset|Hard reset all repos to their remote default branch"
@@ -45,7 +45,8 @@ local -a _fn_examples=(
     "zgit status|Fetch and show status of all repos"
     "zgit status -n|Show status without fetching (offline)"
     "zgit status -f|Show status with the list of changed files"
-    "zgit pull|Pull all repos"
+    "zgit pull|Pull all repos that are behind (one line per repo)"
+    "zgit pull -f|Pull and list changed files"
     "zgit push|Commit and push all repos"
     "zgit sync|Synchronize: merge remote changes and push all repos"
 )
@@ -101,22 +102,84 @@ case "$cmd" in
         ;;
 
     pull)
-        printc "Pulling $count repositories from the remote." $y
-        print "Working directory: $c$GHDIR$x"
+        local -a fetch_failed=()
+        printc "Fetching $count repositories..." $y
+        fetch_git_repos $repos || fetch_failed=($reply)
+        printc "Pulling $count repositories in $GHDIR:" $y
 
+        local -i name_w=0 num_w=${#count}
+        for repo in $repos; do (( ${#repo:t} > name_w )) && name_w=${#repo:t}; done
+
+        local state msg old_head new_head out stat
+        local -i files=0 ins=0 del=0
+        local -i n_updated=0 n_ok=0 n_skipped=0 n_failed=0
         for repo in $repos; do
-            printc "\n$i/$count ${repo:t}" $g
-            url=$(git -C "$repo" remote get-url origin 2>/dev/null) && printc "$url" $c
-
-            git -C "$repo" pull --rebase --autostash 2>&1 | while IFS= read -r line; do
-                if [[ "$line" == *"error:"* || "$line" == *"fatal:"* ]]; then
-                    print -r -- "$r$line$x"
-                else
-                    print -r -- "$line"
-                fi
-            done
+            msg=""
+            if (( ${fetch_failed[(Ie)$repo]} )); then
+                msg="${r}fetch failed, skipped${x}"; (( n_failed++ ))
+            elif ! get_git_status "$repo" >/dev/null; then
+                msg="${r}git status failed, skipped${x}"; (( n_failed++ ))
+            else
+                state=$REPLY
+                case $state in
+                    (up-to-date) msg="${g}up to date${x}"; (( n_ok++ )) ;;
+                    (ahead)      msg="${g}up to date${x} · ${y}${reply[3]} ahead (push needed)${x}"; (( n_ok++ )) ;;
+                    (no-upstream) msg="${p}skipped: no upstream branch${x}"; (( n_skipped++ )) ;;
+                    (gone)        msg="${p}skipped: upstream ${reply[2]} is gone${x}"; (( n_skipped++ )) ;;
+                    (detached)    msg="${p}skipped: detached HEAD${x}"; (( n_skipped++ )) ;;
+                    (behind|diverged)
+                        old_head=$(git -C "$repo" rev-parse HEAD)
+                        if out=$(git -C "$repo" pull --rebase --autostash --quiet 2>&1); then
+                            new_head=$(git -C "$repo" rev-parse HEAD)
+                            stat=$(git -C "$repo" diff --shortstat $old_head $new_head 2>/dev/null)
+                            # " 32 files changed, 1000 insertions(+), 7119 deletions(-)"
+                            files=0 ins=0 del=0
+                            [[ $stat =~ '([0-9]+) file' ]] && files=$match[1]
+                            [[ $stat =~ '([0-9]+) insertion' ]] && ins=$match[1]
+                            [[ $stat =~ '([0-9]+) deletion' ]] && del=$match[1]
+                            msg="${g}updated${x} ${old_head[1,7]}..${new_head[1,7]}"
+                            msg+=" · ${reply[4]} commit${${reply[4]:#1}:+s}"
+                            msg+=" · $files file${${files:#1}:+s} ${g}+$ins${x} ${r}-$del${x}"
+                            [[ $state == diverged ]] && msg+=" · ${y}local commits rebased (push needed)${x}"
+                            (( n_updated++ ))
+                        else
+                            msg="${r}pull failed${x}"; (( n_failed++ ))
+                            # Do not leave the repository in the middle of a rebase
+                            get_git_status "$repo" >/dev/null
+                            if [[ ${reply[9]} == rebase ]] && git -C "$repo" rebase --abort >/dev/null 2>&1; then
+                                msg+=" · ${y}conflict, rebase aborted (repository unchanged)${x}"
+                            fi
+                        fi
+                        ;;
+                esac
+            fi
+            printf "%*d/%d  %-*s  %s\n" $num_w $i $count $name_w ${repo:t} "$msg"
+            # Details: changed files (-f) or the error output of git
+            if [[ $msg == *"pull failed"* ]]; then
+                # Only the relevant lines, without git's multi-line hints
+                for line in ${(f)out}; do
+                    [[ $line == (CONFLICT|error|fatal)* ]] && print -r -- "      $r$line$x"
+                done
+            elif [[ $msg == *updated* ]] && (( ${+opts[files]} )); then
+                git -C "$repo" -c color.diff=always diff --stat=$(( COLUMNS > 20 ? COLUMNS - 6 : 74 )) \
+                    $old_head $new_head | while IFS= read -r line; do
+                        # The totals line is already in the summary above
+                        [[ $line == *" changed"* ]] || print -r -- "      $line"
+                    done
+            fi
             ((i++))
         done
+
+        local -a summary=()
+        (( n_updated )) && summary+=("${g}$n_updated updated${x}")
+        (( n_ok ))      && summary+=("${g}$n_ok already up to date${x}")
+        (( n_skipped )) && summary+=("${p}$n_skipped skipped${x}")
+        (( n_failed ))  && summary+=("${r}$n_failed failed${x}")
+        print -r -- "Summary: ${(pj:, :)summary}"
+        (( n_updated && ! ${+opts[files]} )) && print "Use ${c}zgit pull -f${x} to list changed files."
+        (( n_failed )) && print "Repositories that failed must be pulled manually (${c}git pull${x} in the repository)."
+        (( n_failed )) && return 1
+        return 0
         ;;
 
     push)

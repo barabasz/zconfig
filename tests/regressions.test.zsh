@@ -106,3 +106,6 @@ assert_eq "$(fnneg -.5 2>&1)" -.5 "-.5 is a value"
 assert_eq "$(fnneg -1.5 2>&1)" -1.5 "-1.5 is a value"
 
 command rm -rf -- $tmp
+
+## printc interprets escapes like print (zgit/zhelp pass "\n..."); lib refactor made it print -r
+assert_eq "$(printc 'a\nb')" $'a\nb' "printc: \\n is a newline"

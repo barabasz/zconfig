@@ -208,13 +208,14 @@ printul() {
 }
 
 # Print colored text (simple wrapper)
+# Escape sequences in text are interpreted, like print (e.g. "\nTitle")
 # Usage: printc <text> [color]
 # Returns: 0 success, 2 invalid usage
 printc() {
     (( ARGC >= 1 && ARGC <= 2 )) || return 2
     local text="$1"
     local color="${2:-$x}"
-    print -r -- "${color}${text}${x}"
+    print -- "${color}${text}${x}"
 }
 
 # Print text with a status label right-aligned to the terminal width
