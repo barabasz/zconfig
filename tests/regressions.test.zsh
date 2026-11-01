@@ -106,3 +106,20 @@ assert_eq "$(fnneg -.5 2>&1)" -.5 "-.5 is a value"
 assert_eq "$(fnneg -1.5 2>&1)" -1.5 "-1.5 is a value"
 
 command rm -rf -- $tmp
+
+## printc interprets escapes like print (zgit/zhelp pass "\n..."); lib refactor made it print -r
+assert_eq "$(printc 'a\nb')" $'a\nb' "printc: \\n is a newline"
+assert_eq "$(printkv 'k' 'a\tb')" $'k: a\tb' "printkv interprets escapes"
+ICO_UL='\u2022'
+assert_eq "$(printul 'a\u2022')" " • a•" "printul interprets escapes (item and bullet)"
+assert_eq "${$(printh 'a\u2022')%%$'\n'*}" "a•" "printh interprets escapes"
+assert_eq "${${(f)$(printt 'a\u2022')}[2]}" "│ a• │" "printt interprets escapes"
+
+## functions/ must not declare locals that shadow zsh special hashes
+## (zhelp had `local -A commands`, which hid $commands from is_installed/get_local_ip)
+local -a shadow=()
+local fnfile
+for fnfile in $REPO_DIR/functions/*(.); do
+    shadow+=(${(M)${(f)"$(<$fnfile)"}:#[[:space:]]#(local|typeset)*[[:space:]](commands|functions|aliases|options|parameters|builtins|modules)([[:space:]=]*|)})
+done
+assert_eq "${(j:|:)shadow}" "" "no local commands/functions/... in functions/"

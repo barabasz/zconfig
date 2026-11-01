@@ -17,15 +17,15 @@ local -A _fn=(
 local -A opts=() args=()
 _fn_init "$@" || return $REPLY
 
-local -A commands
+local -A help_cmds
 
 _zhelp_header() {
     printc "\n$1\n" $y
 }
 
 _zhelp_print() {
-    for cmd in ${(k)commands}; do
-        printf "  ${g}%-15s${x}  %s\n" "$cmd" "${commands[$cmd]}"
+    for cmd in ${(k)help_cmds}; do
+        printf "  ${g}%-15s${x}  %s\n" "$cmd" "${help_cmds[$cmd]}"
     done
 }
 
@@ -38,7 +38,7 @@ printt "Zsh-Config Help" $y $g
 
 # Useful Commands
 _zhelp_header "Useful Commands"
-commands=(
+help_cmds=(
     "zdoc"       "View zconfig documentation"
     "zconfig"    "Edit zsh config files"
     "zcheck"     "Check zconfig for errors"
@@ -53,7 +53,7 @@ _zhelp_print
 
 # Plugin Management
 _zhelp_header "Plugin Management"
-commands=(
+help_cmds=(
     "list_plugins"    "List installed plugins"
     "install_plugin"  "Install a plugin from GitHub"
     "update_plugins"  "Update all plugins"
