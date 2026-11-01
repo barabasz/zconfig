@@ -6,17 +6,26 @@ Part of [zconfig](../README.md) documentation. Conventions for naming functions,
 
 **Test/Check Functions:**
 - Prefix: `is_`
-- Return: 0 (true) or 1 (false)
+- Return: 0 (true), 1 (false), 2 (invalid usage)
+- Validators: `is_valid_<thing>` (e.g. `is_valid_ip`, `is_valid_url`)
 - Examples: `is_file`, `is_macos`, `is_installed`
 
 **Info Functions:**
 - Suffix: `_name`, `_version`, `_icon`
-- Return: string via `print`
-- Examples: `os_name`, `shell_ver`, `os_icon`
+- Return: string via `print`, also stored in `REPLY` (or `reply` for lists)
+- Examples: `os_name`, `shell_version`, `os_icon`
 
 **Action Functions:**
 - Verb prefix: `get_`, `compile_`, `clean_`
 - Examples: `get_version`, `compile_dir`, `clean_dir`
+
+**Aliases:**
+- Old or short names are kept as copies: `functions[new]=$functions[old]`
+- `zman` lists them as "Alias for ..."
+- Examples: `shell_ver`, `is_url_valid`, `extract_version`
+
+**Private Functions:**
+- Prefix `_` (e.g. `_patharr_add`); not listed by `zman`
 
 **Utility Functions:**
 - Short, descriptive names
@@ -33,9 +42,9 @@ Part of [zconfig](../README.md) documentation. Conventions for naming functions,
 - Examples: `filepath`, `file_name`, `start_time`
 
 **Color Variables:**
-- Single letter for basic: `r`, `g`, `y`, `b`, `p`, `c`, `w`
-- Prefix `b` for bright: `br`, `bg`, `by`, `bb`, `bp`, `bc`, `bw`
+- Single letter: `r`, `g`, `y`, `b`, `p`, `c`, `w` (defined in `inc/colors.zsh`)
 - Reset: `x`
+- There are no bright variants; use the basic colors
 
 **Icon Variables:**
 - Prefix: `ICO_`, uppercase

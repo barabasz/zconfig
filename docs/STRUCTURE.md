@@ -29,13 +29,16 @@ Part of [zconfig](../README.md) documentation.
 │   └── plugins.zsh         # Plugin loading
 │
 ├── lib/                 # Helper function library
+│   ├── apps.zsh            # Package-manager helpers for zapp
 │   ├── archive.zsh         # Archive extraction/compression
 │   ├── arrays.zsh          # Array utilities
 │   ├── clipboard.zsh       # Clipboard operations
+│   ├── cmdinfo.zsh         # Command information (zinfo, zwhere, zver)
 │   ├── compile.zsh         # Bytecode compilation
 │   ├── cwg.zsh             # Random number generator
 │   ├── date.zsh            # Date/time functions
 │   ├── files.zsh           # File/path tests
+│   ├── fn.zsh              # Option/argument parsing for functions/
 │   ├── hardware.zsh        # Hardware info
 │   ├── math.zsh            # Math utilities
 │   ├── network.zsh         # Network utilities
@@ -73,11 +76,19 @@ Part of [zconfig](../README.md) documentation.
 │   ├── sslinfo             # SSL certificate info
 │   ├── urlinfo             # URL information
 │   ├── ttfb                # Time To First Byte
-│   ├── execs               # Execute with spinner
 │   ├── collatz             # Collatz sequences
 │   ├── primes              # Prime numbers
 │   ├── getrandom           # Random number generator
 │   └── ...                 # Other functions
+│
+├── tests/               # Unit tests for lib/ (zsh tests/run.zsh)
+│   ├── run.zsh             # Test runner and assertions
+│   └── *.test.zsh          # Test files
+│
+├── scripts/             # Maintenance scripts
+│   └── functions-md.zsh    # Generate docs/FUNCTIONS.md
+│
+├── .github/workflows/   # CI: syntax, lint, tests, FUNCTIONS.md check
 │
 ├── plugins/             # Zsh plugins
 │   ├── <name>.zsh          # Plugin wrapper (versioned)
