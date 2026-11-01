@@ -1147,7 +1147,8 @@ _fn_init() {
         fi
 
         # Short option(s)
-        if [[ "$arg" == -? || "$arg" == -??* ]] && [[ "$arg" != -[0-9]* ]]; then
+        # Negative numbers (-5, -1.5, -.5) are values, not options
+        if [[ "$arg" == -? || "$arg" == -??* ]] && [[ "$arg" != -[0-9]* && "$arg" != -.[0-9]* ]]; then
             if ! _fn_has_opts; then
                 printe "This function does not accept any options."
                 _fn_usage_short >&2

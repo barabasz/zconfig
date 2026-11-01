@@ -22,6 +22,8 @@ assert_eq() {
         (( T_FAIL++ ))
         print -r -- "FAIL [$T_FILE] ${3:-assert_eq}: expected '${2}', got '${1}'"
     fi
+    # Always 0, so the status of a test file reflects only real errors
+    return 0
 }
 
 # Check exit status of a command
@@ -37,6 +39,7 @@ assert_rc() {
         (( T_FAIL++ ))
         print -r -- "FAIL [$T_FILE] $*: expected rc=$expected, got rc=$rc"
     fi
+    return 0
 }
 
 # Shorthands for rc 0 and rc 1
@@ -59,7 +62,10 @@ _tests_load_lib() {
     typeset -g r g y b p c w x
     local file
     for file in $ZSH_LIB_DIR/*.zsh(N.on); do
-        source $file || print -r -- "ERROR loading ${file:t}"
+        if ! source $file; then
+            print -r -- "FAIL [lib] error loading ${file:t}"
+            (( T_FAIL++ ))
+        fi
     done
 }
 
@@ -86,7 +92,12 @@ for file in $files; do
     out=$(LANG=$test_locale LC_ALL=$test_locale TZ=UTC zsh -f -c "
         source ${(q)TESTS_DIR}/run.zsh --lib-only
         T_FILE=${(q)file:t}
-        source ${(q)file}
+        # A test file that stops early (syntax error, failed command at the end)
+        # counts as a failure even if all assertions run so far passed
+        if ! source ${(q)file}; then
+            print -r -- \"FAIL [\$T_FILE] test file returned non-zero or aborted\"
+            (( T_FAIL++ ))
+        fi
         print -r -- \"__RESULT__ \$T_PASS \$T_FAIL\"
     " 2>&1)
     local -a lines=("${(@f)out}")

@@ -109,14 +109,15 @@ compress() {
     _archive_need tar || return
 
     # -C parent: store a relative path in the archive
+    # :a (not :A) keeps a symlink's own name instead of resolving it
     local tool=gzip
     if (( ${+commands[pigz]} )); then
         tool=pigz
-        tar -cf - -C "${source:A:h}" "${source:A:t}" | pigz > "$target"
+        tar -cf - -C "${source:a:h}" "${source:a:t}" | pigz > "$target"
         # pipestatus: fail if either tar or pigz failed
         (( ${pipestatus[1]} == 0 && ${pipestatus[2]} == 0 ))
     else
-        tar -czf "$target" -C "${source:A:h}" "${source:A:t}"
+        tar -czf "$target" -C "${source:a:h}" "${source:a:t}"
     fi || {
         printe "Failed to compress '$source'."
         command rm -f -- "$target"
@@ -142,8 +143,8 @@ zip_folder() {
     # Run from the parent directory, so the archive holds a relative path;
     # target is made absolute first because the subshell changes directory
     target=${target:a}
-    if ! ( builtin cd -q -- "${source:A:h}" &&
-           zip -r -9 -q "$target" "${source:A:t}" -x "*.DS_Store" "*/.git/*" "*/.svn/*" ); then
+    if ! ( builtin cd -q -- "${source:a:h}" &&
+           zip -r -9 -q "$target" "${source:a:t}" -x "*.DS_Store" "*/.git/*" "*/.svn/*" ); then
         printe "Failed to zip '$source'."
         return 1
     fi

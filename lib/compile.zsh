@@ -121,7 +121,8 @@ clean_dir() {
         printe "clean_dir: directory not found: $dir"
         return 1
     fi
-    local -a zwc_files=($dir/*.zwc(N.))
+    # D: include hidden files such as .zshrc.zwc
+    local -a zwc_files=($dir/*.zwc(N.D))
     (( ${#zwc_files} )) || return 0
     command rm -f -- $zwc_files || return 1
     printd "Cleaned ${#zwc_files} compiled file(s) from ${dir:t}"

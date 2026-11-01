@@ -48,8 +48,9 @@ _vm_stat_pages() {
 # Run df for a path and split the last line into fields (internal)
 # Uses -P (POSIX output), so each file system is on one line and columns are:
 # filesystem, 1024-blocks, used, available, capacity, mount point.
-# Fields are counted from the end, so a file system name with spaces is fine
-# (a mount point with spaces is not).
+# The capacity column ("42%") is located first and the three numbers before it
+# are used, so spaces in the file system name or in the mount point
+# (e.g. "/Volumes/My Disk") do not shift the columns.
 # Usage: _df_fields <path>
 # Output: none; sets reply=(total used available) in bytes
 # Returns: 0 success, 1 failure
@@ -59,9 +60,12 @@ _df_fields() {
     output=$(command df -kP -- "$1" 2>/dev/null) || return 1
     local -a lines=("${(@f)output}")
     local -a parts=(${=lines[-1]})
-    (( ${#parts} >= 6 )) || return 1
-    # From the end: [-1] mount, [-2] capacity, [-3] avail, [-4] used, [-5] total
-    reply=($(( parts[-5] * 1024 )) $(( parts[-4] * 1024 )) $(( parts[-3] * 1024 )))
+    # (I): index of the last word matching <->% (search from the end)
+    local -i cap=${parts[(I)<->%]}
+    (( cap >= 5 )) || return 1
+    local total=${parts[cap-3]} used=${parts[cap-2]} avail=${parts[cap-1]}
+    [[ $total == <-> && $used == <-> && $avail == <-> ]] || return 1
+    reply=($(( total * 1024 )) $(( used * 1024 )) $(( avail * 1024 )))
 }
 
 ## CPU

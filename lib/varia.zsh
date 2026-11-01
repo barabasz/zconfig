@@ -26,7 +26,8 @@ source_zsh_dir() {
     (( ARGC == 1 )) || return 2
     local f
     local -i failed=0
-    for f in $1/*.zsh(N.); do
+    # -. : regular files, following symlinks (symlinked configs are sourced too)
+    for f in $1/*.zsh(N-.); do
         source "$f" || (( failed++ ))
     done
     (( failed == 0 ))
@@ -48,7 +49,7 @@ concatenate_zsh_dir() {
     [[ -w "$output_dir" ]] || { printe "Cannot write to ${c}${output_dir}${x}."; return 1 }
 
     # .zsh files, excluding _prefixed ones
-    local -a files=("$dir"/[^_]*.zsh(N.))
+    local -a files=("$dir"/[^_]*.zsh(N-.))
     if (( ${#files} == 0 )); then
         printw "No .zsh files found in ${c}${dir}${x}."
         return 1
@@ -70,15 +71,17 @@ concatenate_zsh_dir() {
             # Skip empty lines and full-line comments
             [[ $line == [[:space:]]# || $line == [[:space:]]#\#* ]] && continue
             out+=("$line")
-            # Detect start of a here-document (<<WORD, <<-WORD, <<'WORD', <<"WORD")
-            if [[ $line =~ '<<-?[[:space:]]*["'\'']?([A-Za-z_][A-Za-z0-9_]*)' ]]; then
-                heredoc_end=$match[1]
+            # Detect start of a here-document (<<WORD, <<-WORD, <<'WORD', <<"WORD"),
+            # but not a here-string (<<<)
+            if [[ $line =~ '(^|[^<])<<-?[[:space:]]*["'\'']?([A-Za-z_][A-Za-z0-9_]*)' ]]; then
+                heredoc_end=$match[2]
             fi
         done
         out+=('')
         (( count++ ))
     done
-    print -rl -- $out >| "$output_file" || return 1
+    # Quoted, so empty lines (kept inside here-documents) are not dropped
+    print -rl -- "${out[@]}" >| "$output_file" || return 1
 
     REPLY=$count
     printi "Concatenated ${y}${count}${x} files into ${c}${output_file}${x}."
