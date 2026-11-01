@@ -131,7 +131,8 @@ case "$cmd" in
                         old_head=$(git -C "$repo" rev-parse HEAD)
                         if out=$(git -C "$repo" pull --rebase --autostash --quiet 2>&1); then
                             new_head=$(git -C "$repo" rev-parse HEAD)
-                            stat=$(git -C "$repo" diff --shortstat $old_head $new_head 2>/dev/null)
+                            # C locale: the numbers are parsed from English words below
+                            stat=$(LC_ALL=C git -C "$repo" diff --shortstat $old_head $new_head 2>/dev/null)
                             # " 32 files changed, 1000 insertions(+), 7119 deletions(-)"
                             files=0 ins=0 del=0
                             [[ $stat =~ '([0-9]+) file' ]] && files=$match[1]
@@ -141,7 +142,14 @@ case "$cmd" in
                             msg+=" · ${reply[4]} commit${${reply[4]:#1}:+s}"
                             msg+=" · $files file${${files:#1}:+s} ${g}+$ins${x} ${r}-$del${x}"
                             [[ $state == diverged ]] && msg+=" · ${y}local commits rebased (push needed)${x}"
-                            (( n_updated++ ))
+                            # --autostash returns 0 even when restoring local changes conflicts
+                            get_git_status "$repo" >/dev/null
+                            if (( reply[8] )); then
+                                msg+=" · ${r}local changes conflict after autostash (stash kept)${x}"
+                                (( n_failed++ ))
+                            else
+                                (( n_updated++ ))
+                            fi
                         else
                             msg="${r}pull failed${x}"; (( n_failed++ ))
                             # Do not leave the repository in the middle of a rebase
@@ -155,16 +163,16 @@ case "$cmd" in
             fi
             printf "%*d/%d  %-*s  %s\n" $num_w $i $count $name_w ${repo:t} "$msg"
             # Details: changed files (-f) or the error output of git
-            if [[ $msg == *"pull failed"* ]]; then
+            if [[ $msg == *"pull failed"* || $msg == *"after autostash"* ]]; then
                 # Only the relevant lines, without git's multi-line hints
                 for line in ${(f)out}; do
-                    [[ $line == (CONFLICT|error|fatal)* ]] && print -r -- "      $r$line$x"
+                    [[ $line == (CONFLICT|error|fatal|Your changes are safe)* ]] && print -r -- "      $r$line$x"
                 done
             elif [[ $msg == *updated* ]] && (( ${+opts[files]} )); then
-                git -C "$repo" -c color.diff=always diff --stat=$(( COLUMNS > 20 ? COLUMNS - 6 : 74 )) \
+                LC_ALL=C git -C "$repo" -c color.diff=always diff --stat=$(( COLUMNS > 20 ? COLUMNS - 6 : 74 )) \
                     $old_head $new_head | while IFS= read -r line; do
                         # The totals line is already in the summary above
-                        [[ $line == *" changed"* ]] || print -r -- "      $line"
+                        [[ $line =~ '^ *[0-9]+ files? changed' ]] || print -r -- "      $line"
                     done
             fi
             ((i++))
@@ -177,7 +185,7 @@ case "$cmd" in
         (( n_failed ))  && summary+=("${r}$n_failed failed${x}")
         print -r -- "Summary: ${(pj:, :)summary}"
         (( n_updated && ! ${+opts[files]} )) && print "Use ${c}zgit pull -f${x} to list changed files."
-        (( n_failed )) && print "Repositories that failed must be pulled manually (${c}git pull${x} in the repository)."
+        (( n_failed )) && print "Repositories that failed need manual attention (see the messages above)."
         (( n_failed )) && return 1
         return 0
         ;;
