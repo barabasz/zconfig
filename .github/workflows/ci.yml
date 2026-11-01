@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install zsh
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq zsh
+
+      - name: Syntax check
+        shell: zsh {0}
+        run: |
+          integer failed=0
+          for file in lib/*.zsh inc/*.zsh apps/*.zsh plugins/*.zsh(N) functions/* .zshenv .zshrc .zprofile .zlogin .zlogout tests/*.zsh scripts/*.zsh; do
+            zsh -n "$file" || { print "::error file=$file::syntax error"; (( failed++ )) }
+          done
+          (( failed == 0 ))
+
+      - name: Lint (forbidden constructs from docs/ZSH.md)
+        shell: zsh {0}
+        run: |
+          setopt extendedglob
+          integer failed=0
+          local file line
+          integer n
+          for file in lib/*.zsh; do
+            n=0
+            for line in "${(@f)$(<$file)}"; do
+              (( n++ ))
+              if [[ $line == *local*[[:space:]]path([[:space:]=]*|) ]] ||
+                 [[ $line == *[[:space:]]-eq[[:space:]]* ]] ||
+                 [[ $line == [[:space:]]#echo[[:space:]]* ]]; then
+                print "::error file=$file,line=$n::forbidden construct: $line"
+                (( failed++ ))
+              fi
+            done
+          done
+          (( failed == 0 ))
+
+      - name: Unit tests
+        run: zsh tests/run.zsh
+
+      - name: docs/FUNCTIONS.md is up to date
+        if: runner.os == 'Linux'
+        run: zsh scripts/functions-md.zsh --check
