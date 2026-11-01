@@ -174,6 +174,7 @@ install_plugin() {
 }
 
 # Reinstall a plugin (remove and clone again from its origin URL)
+# A tag or branch selected with install_plugin --branch is kept.
 # Usage: reinstall_plugin <name>
 # Returns: 0 success, 1 failure, 2 invalid usage
 reinstall_plugin() {
@@ -187,8 +188,22 @@ reinstall_plugin() {
         printe "Plugin '$name' not found or has no git origin."
         return 1
     fi
+    # Pinned selection: a branch other than the remote default when HEAD is
+    # attached; an exact tag only when HEAD is detached (a branch tip may also
+    # carry a tag, and pinning it would stop update_plugin from following the branch)
+    local ref default_ref
+    if ref=$(git -C "$target" symbolic-ref -q --short HEAD 2>/dev/null); then
+        default_ref=$(git -C "$target" symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null)
+        [[ $ref == ${default_ref#origin/} ]] && ref=""
+    else
+        ref=$(git -C "$target" describe --tags --exact-match HEAD 2>/dev/null)
+    fi
     remove_plugin "$name" || return 1
-    install_plugin "$name" "$url"
+    if [[ -n $ref ]]; then
+        install_plugin --branch "$ref" "$name" "$url"
+    else
+        install_plugin "$name" "$url"
+    fi
 }
 
 ## Updating

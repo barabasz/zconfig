@@ -48,8 +48,10 @@ _vm_stat_pages() {
 # Run df for a path and split the last line into fields (internal)
 # Uses -P (POSIX output), so each file system is on one line and columns are:
 # filesystem, 1024-blocks, used, available, capacity, mount point.
-# Fields are counted from the end, so a file system name with spaces is fine
-# (a mount point with spaces is not).
+# The first capacity column ("42%", or "-" for zero-sized file systems) that
+# follows three numeric columns is located, so spaces in the file system name
+# or in the mount point (e.g. "/Volumes/Backup 100%") do not shift the columns.
+# Available blocks may be negative when reserved space is used.
 # Usage: _df_fields <path>
 # Output: none; sets reply=(total used available) in bytes
 # Returns: 0 success, 1 failure
@@ -59,9 +61,14 @@ _df_fields() {
     output=$(command df -kP -- "$1" 2>/dev/null) || return 1
     local -a lines=("${(@f)output}")
     local -a parts=(${=lines[-1]})
-    (( ${#parts} >= 6 )) || return 1
-    # From the end: [-1] mount, [-2] capacity, [-3] avail, [-4] used, [-5] total
-    reply=($(( parts[-5] * 1024 )) $(( parts[-4] * 1024 )) $(( parts[-3] * 1024 )))
+    local -i i
+    for (( i = 5; i <= ${#parts}; i++ )); do
+        [[ ${parts[i]} == (<->%|-) ]] || continue
+        [[ ${parts[i-3]} == <-> && ${parts[i-2]} == <-> && ${parts[i-1]} == (-|)<-> ]] || continue
+        reply=($(( parts[i-3] * 1024 )) $(( parts[i-2] * 1024 )) $(( parts[i-1] * 1024 )))
+        return 0
+    done
+    return 1
 }
 
 ## CPU
