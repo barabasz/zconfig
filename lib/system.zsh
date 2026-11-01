@@ -4,85 +4,131 @@
 # Shell files tracking - keep at the top
 zfile_track_start ${0:A}
 
-# OS related functions
-# zsh-specific functions - requires zsh, will not work in bash
+##
+# Operating system detection and information functions
+# Depends on: date.zsh (format_duration, optional)
+# /etc/os-release is parsed once at load time into ZSH_OS_RELEASE (assoc array)
+##
 
-# --- OS Detection (Boolean Checks) ---
+## os-release cache
 
-# Check if current OS is Debian-based (includes Ubuntu, Mint, etc.)
+# Parsed /etc/os-release (keys: ID, ID_LIKE, VERSION_ID, VERSION_CODENAME, PRETTY_NAME, ...)
+typeset -gA ZSH_OS_RELEASE=()
+
+# Parse /etc/os-release into ZSH_OS_RELEASE (internal; called at load time)
+# Usage: _os_release_load
+# Returns: 0 loaded, 1 file not available
+_os_release_load() {
+    ZSH_OS_RELEASE=()
+    [[ -r /etc/os-release ]] || return 1
+    local line key val
+    for line in "${(@f)$(</etc/os-release)}"; do
+        [[ $line == [A-Z_]*=* ]] || continue
+        key=${line%%=*}
+        val=${(Q)line#*=}     # (Q) removes surrounding quotes
+        ZSH_OS_RELEASE[$key]=$val
+    done
+    return 0
+}
+_os_release_load
+
+## OS detection (boolean checks)
+
+# Check if current OS is Debian-based (includes Ubuntu, Mint, Raspberry Pi OS, etc.)
 # Usage: is_debian_based
+# Returns: 0 true, 1 false, 2 invalid usage
 is_debian_based() {
+    (( ARGC == 0 )) || return 2
     [[ -f /etc/debian_version ]]
 }
 
 # Check if current OS is specifically Debian (not derivatives)
 # Usage: is_debian
+# Returns: 0 true, 1 false, 2 invalid usage
 is_debian() {
-    [[ -f /etc/os-release ]] || return 1
-    # Read file directly into variable
-    local content=$(</etc/os-release)
-    [[ $content == *"ID=debian"* ]]
+    (( ARGC == 0 )) || return 2
+    [[ ${ZSH_OS_RELEASE[ID]} == debian ]]
 }
 
 # Check if current OS is specifically Ubuntu
 # Usage: is_ubuntu
+# Returns: 0 true, 1 false, 2 invalid usage
 is_ubuntu() {
-    [[ -f /etc/os-release ]] || return 1
-    local content=$(</etc/os-release)
-    [[ $content == *"ID=ubuntu"* ]]
+    (( ARGC == 0 )) || return 2
+    [[ ${ZSH_OS_RELEASE[ID]} == ubuntu ]]
 }
 
 # Check if current OS is macOS
 # Usage: is_macos
+# Returns: 0 true, 1 false, 2 invalid usage
 is_macos() {
+    (( ARGC == 0 )) || return 2
     [[ $OSTYPE == darwin* ]]
 }
 
 # Check if current OS is Linux
 # Usage: is_linux
+# Returns: 0 true, 1 false, 2 invalid usage
 is_linux() {
+    (( ARGC == 0 )) || return 2
     [[ $OSTYPE == linux* ]]
 }
 
-# Check if current OS is Windows (WSL)
+# Check if running under Windows Subsystem for Linux (WSL)
 # Usage: is_wsl
+# Returns: 0 true, 1 false, 2 invalid usage
 is_wsl() {
-    # Pure Zsh check without grep
-    if [[ -r /proc/version ]]; then
-        local version=$(</proc/version)
-        [[ $version == *[Mm]icrosoft* || $version == *WSL* ]]
-    else
-        return 1
-    fi
+    (( ARGC == 0 )) || return 2
+    [[ -r /proc/version ]] || return 1
+    local version=$(</proc/version)
+    [[ $version == *[Mm]icrosoft* || $version == *WSL* ]]
 }
 
-# --- System Information Retrieval ---
+# Check if running inside a container (Docker, Podman, LXC, systemd-nspawn, ...)
+# Usage: is_container
+# Returns: 0 true, 1 false, 2 invalid usage
+is_container() {
+    (( ARGC == 0 )) || return 2
+    [[ -f /.dockerenv || -f /run/.containerenv || -n $container ]] && return 0
+    if [[ -r /proc/1/cgroup ]]; then
+        local cgroup=$(</proc/1/cgroup)
+        [[ $cgroup == *docker* || $cgroup == *lxc* || $cgroup == *kubepods* || $cgroup == *containerd* ]] && return 0
+    fi
+    return 1
+}
+
+# Check if running on a Raspberry Pi
+# Usage: is_raspberry_pi
+# Returns: 0 true, 1 false, 2 invalid usage
+is_raspberry_pi() {
+    (( ARGC == 0 )) || return 2
+    [[ -r /proc/device-tree/model ]] || return 1
+    local model=$(</proc/device-tree/model)
+    [[ $model == *"Raspberry Pi"* ]]
+}
+
+## System information
 
 # Get OS name (ID)
 # Usage: os_name
-# Returns: "macos", "ubuntu", "debian", "fedora", etc.
+# Output: "macos", "ubuntu", "debian", "fedora", ..., "linux" or "unknown" (stdout); also sets REPLY
+# Returns: 0 success, 2 invalid usage
 os_name() {
+    (( ARGC == 0 )) || return 2
     case $OSTYPE in
-        darwin*)
-            print "macos" ;;
-        linux*)
-            if [[ -f /etc/os-release ]]; then
-                # Optimized extraction without subshells/grep
-                # (M) keeps matching lines, (f) splits by line
-                local line=${${(M)${(f)"$(</etc/os-release)"}:#ID=*}#ID=}
-                print -- ${line//\"/}
-            else
-                print "linux"
-            fi ;;
-        *)
-            print "unknown" ;;
+        darwin*) REPLY=macos ;;
+        linux*)  REPLY=${ZSH_OS_RELEASE[ID]:-linux} ;;
+        *)       REPLY=unknown ;;
     esac
+    print -r -- "$REPLY"
 }
 
 # Get OS code name
 # Usage: os_codename
-# Returns: "Sequoia", "Noble", "Bookworm", etc.
+# Output: "Tahoe", "Noble", "Bookworm", etc. (stdout); also sets REPLY
+# Returns: 0 success, 1 unknown, 2 invalid usage
 os_codename() {
+    (( ARGC == 0 )) || return 2
     if is_macos; then
         _macos_codename
     else
@@ -90,144 +136,156 @@ os_codename() {
     fi
 }
 
-# Helper for Linux codename
+# Get Linux code name from os-release (internal)
+# Usage: _linux_codename
+# Output: code name (stdout); also sets REPLY
+# Returns: 0 success, 1 unknown
 _linux_codename() {
-    [[ -f /etc/os-release ]] || return 1
-
-    # Try VERSION_CODENAME first
-    local line=${${(M)${(f)"$(</etc/os-release)"}:#VERSION_CODENAME=*}#VERSION_CODENAME=}
-
-    # Fallback to PRETTY_NAME if VERSION_CODENAME is missing
-    if [[ -z "$line" ]]; then
-        line=${${(M)${(f)"$(</etc/os-release)"}:#PRETTY_NAME=*}#PRETTY_NAME=}
-    fi
-
-    print -- "${(C)${line//\"/}}"
+    REPLY=${ZSH_OS_RELEASE[VERSION_CODENAME]:-${ZSH_OS_RELEASE[PRETTY_NAME]}}
+    [[ -n $REPLY ]] || return 1
+    REPLY=${(C)REPLY}
+    print -r -- "$REPLY"
 }
 
-# Helper for macOS codename
+# Get macOS marketing name from the product version (internal)
+# Usage: _macos_codename
+# Output: code name (stdout); also sets REPLY
+# Returns: 0 success
 _macos_codename() {
     local product_ver
-    # Fast retrieval
-    product_ver=$(sw_vers -productVersion)
-    
-    # Split version by dots
+    product_ver=$(sw_vers -productVersion 2>/dev/null)
     local -a ver_parts=(${(s:.:)product_ver})
     local major=${ver_parts[1]}
     local minor=${ver_parts[2]}
 
-    # Based on your previous context about Tahoe 26.2
     case $major in
-        27) print "Golden Gate" ;;
-        26) print "Tahoe" ;;
-        15) print "Sequoia" ;;
-        14) print "Sonoma" ;;
-        13) print "Ventura" ;;
-        12) print "Monterey" ;;
-        11) print "Big Sur" ;;
+        27) REPLY="Golden Gate" ;;
+        26) REPLY="Tahoe" ;;
+        15) REPLY="Sequoia" ;;
+        14) REPLY="Sonoma" ;;
+        13) REPLY="Ventura" ;;
+        12) REPLY="Monterey" ;;
+        11) REPLY="Big Sur" ;;
         10)
             case $minor in
-                16|15) print "Catalina" ;;
-                14) print "Mojave" ;;
-                13) print "High Sierra" ;;
-                12) print "Sierra" ;;
-                11) print "El Capitan" ;;
-                *)  print "macOS $product_ver" ;;
+                16|15) REPLY="Catalina" ;;
+                14)    REPLY="Mojave" ;;
+                13)    REPLY="High Sierra" ;;
+                12)    REPLY="Sierra" ;;
+                11)    REPLY="El Capitan" ;;
+                *)     REPLY="macOS $product_ver" ;;
             esac
             ;;
-        *)  print "Unknown ($product_ver)" ;;
+        *)  REPLY="Unknown ($product_ver)" ;;
     esac
+    print -r -- "$REPLY"
 }
 
-# Display OS version number
+# Get OS version number
 # Usage: os_version
-# Returns: "14.2.1" or "22.04"
+# Output: e.g. "26.1" or "24.04" (stdout); also sets REPLY
+# Returns: 0 success, 1 unknown, 2 invalid usage
 os_version() {
+    (( ARGC == 0 )) || return 2
     if is_macos; then
-        sw_vers -productVersion
-    elif [[ -f /etc/os-release ]]; then
-        local line=${${(M)${(f)"$(</etc/os-release)"}:#VERSION_ID=*}#VERSION_ID=}
-        print -- ${line//\"/}
+        REPLY=$(sw_vers -productVersion 2>/dev/null)
+    else
+        REPLY=${ZSH_OS_RELEASE[VERSION_ID]}
     fi
+    [[ -n $REPLY ]] || return 1
+    print -r -- "$REPLY"
 }
 
 # Get kernel version
 # Usage: get_kernel_version
+# Output: kernel release, e.g. "6.8.0-45-generic" (stdout); also sets REPLY
+# Returns: 0 success, 2 invalid usage
 get_kernel_version() {
-    uname -r
+    (( ARGC == 0 )) || return 2
+    if [[ -r /proc/sys/kernel/osrelease ]]; then
+        REPLY=$(</proc/sys/kernel/osrelease)
+    else
+        REPLY=$(uname -r)
+    fi
+    print -r -- "$REPLY"
 }
 
 # Get OS icon (Nerd Fonts required)
 # Usage: os_icon
+# Output: icon character (stdout); also sets REPLY
+# Returns: 0 success, 2 invalid usage
 os_icon() {
-    case $(os_name) in
-        macos)      print $'\Uf179' ;; # Apple logo
-        ubuntu)     print $'\Uf31b' ;;
-        debian)     print $'\Uf306' ;;
-        redhat)     print $'\Uf316' ;;
-        fedora)     print $'\Uf30a' ;;
-        arch)       print $'\Uf303' ;;
-        opensuse*)  print $'\Uf314' ;;
-        windows)    print $'\Uf17a' ;;
-        raspbian)   print $'\Uf315' ;;
-        alpine)     print $'\Uf300' ;;
-        *)          print $'\Ue712' ;; # Generic Linux penguin
-    esac
-}
-
-# Get system uptime (human readable)
-# Usage: get_uptime
-# Returns: "2 days 4h 15m" using format_duration
-get_uptime() {
-    local uptime_sec boot_time
-    
-    if is_macos; then
-        # sysctl returns: { sec = 1700000000, usec = 0 }
-        # We extract the seconds part
-        boot_time=${$(sysctl -n kern.boottime)[(w)4]//,}
-        uptime_sec=$(( EPOCHSECONDS - boot_time ))
-    elif [[ -r /proc/uptime ]]; then
-        # First field of /proc/uptime is seconds
-        read uptime_sec _ < /proc/uptime
-        uptime_sec=${uptime_sec%.*}
-    else
-        # Fallback without sed, using parameter expansion
-        local up_str=$(uptime)
-        # Extract part after "up " until first comma
-        up_str=${up_str#*up }
-        print -- ${up_str%%,*}
+    (( ARGC == 0 )) || return 2
+    if is_wsl; then
+        REPLY=$'\Uf17a'   # Windows logo
+        print -r -- "$REPLY"
         return 0
     fi
-    
-    # Use helper from date.zsh if available
-    if (( ${+functions[format_duration]} )); then
-        format_duration "$uptime_sec"
+    os_name >/dev/null
+    case $REPLY in
+        macos)      REPLY=$'\Uf179' ;; # Apple logo
+        ubuntu)     REPLY=$'\Uf31b' ;;
+        debian)     REPLY=$'\Uf306' ;;
+        rhel|redhat) REPLY=$'\Uf316' ;;
+        fedora)     REPLY=$'\Uf30a' ;;
+        arch)       REPLY=$'\Uf303' ;;
+        opensuse*)  REPLY=$'\Uf314' ;;
+        raspbian)   REPLY=$'\Uf315' ;;
+        alpine)     REPLY=$'\Uf300' ;;
+        *)          REPLY=$'\Ue712' ;; # Generic Linux penguin
+    esac
+    print -r -- "$REPLY"
+}
+
+# Get system uptime (human readable, via format_duration)
+# Usage: get_uptime
+# Output: e.g. "2d 4h 15m" (stdout); also sets REPLY
+# Returns: 0 success, 1 unknown, 2 invalid usage
+get_uptime() {
+    (( ARGC == 0 )) || return 2
+    local -i uptime_sec boot_time
+    local raw
+
+    if is_macos; then
+        # sysctl returns: { sec = 1700000000, usec = 0 } ...
+        raw=$(sysctl -n kern.boottime 2>/dev/null)
+        boot_time=${${raw[(w)4]}//,}
+        uptime_sec=$(( EPOCHSECONDS - boot_time ))
+    elif [[ -r /proc/uptime ]]; then
+        # First field of /proc/uptime is seconds (with decimals)
+        raw=$(</proc/uptime)
+        uptime_sec=${raw%%.*}
     else
-        # Simple fallback
-        local d=$(( uptime_sec / 86400 ))
-        local h=$(( (uptime_sec % 86400) / 3600 ))
-        local m=$(( (uptime_sec % 3600) / 60 ))
-        (( d > 0 )) && print -n "${d}d "
-        (( h > 0 )) && print -n "${h}h "
-        print "${m}m"
+        return 1
+    fi
+
+    if (( ${+functions[format_duration]} )); then
+        format_duration $uptime_sec
+    else
+        REPLY="$(( uptime_sec / 86400 ))d $(( uptime_sec % 86400 / 3600 ))h $(( uptime_sec % 3600 / 60 ))m"
+        print -r -- "$REPLY"
     fi
 }
 
-# Get CPU Load Average (1 min)
+# Get CPU load average (1 minute)
 # Usage: get_load_average
-# Returns: "1.50"
+# Output: e.g. "1.50" (stdout); also sets REPLY
+# Returns: 0 success, 1 unknown, 2 invalid usage
 get_load_average() {
+    (( ARGC == 0 )) || return 2
+    local load
     if is_macos; then
         # sysctl returns "{ 1.50 1.20 1.00 }"
-        local load=$(sysctl -n vm.loadavg)
-        # Extract second word (the first number inside braces)
-        print -- ${load[(w)2]}
+        load=$(sysctl -n vm.loadavg 2>/dev/null)
+        REPLY=${load[(w)2]}
     elif [[ -r /proc/loadavg ]]; then
-        # First field
-        read load _ < /proc/loadavg
-        print -- $load
+        load=$(</proc/loadavg)
+        REPLY=${load[(w)1]}
+    else
+        return 1
     fi
+    print -r -- "$REPLY"
 }
 
-# shell files tracking - keep at the end
+# Shell files tracking - keep at the end
 zfile_track_end ${0:A}

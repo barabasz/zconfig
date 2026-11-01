@@ -4,263 +4,362 @@
 # Shell files tracking - keep at the top
 zfile_track_start ${0:A}
 
-# Filesystem related functions
-# zsh-specific functions - requires zsh, will not work in bash
-# Uses built-in zsh/stat module as `zstat` command
+##
+# Filesystem helper functions
+# Depends on: zsh/stat (zstat), math.zsh (format_bytes, used by format_size)
+# Getters print the result and also set REPLY (use REPLY to avoid subshells)
+##
+
+## Type and permission checks
 
 # Check if path exists and is a regular file
-# Usage: is_file "/path/to/file"
-# Returns: 0 (true), 1 (false), 2 (invalid usage)
+# Usage: is_file <path>
+# Returns: 0 true, 1 false, 2 invalid usage
 is_file() {
     (( ARGC == 1 )) || return 2
     [[ -f $1 ]]
 }
 
 # Check if path exists and is a directory
-# Usage: is_dir "/path/to/dir"
-# Returns: 0 (true), 1 (false), 2 (invalid usage)
+# Usage: is_dir <path>
+# Returns: 0 true, 1 false, 2 invalid usage
 is_dir() {
     (( ARGC == 1 )) || return 2
     [[ -d $1 ]]
 }
+# Alias: is_folder
 functions[is_folder]=$functions[is_dir]
 
-# Check if path exists and is a symbolic link
-# Usage: is_link "/path/to/symlink"
-# Returns: 0 (true), 1 (false), 2 (invalid usage)
+# Check if path is a symbolic link (also a broken one)
+# Usage: is_link <path>
+# Returns: 0 true, 1 false, 2 invalid usage
 is_link() {
     (( ARGC == 1 )) || return 2
     [[ -L $1 ]]
 }
+# Alias: is_symlink
 functions[is_symlink]=$functions[is_link]
 
-# Check if file is a hard link (has link count > 1)
-# Uses built-in zstat with array storage to avoid subshells
-# Usage: is_hardlink "/path/to/file"
-# Returns: 0 (true), 1 (false), 2 (invalid usage)
+# Check if file is a hard link (link count > 1)
+# Usage: is_hardlink <file>
+# Returns: 0 true, 1 false, 2 invalid usage
 is_hardlink() {
     (( ARGC == 1 )) || return 2
     [[ -f $1 ]] || return 1
-
     local -a stats
-    # -A: load into array, +nlink: get hardlink count
-    zstat -A stats +nlink "$1" 2>/dev/null || return 1
-
+    zstat -A stats +nlink -- "$1" 2>/dev/null || return 1
     (( stats[1] > 1 ))
 }
 
 # Check if file is executable
-# Usage: is_executable "/path/to/file"
-# Returns: 0 (true), 1 (false), 2 (invalid usage)
+# Usage: is_executable <path>
+# Returns: 0 true, 1 false, 2 invalid usage
 is_executable() {
     (( ARGC == 1 )) || return 2
     [[ -x $1 ]]
 }
 
 # Check if file/dir is writable
-# Usage: is_writable "/path/to/file"
-# Returns: 0 (true), 1 (false), 2 (invalid usage)
+# Usage: is_writable <path>
+# Returns: 0 true, 1 false, 2 invalid usage
 is_writable() {
     (( ARGC == 1 )) || return 2
     [[ -w $1 ]]
 }
 
 # Check if file/dir is readable
-# Usage: is_readable "/path/to/file"
-# Returns: 0 (true), 1 (false), 2 (invalid usage)
+# Usage: is_readable <path>
+# Returns: 0 true, 1 false, 2 invalid usage
 is_readable() {
     (( ARGC == 1 )) || return 2
     [[ -r $1 ]]
 }
 
-# Check if directory is empty
-# Usage: is_empty_dir "/path/to/dir"
-# Returns: 0 (true), 1 (false), 2 (invalid usage)
+# Check if directory is empty (hidden files count as content)
+# Usage: is_empty_dir <dir>
+# Returns: 0 true, 1 false (or not a directory), 2 invalid usage
 is_empty_dir() {
     (( ARGC == 1 )) || return 2
     [[ -d $1 ]] || return 1
-    # Check if there is at least one file inside
-    # Uses Zsh glob qualifiers: D (dotfiles), N (nullglob), [1] (stop after 1 match)
-    # This is extremely fast as it stops scanning immediately upon finding anything
+    # D: dotfiles, N: nullglob, [1]: stop after first match (fast)
     local -a files=("$1"/*(DN[1]))
     (( ${#files} == 0 ))
 }
 
-# Check if directory has at least one non-hidden file
-# Usage: has_visible_files "/path/to/dir"
-# Returns: 0 (true), 1 (false), 2 (invalid usage)
+# Check if regular file is empty (size 0)
+# Usage: is_empty_file <file>
+# Returns: 0 true, 1 false (or not a regular file), 2 invalid usage
+is_empty_file() {
+    (( ARGC == 1 )) || return 2
+    [[ -f $1 && ! -s $1 ]]
+}
+
+# Check if directory has at least one non-hidden entry
+# Usage: has_visible_files <dir>
+# Returns: 0 true, 1 false (or not a directory), 2 invalid usage
 has_visible_files() {
     (( ARGC == 1 )) || return 2
     [[ -d $1 ]] || return 1
-    # Uses N (nullglob), [1] (stop after 1 match) - no D flag = excludes dotfiles
     local -a files=("$1"/*(N[1]))
     (( ${#files} > 0 ))
 }
 
-# --- Statistics & Info (No Subshells) ---
+# Check if first file is newer than second (by modification time)
+# Usage: is_newer <file1> <file2>
+# Returns: 0 true (file1 newer, or file2 missing), 1 false, 2 invalid usage
+is_newer() {
+    (( ARGC == 2 )) || return 2
+    [[ $1 -nt $2 ]]
+}
+
+# Check if two paths point to the same file (same device and inode)
+# Usage: is_same_file <path1> <path2>
+# Returns: 0 true, 1 false, 2 invalid usage
+is_same_file() {
+    (( ARGC == 2 )) || return 2
+    [[ $1 -ef $2 ]]
+}
+
+## Statistics and info (zstat, no subshells)
 
 # Get file size in bytes
-# Usage: get_file_size "file.txt"
-# Returns: file size in bytes (e.g., 1024)
+# Usage: get_file_size <file>
+# Output: size in bytes (stdout); also sets REPLY
+# Returns: 0 success, 1 not a regular file, 2 invalid usage
 get_file_size() {
     (( ARGC == 1 )) || return 2
     [[ -f $1 ]] || return 1
     local -a stats
-    zstat -A stats +size "$1" 2>/dev/null && print -- $stats[1]
+    zstat -A stats +size -- "$1" 2>/dev/null || return 1
+    REPLY=$stats[1]
+    print -r -- "$REPLY"
 }
 
-# Get file permissions in octal format
-# Usage: get_file_mode "file.txt"
-# Returns: 644, 755, etc.
+# Get file permissions in octal format (special bits included when set)
+# Usage: get_file_mode <path>
+# Example: get_file_mode /etc/hosts -> 644, get_file_mode /usr/bin/sudo -> 4755
+# Output: octal mode (stdout); also sets REPLY
+# Returns: 0 success, 1 not found, 2 invalid usage
 get_file_mode() {
     (( ARGC == 1 )) || return 2
-    [[ -e $1 ]] || return 1
-    local mode
-    # -o flag outputs octal format (0100644), extract last 3 digits
-    zstat -o -A mode +mode "$1" 2>/dev/null && print -- ${mode[1]: -3}
+    [[ -e $1 || -L $1 ]] || return 1
+    local -a mode
+    zstat -A mode +mode -- "$1" 2>/dev/null || return 1
+    # Keep permission and special bits (setuid/setgid/sticky), drop file type
+    local -i perm=$(( mode[1] & 8#7777 ))
+    local oct=$(( [##8] perm ))
+    # (l:3::0:) would truncate 4-digit modes, so pad only when shorter
+    REPLY=$oct
+    (( ${#oct} < 3 )) && REPLY=${(l:3::0:)oct}
+    print -r -- "$REPLY"
 }
 
-# Get file owner name
-# Usage: get_file_owner "file.txt"
-# Returns: user name
+# Get file owner (user name)
+# Usage: get_file_owner <path>
+# Output: user name (stdout); also sets REPLY
+# Returns: 0 success, 1 not found, 2 invalid usage
 get_file_owner() {
     (( ARGC == 1 )) || return 2
-    [[ -e $1 ]] || return 1
+    [[ -e $1 || -L $1 ]] || return 1
     local -a stats
-    # +uid is numeric, but we want name. zstat doesn't resolve names by default easily via +flags alone
-    # in pure zstat without external 'id' command, sticking to ls -ld or zstat +uid is safer.
-    # However, zsh/stat can return user name if configured, but typically returns uid.
-    # Let's return UID to be safe and pure, or use stat's string output mode.
-    zstat -s +uid "$1" 2>/dev/null
+    # -s: return names instead of numeric ids
+    zstat -s -A stats +uid -- "$1" 2>/dev/null || return 1
+    REPLY=$stats[1]
+    print -r -- "$REPLY"
 }
 
-# Resolve symbolic link target (readlink equivalent)
-# Usage: resolve_link "symlink"
-# Returns: target path
+# Get file group (group name)
+# Usage: get_file_group <path>
+# Output: group name (stdout); also sets REPLY
+# Returns: 0 success, 1 not found, 2 invalid usage
+get_file_group() {
+    (( ARGC == 1 )) || return 2
+    [[ -e $1 || -L $1 ]] || return 1
+    local -a stats
+    zstat -s -A stats +gid -- "$1" 2>/dev/null || return 1
+    REPLY=$stats[1]
+    print -r -- "$REPLY"
+}
+
+# Resolve symbolic link target, one level (readlink equivalent)
+# Usage: resolve_link <symlink>
+# Output: target path (stdout); also sets REPLY
+# Returns: 0 success, 1 not a symlink, 2 invalid usage
 resolve_link() {
     (( ARGC == 1 )) || return 2
     [[ -L $1 ]] || return 1
     local -a stats
-    zstat -A stats +link "$1" 2>/dev/null && print -- $stats[1]
+    zstat -A stats +link -- "$1" 2>/dev/null || return 1
+    REPLY=$stats[1]
+    print -r -- "$REPLY"
+}
+
+# Get absolute path with all symlinks resolved (realpath equivalent)
+# Usage: get_realpath <path>
+# Output: absolute path (stdout); also sets REPLY
+# Returns: 0 success, 1 not found, 2 invalid usage
+get_realpath() {
+    (( ARGC == 1 )) || return 2
+    [[ -e $1 ]] || return 1
+    REPLY=${1:A}
+    print -r -- "$REPLY"
 }
 
 # Get modification time (epoch)
-# Usage: get_file_mtime "file.txt"
-# Returns: modification time in seconds since epoch
+# Usage: get_file_mtime <path>
+# Output: seconds since epoch (stdout); also sets REPLY
+# Returns: 0 success, 1 not found, 2 invalid usage
 get_file_mtime() {
     (( ARGC == 1 )) || return 2
     [[ -e $1 ]] || return 1
     local -a stats
-    zstat -A stats +mtime "$1" 2>/dev/null && print -- $stats[1]
+    zstat -A stats +mtime -- "$1" 2>/dev/null || return 1
+    REPLY=$stats[1]
+    print -r -- "$REPLY"
 }
 
-# --- Path Manipulation (Pure Zsh Modifiers) ---
-# Note: These are wrappers around native modifiers. 
-# In performance-critical loops, use ${var:t} directly instead of $(get_filename $var)
+# Get last access time (epoch)
+# Usage: get_file_atime <path>
+# Output: seconds since epoch (stdout); also sets REPLY
+# Returns: 0 success, 1 not found, 2 invalid usage
+get_file_atime() {
+    (( ARGC == 1 )) || return 2
+    [[ -e $1 ]] || return 1
+    local -a stats
+    zstat -A stats +atime -- "$1" 2>/dev/null || return 1
+    REPLY=$stats[1]
+    print -r -- "$REPLY"
+}
+
+# Get inode change time (epoch)
+# Usage: get_file_ctime <path>
+# Output: seconds since epoch (stdout); also sets REPLY
+# Returns: 0 success, 1 not found, 2 invalid usage
+get_file_ctime() {
+    (( ARGC == 1 )) || return 2
+    [[ -e $1 ]] || return 1
+    local -a stats
+    zstat -A stats +ctime -- "$1" 2>/dev/null || return 1
+    REPLY=$stats[1]
+    print -r -- "$REPLY"
+}
+
+# Get file age in seconds (time since last modification)
+# Usage: file_age <path>
+# Output: seconds (stdout); also sets REPLY
+# Returns: 0 success, 1 not found, 2 invalid usage
+file_age() {
+    (( ARGC == 1 )) || return 2
+    get_file_mtime "$1" >/dev/null || return
+    REPLY=$(( EPOCHSECONDS - REPLY ))
+    print -r -- "$REPLY"
+}
+
+## Path manipulation (wrappers around zsh modifiers)
+# In loops use the modifiers directly (${var:t}), or REPLY instead of $(...)
 
 # Get filename from path (basename equivalent)
-# Usage: get_filename "/path/to/file.txt" -> "file.txt"
-# Returns: filename
+# Usage: get_filename <path>
+# Example: get_filename "/path/to/file.txt" -> file.txt
+# Output: filename (stdout); also sets REPLY
+# Returns: 0 success, 2 invalid usage
 get_filename() {
     (( ARGC == 1 )) || return 2
-    print -- "${1:t}"
+    REPLY="${1:t}"
+    print -r -- "$REPLY"
 }
 
 # Get directory from path (dirname equivalent)
-# Usage: get_dirname "/path/to/file.txt" -> "/path/to"
-# Returns: directory path
+# Usage: get_dirname <path>
+# Example: get_dirname "/path/to/file.txt" -> /path/to
+# Output: directory (stdout); also sets REPLY
+# Returns: 0 success, 2 invalid usage
 get_dirname() {
     (( ARGC == 1 )) || return 2
-    print -- "${1:h}"
+    REPLY="${1:h}"
+    print -r -- "$REPLY"
 }
 
 # Get file extension (without dot)
-# Usage: get_extension "image.jpg" -> "jpg"
-# Returns: extension
+# Usage: get_extension <path>
+# Example: get_extension "image.jpg" -> jpg
+# Output: extension (stdout); also sets REPLY
+# Returns: 0 success, 2 invalid usage
 get_extension() {
     (( ARGC == 1 )) || return 2
-    print -- "${1:e}"
+    REPLY="${1:e}"
+    print -r -- "$REPLY"
 }
 
 # Get filename without extension
-# Usage: get_filename_no_ext "image.jpg" -> "image"
-# Returns: filename without extension
+# Usage: get_filename_no_ext <path>
+# Example: get_filename_no_ext "/tmp/image.jpg" -> image
+# Output: filename (stdout); also sets REPLY
+# Returns: 0 success, 2 invalid usage
 get_filename_no_ext() {
     (( ARGC == 1 )) || return 2
-    print -- "${1:t:r}"
+    REPLY="${1:t:r}"
+    print -r -- "$REPLY"
 }
 
-# --- Advanced Utilities ---
+## Utilities
 
-# Count files in directory (non-recursive)
-# Usage: count_files ["/path/to/dir"] ["pattern"]
-# Returns: number of files
+# Count regular files in directory (non-recursive)
+# Usage: count_files [dir] [pattern]   (defaults: current dir, *)
+# Output: number of files (stdout); also sets REPLY
+# Returns: 0 success, 1 not a directory, 2 invalid usage
 count_files() {
-    # Defaults to current directory if no path provided.
+    (( ARGC <= 2 )) || return 2
     local dir=${1:-.}
     local pattern=${2:-*}
-    
     [[ -d $dir ]] || return 1
-    
-    # Glob qualifier (.): regular files only, (N): nullglob
+    # (.): regular files only, (N): nullglob
     local -a files=($dir/$~pattern(N.))
-    print -- ${#files}
+    REPLY=${#files}
+    print -r -- "$REPLY"
 }
 
 # Count directories in directory (non-recursive)
-# Usage: count_dirs ["/path/to/dir"] ["pattern"]
-# Returns: number of directories
+# Usage: count_dirs [dir] [pattern]   (defaults: current dir, *)
+# Output: number of directories (stdout); also sets REPLY
+# Returns: 0 success, 1 not a directory, 2 invalid usage
 count_dirs() {
-    # Defaults to current directory if no path provided.
+    (( ARGC <= 2 )) || return 2
     local dir=${1:-.}
     local pattern=${2:-*}
-    
     [[ -d $dir ]] || return 1
-    
-    # Glob qualifier (/): directories only, (N): nullglob
+    # (/): directories only, (N): nullglob
     local -a dirs=($dir/$~pattern(N/))
-    print -- ${#dirs}
+    REPLY=${#dirs}
+    print -r -- "$REPLY"
 }
 
-# Create directory and change into it
-# Usage: mkcd "new/directory/path"
-# Returns: 0 on success, 1 on mkdir failure
+# Create directory (with parents) and change into it
+# Usage: mkcd <dir>
+# Returns: 0 success, 1 mkdir/cd failure, 2 invalid usage
 mkcd() {
     (( ARGC == 1 )) || return 2
     mkdir -p -- "$1" && cd -- "$1"
 }
 
 # Create a file and its parent directories if they don't exist
-# Usage: mkfile "path/to/deep/file.txt"
-# Returns: 0 on success, 1 on failure, 2 on invalid usage
+# Usage: mkfile <path>
+# Returns: 0 success, 1 failure, 2 invalid usage
 mkfile() {
     (( ARGC == 1 )) || return 2
     local dir=${1:h}
-    [[ -d $dir ]] || mkdir -p "$dir" || return 1
-    touch "$1"
+    [[ -d $dir ]] || mkdir -p -- "$dir" || return 1
+    touch -- "$1"
 }
 
-# Format bytes into human readable size
-# Usage: format_size 12345678
-# Returns: 11.77 MB
+# Format bytes into human readable size (alias for format_bytes, IEC units)
+# Usage: format_size <bytes>
+# Example: format_size 12345678 -> 11.77 MiB
+# Output: formatted size (stdout); also sets REPLY
+# Returns: 0 success, 2 invalid usage
 format_size() {
     (( ARGC == 1 )) || return 2
-    local bytes=$1
-    local -a units=(B KB MB GB TB PB)
-    local i=1
-    local -F size=$bytes
-
-    while (( size >= 1024 && i < 6 )); do
-        (( size /= 1024.0 ))
-        (( i++ ))
-    done
-
-    # No decimals for bytes, 2 decimals for larger units
-    if (( i == 1 )); then
-        LC_NUMERIC=C printf "%.0f %s\n" $size $units[$i]
-    else
-        LC_NUMERIC=C printf "%.2f %s\n" $size $units[$i]
-    fi
+    format_bytes "$1"
 }
 
 # Shell files tracking - keep at the end
