@@ -273,7 +273,8 @@ See [GUIDELINES.md](docs/GUIDELINES.md) for do's, don'ts, file type rules, commo
 
 1. Run `reload` to restart the shell with the new configuration
 2. Or manually: `source ~/.zshenv` (for `lib/`, `inc/`) or `source ~/.zshrc` (for `apps/`)
-3. After editing `functions/`: `unfunction <name>` then call it again (autoload will reload)
+3. After editing `functions/` or `lib/`: `reload_zconfig` reloads them in the current shell
+   (`zupdate` does this automatically after pulling changes)
 
 ### Check Installation
 

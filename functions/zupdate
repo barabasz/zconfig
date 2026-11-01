@@ -6,10 +6,11 @@
 local -A _fn=(
     [info]="Update zconfig, plugins, and system packages"
     [desc]="Updates zconfig repository, installed plugins, and system packages.
-            By default updates only zconfig. Use ${p}-a${x}/${p}--all${x} to update everything."
-    [version]="0.6.1"
+            By default updates only zconfig. Use ${p}-a${x}/${p}--all${x} to update everything.
+            After pulling zconfig changes, functions and lib are reloaded in the current shell."
+    [version]="0.7.0"
     [created]="2025"
-    [modified]="2026-02-08"
+    [modified]="2026-11-01"
     [license]="MIT"
     [author]="Andrzej Barabasz"
     [required]="git"
@@ -23,6 +24,7 @@ local -a _fn_opts=(
     "brew|b|Update only Homebrew packages (macOS)"
     "apt|A|Update only apt packages (Linux)"
     "system|s|Update only system packages (brew or apt)"
+    "no-reload|n|Do not reload zconfig in the current shell after update"
     "quiet|q|Quieter output (suppress verbose messages)"
 )
 
@@ -62,20 +64,44 @@ fi
 _zupdate_config() {
     printi "Updating zconfig..."
     local zdir=${ZDOTDIR:A}
-    local output
+    local output old_head new_head
+    old_head=$(git -C "$zdir" rev-parse HEAD 2>/dev/null)
     output=$(git -C "$zdir" pull --rebase 2>&1)
     if (( status != 0 )); then
         printe "Git pull failed for zconfig."
         (( quiet )) || print "$output"
         return 1
-    else
-        if [[ "$output" == *"Already up to date"* ]]; then
-            (( quiet )) || prints "zconfig is already up to date."
-        else
-            prints "zconfig updated successfully."
-            (( quiet )) || print "$output"
-        fi
     fi
+    new_head=$(git -C "$zdir" rev-parse HEAD 2>/dev/null)
+    if [[ -n $old_head && $old_head == $new_head ]]; then
+        (( quiet )) || prints "zconfig is already up to date."
+        return 0
+    fi
+    prints "zconfig updated successfully."
+    (( quiet )) || print "$output"
+    (( ${+opts[no-reload]} )) && return 0
+    _zupdate_reload "$zdir" "$old_head" "$new_head"
+}
+
+## Apply pulled zconfig changes to the current shell
+_zupdate_reload() {
+    local zdir=$1 old_head=$2 new_head=$3
+    if (( ! ${+functions[reload_zconfig]} )); then
+        printw "Run ${c}reload${x} to apply the changes."
+        return 0
+    fi
+    local -a reload_opt=()
+    (( quiet )) && reload_opt=(-q)
+    reload_zconfig $reload_opt || return 1
+    # Files that are read only at shell startup need a new shell
+    [[ -n $old_head ]] || return 0
+    local -a changed=("${(@f)$(git -C "$zdir" diff --name-only "$old_head" "$new_head" 2>/dev/null)}")
+    local -a startup=(${(M)changed:#(.z(shenv|profile|shrc|login|logout)|(inc|apps)/*.zsh|plugins/*.zsh)})
+    if (( ${#startup} )); then
+        printw "Startup files changed: ${startup[*]}"
+        printi "Run ${c}reload${x} to apply them (functions and lib are already reloaded)."
+    fi
+    return 0
 }
 
 ## Update plugins
