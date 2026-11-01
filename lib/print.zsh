@@ -7,8 +7,9 @@ zfile_track_start ${0:A}
 ##
 # Output, logging and interactive prompt helper functions
 # Depends on: inc/colors.zsh ($r $g $y $b $c $p $x), inc/icons.zsh ($ICO_*)
-# Note: message functions (printe, printw, ...) interpret print escape
-# sequences in their text argument, like the print builtin does.
+# Note: message and display functions (printe, printw, printc, printkv, printul,
+# printh, printt, ...) interpret print escape sequences in their text arguments,
+# like the print builtin does (callers pass "\n...", icons are "\uXXXX" strings).
 ##
 
 typeset -g PRINT_ICON_SPACE="  "  # Space between icon and text
@@ -151,7 +152,7 @@ printkv() {
     local kc="${3:-$b}" # Blue default
     local vc="${4:-$x}" # Reset default
 
-    print -r -- "${kc}${key}${x}: ${vc}${val}${x}"
+    print -- "${kc}${key}${x}: ${vc}${val}${x}"
 }
 
 # Print all elements of an array (associative or indexed)
@@ -203,7 +204,7 @@ printul() {
     local bullet="$ICO_UL"
 
     for item in "$@"; do
-        print -r -- " ${b}${bullet}${x} ${item}"
+        print -- " ${b}${bullet}${x} ${item}"
     done
 }
 
@@ -332,7 +333,7 @@ printh() {
     local lc="${3:-$x}"
     local char="${4:-‾}"
 
-    print -r -- "${tc}${text}${x}"
+    print -- "${tc}${text}${x}"
     # (m) = display width, correct for wide characters and emoji
     printl "$lc" "$char" "${(m)#text}"
 }
@@ -349,9 +350,9 @@ printt() {
     local -i width=$(( ${(m)#text} + 2 ))
     local bar="${(l:width::─:)}"
 
-    print -r -- "${cb}┌${bar}┐${x}"
-    print -r -- "${cb}│${x} ${ct}${text}${x} ${cb}│${x}"
-    print -r -- "${cb}└${bar}┘${x}"
+    print -- "${cb}┌${bar}┐${x}"
+    print -- "${cb}│${x} ${ct}${text}${x} ${cb}│${x}"
+    print -- "${cb}└${bar}┘${x}"
 }
 
 # Execute command with animated spinner
