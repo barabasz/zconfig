@@ -226,6 +226,49 @@ reload_shell() {
     exec zsh -l
 }
 
+# Reload zconfig code in the current shell without restarting it:
+# recompiles changed files, re-sources lib/ and re-autoloads all functions/
+# (otherwise an already loaded function keeps its old body until a new shell).
+# Startup files, inc/, apps/ and plugins are not re-read: use reload_shell for them.
+# Usage: reload_zconfig [-q|--quiet]
+# Returns: 0 success, 1 at least one lib file failed to load, 2 invalid usage
+reload_zconfig() {
+    local -a quiet_opt
+    zparseopts -D q=quiet_opt -quiet=quiet_opt
+    (( ARGC == 0 )) || return 2
+    # Aliases defined at startup (e.g. global alias G='| grep') must not expand
+    # inside re-sourced function definitions
+    setopt localoptions noaliases
+    local name
+    local -i failed=0 nfuncs=0
+
+    (( ZSH_AUTOCOMPILE )) && compile_zsh_config -q
+
+    if (( ZSH_LOAD_LIB )) && [[ -d $ZSH_LIB_DIR ]]; then
+        source_zsh_dir "$ZSH_LIB_DIR" || failed=1
+        # Re-sourced files are tracked again; keep each file listed once
+        (( ${+ZFILES_ORDER} )) && ZFILES_ORDER=(${(u)ZFILES_ORDER})
+    fi
+
+    if (( ZSH_LOAD_USER_FUNCS )) && [[ -d $ZSH_FUNCS_DIR ]]; then
+        # Same selection as the autoload in .zshrc: not hidden, not private (_*)
+        for name in $ZSH_FUNCS_DIR/[^_.]*(N.:t); do
+            [[ $name == *.zwc ]] && continue
+            # Safe even for the running function: it finishes with its old body
+            (( ${+functions[$name]} )) && unfunction $name
+            autoload -Uz $name
+            (( nfuncs++ ))
+        done
+    fi
+
+    if (( failed )); then
+        printw "zconfig reloaded with errors (see above)."
+        return 1
+    fi
+    (( ${#quiet_opt} )) || prints "zconfig reloaded ($nfuncs functions)."
+    return 0
+}
+
 ## Terminal info
 
 # Get terminal type

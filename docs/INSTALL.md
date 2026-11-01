@@ -84,7 +84,13 @@ Or update only specific components:
 zupdate -c    # Update only zconfig repository
 zupdate -p    # Update only plugins
 zupdate -s    # Update system packages (brew/apt)
+zupdate -n    # Update zconfig without reloading it in the current shell
 ```
+
+When the update pulls zconfig changes, `zupdate` reloads `functions/` and `lib/`
+in the current shell (via `reload_zconfig`), so new versions work right away.
+Changes to startup files (`.zshenv`, `.zshrc`, `inc/`, `apps/`, plugin wrappers)
+are listed with a hint to run `reload`.
 
 ## Uninstalling
 
