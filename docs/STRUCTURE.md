@@ -39,6 +39,7 @@ Part of [zconfig](../README.md) documentation.
 │   ├── date.zsh            # Date/time functions
 │   ├── files.zsh           # File/path tests
 │   ├── fn.zsh              # Option/argument parsing for functions/
+│   ├── git.zsh             # Git repository helpers (zgit)
 │   ├── hardware.zsh        # Hardware info
 │   ├── math.zsh            # Math utilities
 │   ├── network.zsh         # Network utilities

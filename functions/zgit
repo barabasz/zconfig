@@ -5,35 +5,48 @@
 
 local -A _fn=(
     [info]="Git wrapper for bulk operations on repositories"
-    [desc]="Performs git operations (pull, push, status, reset) on all repositories
-            located in the ${c}\$GHDIR${x} directory."
-    [version]="0.5.3"
+    [desc]="Performs git operations (status, fetch, pull, push, sync, reset) on all
+            git repositories located directly in the ${c}\$GHDIR${x} directory.
+            Directories that are not git clones and plain files are skipped.
+            ${c}status${x} fetches all remotes first (in parallel), so it shows whether
+            each repository is up to date, ahead (not pushed), behind (pull needed)
+            or diverged, plus local changes (staged, modified, untracked, conflicts)."
+    [version]="0.6.0"
     [created]="2025"
-    [modified]="2026-08-03"
+    [modified]="2026-11-01"
     [license]="MIT"
     [author]="Andrzej Barabasz"
     [required]="git"
-    [notes]="Requires ${c}\$GHDIR${x} to be set to the parent directory containing your git repositories."
+    [notes]="Requires ${c}\$GHDIR${x} to be set to the parent directory containing your git repositories.
+             To hide files like .DS_Store from all repositories, add them to ${c}~/.config/git/ignore${x}."
 )
 
 local -a _fn_args=(
     "command|Command to execute|r"
 )
 
+local -a _fn_opts=(
+    "no-fetch|n|status: use local data only (offline, faster)"
+    "files|f|status: list changed files for each repository"
+)
+
 local -a _fn_commands=(
-    "list|List all repositories"
-    "pull|Pull --rebase all repos"
+    "fetch|Fetch all remotes of all repos (in parallel)"
+    "list|List all repositories with branch and remote"
+    "pull|Pull --rebase --autostash all repos"
     "push|Commit and push all repos"
     "push-force|Force push current directory to origin/main"
-    "reset|Hard reset all repos to origin/main"
-    "status|Show status for all repos"
+    "reset|Hard reset all repos to their remote default branch"
+    "status|Fetch and show sync state and local changes of all repos"
     "sync|Merge remote changes and push all repos"
 )
 
 local -a _fn_examples=(
+    "zgit status|Fetch and show status of all repos"
+    "zgit status -n|Show status without fetching (offline)"
+    "zgit status -f|Show status with the list of changed files"
     "zgit pull|Pull all repos"
     "zgit push|Commit and push all repos"
-    "zgit status|Show status for all repos"
     "zgit sync|Synchronize: merge remote changes and push all repos"
 )
 
@@ -45,31 +58,61 @@ if [[ -z "$GHDIR" ]]; then
     printe "\$GHDIR is not set."
     return 1
 fi
+if [[ ! -d "$GHDIR" ]]; then
+    printe "\$GHDIR ($GHDIR) is not a directory."
+    return 1
+fi
 
-local cmd="${args[command]:-help}"
+local cmd="${args[command]}"
 
-# Define repository list glob pattern
-local repo_glob="$GHDIR/*(/)"
+# Only real git clones (not .DS_Store, plain folders, etc.); push-force works on $PWD
+local -a repos=()
+if [[ $cmd != push-force ]]; then
+    get_git_repos "$GHDIR" >/dev/null
+    repos=($reply)
+    if (( ${#repos} == 0 )); then
+        printe "No git repositories found in $GHDIR."
+        return 1
+    fi
+fi
+local -i count=${#repos}
+local i=1 repo url line
 
 case "$cmd" in
-    pull)
-        local -a repos=($~repo_glob)
-        local count=${#repos}
-        (( count == 0 )) && { printe "No repositories found in $GHDIR."; return 1; }
+    fetch)
+        printc "Fetching $count repositories..." $y
+        if fetch_git_repos $repos; then
+            printc "All repositories fetched." $g
+        else
+            printe "Fetch failed for ${#reply} of $count repositories:"
+            for repo in $reply; do print "  - ${repo:t}"; done
+            return 1
+        fi
+        ;;
 
+    list)
+        local -i width=0
+        for repo in $repos; do (( ${#repo:t} > width )) && width=${#repo:t}; done
+        for repo in $repos; do
+            get_git_status $repo >/dev/null
+            url=$(git -C "$repo" remote get-url origin 2>/dev/null)
+            printf "%-*s  %s%-12s%s  %s%s%s\n" $width ${repo:t} "$y" "${reply[1]:-?}" "$x" "$c" "${url:--}" "$x"
+        done
+        ;;
+
+    pull)
         printc "Pulling $count repositories from the remote." $y
         print "Working directory: $c$GHDIR$x"
 
-        local i=1 repo
         for repo in $repos; do
             printc "\n$i/$count ${repo:t}" $g
-            printc "$(git -C "$repo" remote get-url origin)" $c
+            url=$(git -C "$repo" remote get-url origin 2>/dev/null) && printc "$url" $c
 
-            git -C "$repo" pull --rebase 2>&1 | while read line; do
-                if [[ "$line" == *"error:"* ]]; then
-                    print -- "$r$line$x"
+            git -C "$repo" pull --rebase --autostash 2>&1 | while IFS= read -r line; do
+                if [[ "$line" == *"error:"* || "$line" == *"fatal:"* ]]; then
+                    print -r -- "$r$line$x"
                 else
-                    print -- "$line"
+                    print -r -- "$line"
                 fi
             done
             ((i++))
@@ -77,17 +120,12 @@ case "$cmd" in
         ;;
 
     push)
-        local -a repos=($~repo_glob)
-        local count=${#repos}
-        (( count == 0 )) && { printe "No repositories found in $GHDIR."; return 1; }
-
         printc "Pushing $count repositories to the remote." $y
         print "Working directory: $c$GHDIR$x"
 
-        local i=1 repo
         for repo in $repos; do
             printc "\n$i/$count ${repo:t}" $g
-            printc "$(git -C "$repo" remote get-url origin)" $c
+            url=$(git -C "$repo" remote get-url origin 2>/dev/null) && printc "$url" $c
 
             git -C "$repo" add --all
             git -C "$repo" commit -m "update" >/dev/null 2>&1
@@ -105,16 +143,8 @@ case "$cmd" in
         git push origin HEAD:main --force
         ;;
 
-    list)
-        print -l $~repo_glob
-        ;;
-
     reset)
-        local -a repos=($~repo_glob)
-        local count=${#repos}
-        (( count == 0 )) && { printe "No repositories found in $GHDIR."; return 1; }
-
-        printe "WARNING: This will reset ALL $count repositories to the latest commit on the main branch."
+        printe "WARNING: This will reset ALL $count repositories to the latest commit of their remote default branch."
 
         if ! read -q "?${y}Are you sure you want to continue? [y/N] ${x}"; then
             print ""
@@ -122,51 +152,110 @@ case "$cmd" in
         fi
         print ""
 
-        local i=1 repo
+        local branch
         for repo in $repos; do
             printc "$i/$count ${repo:t}" $g
-            printc "$(git -C "$repo" remote get-url origin)" $c
+            url=$(git -C "$repo" remote get-url origin 2>/dev/null) && printc "$url" $c
 
-            git -C "$repo" fetch origin
-            git -C "$repo" checkout main
-            git -C "$repo" reset --hard origin/main
-            git -C "$repo" pull
             ((i++))
+            if ! git -C "$repo" fetch origin; then
+                printe "Fetch failed for ${repo:t}, skipped."
+                continue
+            fi
+            # Default branch of origin (main, master, ...), refreshed from the remote
+            git -C "$repo" remote set-head origin --auto >/dev/null 2>&1
+            branch=$(git -C "$repo" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null)
+            branch=${branch#origin/}
+            if [[ -z $branch ]]; then
+                printe "Cannot determine the default branch of origin for ${repo:t}, skipped."
+                continue
+            fi
+            git -C "$repo" checkout "$branch" && git -C "$repo" reset --hard "origin/$branch"
         done
         ;;
 
     status)
-        local -a repos=($~repo_glob)
-        local count=${#repos}
-        (( count == 0 )) && { printe "No repositories found in $GHDIR."; return 1; }
+        local -a fetch_failed=()
+        if (( ! ${+opts[no-fetch]} )); then
+            printc "Fetching $count repositories..." $y
+            fetch_git_repos $repos || fetch_failed=($reply)
+        fi
+        printc "Status of $count repositories in $GHDIR:" $y
 
-        printc "Checking status for $count repositories." $y
-
-        local i=1 repo
+        # Column widths
+        local -i name_w=0 branch_w=0 num_w=${#count}
+        local -A branches=()
         for repo in $repos; do
-            printc "$i/$count ${repo:t}" $g
-            git -C "$repo" status -s
+            (( ${#repo:t} > name_w )) && name_w=${#repo:t}
+            branches[$repo]=$(git -C "$repo" symbolic-ref --quiet --short HEAD 2>/dev/null || print "(detached)")
+            (( ${#branches[$repo]} > branch_w )) && branch_w=${#branches[$repo]}
+        done
+
+        local state msg
+        local -a notes
+        local -i n_ok=0 n_ahead=0 n_behind=0 n_diverged=0 n_other=0 n_dirty=0 n_error=0
+        for repo in $repos; do
+            if ! get_git_status "$repo" >/dev/null; then
+                printf "%*d/%d  %-*s  %s\n" $num_w $i $count $name_w ${repo:t} "${r}git status failed${x}"
+                (( n_error++, i++ ))
+                continue
+            fi
+            state=$REPLY
+            # reply: branch upstream ahead behind staged modified untracked conflicts operation
+            case $state in
+                (up-to-date)  msg="${g}up to date${x}"; (( n_ok++ )) ;;
+                (ahead)       msg="${y}${reply[3]} ahead${x} (push needed)"; (( n_ahead++ )) ;;
+                (behind)      msg="${y}${reply[4]} behind${x} (pull needed)"; (( n_behind++ )) ;;
+                (diverged)    msg="${r}diverged: ${reply[3]} ahead, ${reply[4]} behind${x}"; (( n_diverged++ )) ;;
+                (no-upstream) msg="${p}no upstream branch${x}"; (( n_other++ )) ;;
+                (gone)        msg="${r}upstream ${reply[2]} is gone${x}"; (( n_other++ )) ;;
+                (detached)    msg="${p}detached HEAD${x}"; (( n_other++ )) ;;
+            esac
+            notes=()
+            [[ -n ${reply[9]} ]] && notes+=("${r}${reply[9]} in progress${x}")
+            (( reply[8] )) && notes+=("${r}${reply[8]} conflicted${x}")
+            (( reply[5] )) && notes+=("${c}${reply[5]} staged${x}")
+            (( reply[6] )) && notes+=("${c}${reply[6]} modified${x}")
+            (( reply[7] )) && notes+=("${c}${reply[7]} untracked${x}")
+            (( reply[5] + reply[6] + reply[7] + reply[8] )) && (( n_dirty++ ))
+            (( ${fetch_failed[(Ie)$repo]} )) && notes+=("${r}fetch failed, remote state may be outdated${x}")
+            (( ${#notes} )) && msg+=" · ${(pj: · :)notes}"
+
+            printf "%*d/%d  %-*s  %-*s  %s\n" $num_w $i $count $name_w ${repo:t} $branch_w ${branches[$repo]} "$msg"
+            if (( ${+opts[files]} )) && (( reply[5] + reply[6] + reply[7] + reply[8] )); then
+                git -C "$repo" -c color.status=always status --short | while IFS= read -r line; do
+                    print -r -- "      $line"
+                done
+            fi
             ((i++))
         done
-        ;;
-    
-    sync)
-        local -a repos=($~repo_glob)
-        local count=${#repos}
-        (( count == 0 )) && {
-            printe "No repositories found in $GHDIR."
-            return 1
-        }
 
+        # Summary
+        local -a summary=()
+        (( n_ok ))       && summary+=("${g}$n_ok up to date${x}")
+        (( n_ahead ))    && summary+=("${y}$n_ahead ahead${x}")
+        (( n_behind ))   && summary+=("${y}$n_behind behind${x}")
+        (( n_diverged )) && summary+=("${r}$n_diverged diverged${x}")
+        (( n_other ))    && summary+=("${p}$n_other without tracked upstream${x}")
+        (( n_dirty ))    && summary+=("${c}$n_dirty with local changes${x}")
+        (( n_error ))    && summary+=("${r}$n_error failed${x}")
+        print -r -- "Summary: ${(pj:, :)summary}"
+        (( ${+opts[no-fetch]} )) && print "Remote state not fetched (-n): ahead/behind may be outdated."
+        (( n_behind || n_diverged )) && print "Run ${c}zgit pull${x} to update repositories that are behind."
+        (( n_ahead )) && print "Run ${c}zgit push${x} (or ${c}zgit sync${x}) to publish local commits."
+        (( ${#fetch_failed} || n_error )) && return 1
+        return 0
+        ;;
+
+    sync)
         printc "Synchronizing $count repositories with the remote." $y
         print "Working directory: $c$GHDIR$x"
 
         local -a failed=()
-        local i=1 repo
 
         for repo in $repos; do
             printc "\n$i/$count ${repo:t}" $g
-            printc "$(git -C "$repo" remote get-url origin)" $c
+            url=$(git -C "$repo" remote get-url origin 2>/dev/null) && printc "$url" $c
 
             if ! git -C "$repo" pull --no-rebase --no-edit; then
                 printe "Pull/merge failed for ${repo:t}."

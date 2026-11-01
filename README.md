@@ -108,6 +108,7 @@ Fast utility functions loaded in `.zshrc` (interactive sessions only). See indiv
 | `date.zsh` | Date/time functions (`now_iso`, `format_duration`, etc.) |
 | `files.zsh` | File system tests (`is_file`, `is_dir`, `is_link`, etc.) |
 | `fn.zsh` | Option/argument parsing and help for `functions/` (see [FN.md](docs/FN.md)) |
+| `git.zsh` | Git repository helpers for `zgit` (`get_git_repos`, `get_git_status`, `fetch_git_repos`) |
 | `hardware.zsh` | Hardware info (`get_cpu_count`, `get_ram_total`, etc.) |
 | `math.zsh` | Math utilities (`calc`, `abs`, `round`, `random`, `format_bytes`, etc.) |
 | `network.zsh` | Network utilities (`get_local_ip`, `is_online`, etc.) |
