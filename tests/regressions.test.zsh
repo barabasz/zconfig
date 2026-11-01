@@ -32,7 +32,17 @@ mkdir -p $tmp/arch/target
 print hi > $tmp/arch/target/f
 ln -s $tmp/arch/target $tmp/arch/latest
 ( cd $tmp/arch && compress out latest >/dev/null )
-assert_eq "$(tar -tzf $tmp/arch/out.tar.gz | head -1)" latest "archive entry uses the symlink name"
+local -a entries=("${(@f)$(tar -tzf $tmp/arch/out.tar.gz)}")
+assert_eq "${#${(@)entries:#latest/*}}" 0 "archive entries use the symlink name"
+assert_ok test "${entries[(Ie)latest/f]}" -gt 0
+mkdir -p $tmp/arch/y && tar -xzf $tmp/arch/out.tar.gz -C $tmp/arch/y
+assert_fail test -L $tmp/arch/y/latest
+assert_eq "$(<$tmp/arch/y/latest/f)" hi "top-level directory symlink is followed"
+ln -s $tmp/arch/target/f $tmp/arch/flink
+( cd $tmp/arch && compress out2 flink >/dev/null )
+mkdir -p $tmp/arch/x && tar -xzf $tmp/arch/out2.tar.gz -C $tmp/arch/x
+assert_fail test -L $tmp/arch/x/flink
+assert_eq "$(<$tmp/arch/x/flink)" hi "top-level file symlink stores contents"
 
 ## _df_fields: mount points and file systems with spaces
 mkdir -p $tmp/bin
@@ -46,6 +56,18 @@ print -rl -- '#!/bin/sh' 'echo "Filesystem 1024-blocks Used Available Capacity M
     'echo "map auto home 10 4 6 40% /home"' > $tmp/bin/df
 _df_fields /x
 assert_eq "${reply[*]}" "10240 4096 6144" "file system name with spaces"
+print -rl -- '#!/bin/sh' 'echo "Filesystem 1024-blocks Used Available Capacity Mounted on"' \
+    'echo "/dev/disk5 1000 400 600 40% /Volumes/Backup 100%"' > $tmp/bin/df
+_df_fields /x
+assert_eq "${reply[*]}" "1024000 409600 614400" "percent sign inside mount point"
+print -rl -- '#!/bin/sh' 'echo "Filesystem 1024-blocks Used Available Capacity Mounted on"' \
+    'echo "devfs 0 0 0 - /dev"' > $tmp/bin/df
+_df_fields /x
+assert_eq "${reply[*]}" "0 0 0" "capacity reported as -"
+print -rl -- '#!/bin/sh' 'echo "Filesystem 1024-blocks Used Available Capacity Mounted on"' \
+    'echo "/dev/sda1 100 105 -5 105% /"' > $tmp/bin/df
+_df_fields /x
+assert_eq "${reply[*]}" "102400 107520 -5120" "negative available blocks"
 path=(${path:#$tmp/bin})
 
 ## reinstall_plugin keeps a pinned tag
@@ -65,6 +87,11 @@ if (( ${+commands[git]} )); then
     install_plugin demo2 file://$repo >/dev/null 2>&1
     reinstall_plugin demo2 >/dev/null 2>&1
     assert_eq "$(<$ZSH_PLUGINS_DIR/demo2/p.plugin.zsh)" "V=2" "default branch reinstall"
+    # A branch tip that also has a tag stays on the branch
+    git -C $repo tag v2
+    install_plugin demo3 file://$repo >/dev/null 2>&1
+    reinstall_plugin demo3 >/dev/null 2>&1
+    assert_ok git -C $ZSH_PLUGINS_DIR/demo3 symbolic-ref -q HEAD
 fi
 
 ## _fn_init accepts negative floats such as -.5 as positional values

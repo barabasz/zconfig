@@ -188,13 +188,15 @@ reinstall_plugin() {
         printe "Plugin '$name' not found or has no git origin."
         return 1
     fi
-    # Pinned selection: exact tag first, then a branch other than the remote default
+    # Pinned selection: a branch other than the remote default when HEAD is
+    # attached; an exact tag only when HEAD is detached (a branch tip may also
+    # carry a tag, and pinning it would stop update_plugin from following the branch)
     local ref default_ref
-    ref=$(git -C "$target" describe --tags --exact-match HEAD 2>/dev/null)
-    if [[ -z $ref ]]; then
-        ref=$(git -C "$target" symbolic-ref -q --short HEAD 2>/dev/null)
+    if ref=$(git -C "$target" symbolic-ref -q --short HEAD 2>/dev/null); then
         default_ref=$(git -C "$target" symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null)
         [[ $ref == ${default_ref#origin/} ]] && ref=""
+    else
+        ref=$(git -C "$target" describe --tags --exact-match HEAD 2>/dev/null)
     fi
     remove_plugin "$name" || return 1
     if [[ -n $ref ]]; then

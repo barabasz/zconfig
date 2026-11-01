@@ -108,16 +108,29 @@ compress() {
     fi
     _archive_need tar || return
 
-    # -C parent: store a relative path in the archive
-    # :a (not :A) keeps a symlink's own name instead of resolving it
+    # -C parent: store a relative path in the archive.
+    # :a (not :A) keeps a symlink's own name. A top-level symlink is followed
+    # (its contents are archived, not the link), nested symlinks stay links:
+    # for a directory link its children are listed as "link/child" (the OS
+    # resolves the link, tar keeps the names); a file link or an empty
+    # directory link uses tar -h, which has no nested links to affect.
+    local -a tar_opts=() entry=("${source:a:t}")
+    if [[ -L $source ]]; then
+        local -a children=("${source:a}"/*(DN))
+        if [[ -d $source ]] && (( ${#children} )); then
+            entry=("${source:a:t}/${^children:t}")
+        else
+            tar_opts=(-h)
+        fi
+    fi
     local tool=gzip
     if (( ${+commands[pigz]} )); then
         tool=pigz
-        tar -cf - -C "${source:a:h}" "${source:a:t}" | pigz > "$target"
+        tar $tar_opts -cf - -C "${source:a:h}" $entry | pigz > "$target"
         # pipestatus: fail if either tar or pigz failed
         (( ${pipestatus[1]} == 0 && ${pipestatus[2]} == 0 ))
     else
-        tar -czf "$target" -C "${source:a:h}" "${source:a:t}"
+        tar $tar_opts -czf "$target" -C "${source:a:h}" $entry
     fi || {
         printe "Failed to compress '$source'."
         command rm -f -- "$target"
