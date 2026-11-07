@@ -1,3 +1,5 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # Tests for lib/strings.zsh
 
 ## trim family keeps backslashes literally (audit bug #17)

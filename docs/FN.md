@@ -26,7 +26,7 @@ _fn_init "$@" || return $REPLY
 print "Hello, ${args[name]}!"
 ```
 
-For more information see the [Complete Examples](#complete-examples) and [Commands](#commands) sections below.
+For more information see the [Complete Examples](#complete-examples) and [Commands](#commands-_fn_commands) sections below.
 
 ## Function Metadata (_fn)
 
@@ -151,7 +151,7 @@ ${opts[cycles]}
 
 # Check if flag is set
 if (( ${+opts[force]} )); then
-    echo "Force mode enabled"
+    print "Force mode enabled"
 fi
 ```
 

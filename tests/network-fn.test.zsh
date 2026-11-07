@@ -1,3 +1,5 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # Tests for validation in lib/network.zsh and types in lib/fn.zsh
 
 ## IP / domain / URL predicates share _FN_TYPES patterns

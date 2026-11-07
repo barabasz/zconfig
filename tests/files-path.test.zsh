@@ -1,3 +1,5 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # Tests for lib/files.zsh and lib/path.zsh
 
 local tmp=$(mktemp -d)

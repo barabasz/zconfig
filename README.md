@@ -2,6 +2,8 @@
 
 **zconfig** is a modern, modular, and performance-optimized Zsh framework architected for maintainability and near-instant startup. It eschews the overhead of bloated frameworks in favor of a lightweight, custom-tailored architecture that prioritizes speed without sacrificing power.
 
+Its purpose is simple: to set up a complete Zsh working environment on a new machine in minutes, and to keep commands and workflow identical across all machines you use.
+
 Whether you are a Zsh power user or just taking your first steps in the terminal, zconfig is built for you. It provides beginners with a stable, "batteries-included" environment out of the box, while offering veterans the modular flexibility needed to deeply customize and refine their workflow.
 
 👉 For installation instructions, see [INSTALL.md](docs/INSTALL.md).
@@ -30,6 +32,7 @@ Whether you are a Zsh power user or just taking your first steps in the terminal
 | [INSTALL.md](docs/INSTALL.md) | Installation instructions |
 | [NAMING.md](docs/NAMING.md) | Naming conventions |
 | [STRUCTURE.md](docs/STRUCTURE.md) | Directory structure |
+| [ZAPP.md](docs/ZAPP.md) | Application recipes (`zapp`) |
 | [ZFILES.md](docs/ZFILES.md) | File tracking system |
 | [ZSH.md](docs/ZSH.md) | Zsh coding style |
 
@@ -40,153 +43,17 @@ Whether you are a Zsh power user or just taking your first steps in the terminal
 3. **Zsh-Native** - No bash compatibility, use zsh-specific features exclusively
 4. **Explicit Over Implicit** - Clear naming conventions, documented behavior
 
-## Directory Overview
+## Components
 
-```
-~/.config/zsh/
-├── .zshenv           # Entry point (always sourced first)
-├── .zshrc            # Interactive shell setup
-├── .zprofile         # Login shell initialization
-├── .zlogin           # Post-login actions
-├── .zlogout          # Logout cleanup
-├── inc/              # Core configuration modules
-├── lib/              # Helper function library
-├── apps/             # Application integrations
-├── functions/        # Autoloaded user functions
-├── plugins/          # Zsh plugins (wrappers + git clones)
-└── cache/            # Runtime cache
-```
-
-See [STRUCTURE.md](docs/STRUCTURE.md) for detailed structure.
-
-## Core Components
-
-### Entry Points
-
-| File | Purpose |
-|------|---------|
-| `.zshenv` | Always sourced first; loads tracking, core config, PATH, locale |
-| `.zshrc` | Interactive shell; loads lib/, options, colors, aliases, apps, plugins |
-| `.zprofile` | Login shell initialization |
-| `.zlogin` | Post-login actions (cleanup, display system info) |
-
-### Configuration Modules (`inc/`)
-
-Core configuration split by responsibility. Each file handles one concern.
-
-| File | Purpose |
-|------|---------|
-| `env.zsh` | Core environment variables |
-| `zfiles.zsh` | File tracking infrastructure |
-| `modules.zsh` | Zsh module loading (`zmodload`) |
-| `xdg.zsh` | XDG Base Directory variables |
-| `colors.zsh` | ANSI color code variables |
-| `icons.zsh` | Icon/glyph variables |
-| `options.zsh` | Shell options (setopt/unsetopt) |
-| `prompt.zsh` | Fallback prompt |
-| `path.zsh` | PATH configuration |
-| `hashdirs.zsh` | Named directory hashes (`~zsh`, `~gh`, etc.) |
-| `aliases.zsh` | Command aliases |
-| `keys.zsh` | Key bindings |
-| `completion.zsh` | Completion configuration |
-| `locales.zsh` | Locale settings |
-| `plugins.zsh` | Plugin loading configuration |
-
-### Helper Library (`lib/`)
-
-Fast utility functions loaded in `.zshrc` (interactive sessions only). See individual files for available functions. Use `zman` to list all functions or `zinfo <function>` for details.
-
-| File | Category |
-|------|----------|
-| `apps.zsh` | Package-manager helpers used by `zapp` (`app_install`, `app_upgrade`, etc.) |
-| `archive.zsh` | Archive extraction and compression (`extract`, `list_archive`, `compress`) |
-| `arrays.zsh` | Array utilities (`array_contains`, `array_map`, etc.) |
-| `clipboard.zsh` | Clipboard operations (`clip_copy`, `clip_paste`; also WSL and OSC 52) |
-| `cmdinfo.zsh` | Command information for `zinfo`/`zwhere`/`zver` (`get_cmd_path`, etc.) |
-| `compile.zsh` | Bytecode compilation (`compile_zsh_config`, `compile_dir`, etc.) |
-| `cwg.zsh` | Collatz-Weyl pseudo-random number generator (`cwg_seed`, `cwg_next`) |
-| `date.zsh` | Date/time functions (`now_iso`, `format_duration`, etc.) |
-| `files.zsh` | File system tests (`is_file`, `is_dir`, `is_link`, etc.) |
-| `fn.zsh` | Option/argument parsing and help for `functions/` (see [FN.md](docs/FN.md)) |
-| `git.zsh` | Git repository helpers for `zgit` (`get_git_repos`, `get_git_status`, `fetch_git_repos`) |
-| `hardware.zsh` | Hardware info (`get_cpu_count`, `get_ram_total`, etc.) |
-| `math.zsh` | Math utilities (`calc`, `abs`, `round`, `random`, `format_bytes`, etc.) |
-| `network.zsh` | Network utilities (`get_local_ip`, `is_online`, etc.) |
-| `path.zsh` | PATH manipulation (`path_append`, `path_prepend`, etc.) |
-| `plugins.zsh` | Plugin management (`install_plugin`, `load_plugin`, etc.) |
-| `print.zsh` | Print functions for formatted output (`printe`, `printkv`, etc.) |
-| `shell.zsh` | Shell info (`shell_version`, `is_interactive`, etc.) |
-| `strings.zsh` | String manipulation (`trim`, `lowercase`, `str_contains`, etc.) |
-| `system.zsh` | OS detection (`is_macos`, `is_linux`, `os_name`, etc.) |
-| `varia.zsh` | Miscellaneous (`is_debug`, `etime`, `bench`, `retry`, `is_installed`, `confirm`) |
-
-### Application Integrations (`apps/`)
-
-External tool configurations. Loaded dynamically in `.zshrc`. Each file follows the pattern:
-
-```zsh
-#!/bin/zsh
-zfile_track_start ${0:A}
-
-if is_installed <tool>; then
-    # Configuration here
-fi
-
-zfile_track_end ${0:A}
-```
-
-Use `_` prefix for priority loading (e.g., `_brew.zsh` loads before `fzf.zsh`).
-
-### Plugins (`plugins/`)
-
-Lightweight plugin system without Oh-My-Zsh. Each plugin has:
-- `<name>.zsh` - Wrapper file (versioned, your configuration)
-- `<name>/` - Git clone (in `.gitignore`, auto-compiled)
-
-```zsh
-# Install a plugin
-install_plugin <name> <github-user/repo>
-
-# Update all plugins
-update_plugins
-
-# List plugins
-list_plugins
-```
-
-See `lib/plugins.zsh` for all available functions.
-
-### User Functions (`functions/`)
-
-Autoloaded functions available on-demand. No function declaration needed in files - just write the function body directly.
-
-| Function | Description |
-|----------|-------------|
-| `zhelp` | Display helpful commands and documentation |
-| `zdoc` | Browse and view documentation files |
-| `zman` | List all zconfig functions with filtering |
-| `zinfo` | Display version, path, and description of any command |
-| `zconfig` | Edit zsh config files using the default editor |
-| `zfiles` | Show loaded shell files with status and load time |
-| `zupdate` | Update zconfig and all plugins |
-| `zgit` | Git wrapper for bulk operations on repositories |
-| `sysinfo` | Display system information summary |
-| `logininfo` | Display login information |
-| `cpuinfo` | Display CPU hardware and load statistics |
-| `meminfo` | Display memory usage statistics |
-| `diskinfo` | Display disk usage statistics |
-| `lanip` | Retrieve local IP address |
-| `wanip` | Retrieve public IP address |
-| `mdig` | Multi-DNS query tool |
-| `sslinfo` | Inspect SSL certificates |
-| `urlinfo` | URL information tool |
-| `ttfb` | Measure Time To First Byte |
-| `execs` | Execute command with animated spinner |
-| `collatz` | Calculate Collatz sequences |
-| `primes` | Prime number generator and tester |
-| `getrandom` | Generate random numbers with formatting |
-| `j2y` | Convert JSON to YAML |
-| `y2j` | Convert YAML to JSON |
+| Location | Purpose | Details |
+|----------|---------|---------|
+| `.zshenv`, `.zshrc`, ... | Startup files | [STRUCTURE.md](docs/STRUCTURE.md#startup-order) |
+| `inc/` | Core configuration modules, one concern per file | [STRUCTURE.md](docs/STRUCTURE.md) |
+| `lib/` | Helper function library | [FUNCTIONS.md](docs/FUNCTIONS.md) |
+| `functions/` | Autoloaded user commands | [FUNCTIONS.md](docs/FUNCTIONS.md), [FN.md](docs/FN.md) |
+| `apps/` | Integrations with external tools | [GUIDELINES.md](docs/GUIDELINES.md#app-integrations-apps) |
+| `recipes/` | Application recipes for `zapp` | [ZAPP.md](docs/ZAPP.md) |
+| `plugins/` | Lightweight plugin system, without Oh-My-Zsh | [GUIDELINES.md](docs/GUIDELINES.md#plugins-plugins) |
 
 ## Configuration Variables
 
@@ -226,31 +93,11 @@ ZSH_DEBUG=0 zsh
 
 ## Bytecode Compilation
 
-Zsh files are automatically compiled to `.zwc` bytecode for faster loading (~10% speedup).
-
-**How it works:**
-- On shell startup, `compile_zsh_config -q` checks all files in `lib/`, `inc/`, `apps/`
-- Only changed files are recompiled (compares timestamps)
-- Overhead: ~0.3ms (negligible)
-- Zsh automatically uses `.zwc` when newer than `.zsh`
-- Controlled by `ZSH_AUTOCOMPILE` variable
-
-**After editing a file:**
-1. First shell startup → uses `.zsh` (newer), then recompiles
-2. Next shell startup → uses `.zwc` (faster)
-
-**Manual commands:**
-```zsh
-compile_zsh_config      # Compile with output
-compile_zsh_config -q   # Compile quietly
-clean_zsh_config        # Remove all .zwc files
-```
-
-See `lib/compile.zsh` for all compilation functions.
+Zsh files are automatically compiled to `.zwc` bytecode for faster loading (~10% speedup). See [GUIDELINES.md](docs/GUIDELINES.md#bytecode-compilation).
 
 ## Best Practices
 
-See [GUIDELINES.md](docs/GUIDELINES.md) for do's, don'ts, file type rules, common patterns, and performance tips.
+See [GUIDELINES.md](docs/GUIDELINES.md) for project rules, file types, and performance tips, and [ZSH.md](docs/ZSH.md) for coding style.
 
 ## Troubleshooting
 
@@ -259,7 +106,7 @@ See [GUIDELINES.md](docs/GUIDELINES.md) for do's, don'ts, file type rules, commo
 1. Run `zspeed` to benchmark startup time across shell modes
 2. Run `zfiles` to identify slow files (> 10ms is suspicious)
 3. Use `zinfo -i <command>` to inspect specific tools and their load cost
-4. Consider lazy loading heavy apps (see [GUIDELINES.md](docs/GUIDELINES.md#lazy-loading))
+4. Consider lazy loading heavy apps (see [EXAMPLES.md](docs/EXAMPLES.md#lazy-loading-pattern))
 5. Check for unnecessary external commands — prefer zsh builtins
 
 ### Function Not Found
@@ -272,8 +119,7 @@ See [GUIDELINES.md](docs/GUIDELINES.md) for do's, don'ts, file type rules, commo
 ### Changes Not Applied
 
 1. Run `reload` to restart the shell with the new configuration
-2. Or manually: `source ~/.zshenv` (for `lib/`, `inc/`) or `source ~/.zshrc` (for `apps/`)
-3. After editing `functions/` or `lib/`: `reload_zconfig` reloads them in the current shell
+2. After editing `functions/` or `lib/`: `reload_zconfig` reloads them in the current shell
    (`zupdate` does this automatically after pulling changes)
 
 ### Check Installation
@@ -284,11 +130,15 @@ Run `zcheck` to verify zconfig installation, directory structure, and loaded com
 
 ### zconfig Tools
 
+The most important commands; all of them are listed in [FUNCTIONS.md](docs/FUNCTIONS.md).
+
 | Command | Description |
 |---------|-------------|
 | `zhelp` | Display helpful commands and documentation |
 | `zdoc` | Browse and view documentation files |
 | `zman` | List all functions from `lib/` and `functions/` |
+| `zapp` | Install applications and link their configuration |
+| `zgit` | Git wrapper for bulk operations on repositories |
 | `zinfo` | Display version, path, and description of any command |
 | `zfiles` | Show loaded shell files with status and load time |
 | `zspeed` | Measure zsh startup performance |

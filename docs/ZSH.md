@@ -9,12 +9,27 @@ Guidelines for writing idiomatic zsh code (not bash).
 
 **Write for zsh exclusively** - no bash/POSIX compatibility. Use zsh-native constructs, variables, and builtins.
 
+The only exception is `install.sh`, which is written in bash because it runs before zsh is installed.
+
 ---
 
-## Script Comments
+## Comments
 
-- `##` = Section header (logical level, not Markdown syntax)
-- `#` = Regular comments
+All comments are in English. Non-English text is allowed only as literal data, for example in a usage example.
+
+| Marker | Use |
+|--------|-----|
+| `#!/bin/zsh` + `# Part of zconfig · ...` | File header; see the templates in [GUIDELINES.md](GUIDELINES.md#adding-components) |
+| `##` / `# text` / `##` | File description block in `lib/` and `inc/` |
+| `## Section name` | Section header (logical level, not Markdown syntax) |
+| `# Text` | Regular comment |
+
+- Write section names in sentence case, without a period: `## Whitespace`
+- Don't use banners such as `# --- Name ---` or `# === Name ===`
+- Start a comment with a capital letter, after one space; end it without a period, unless it has several sentences
+- Explain why, not what: describe intent, traps and non-obvious behavior
+- Mark guards with `# Guard: ...`, and keep the fixed tracking comments from the templates
+- Every `lib/` function has a header comment, as defined in [GUIDELINES.md](GUIDELINES.md#helper-functions-lib); mark private functions with `(internal)` in the first line
 
 ## Special Variables
 
@@ -23,18 +38,18 @@ Use zsh-native special variables instead of POSIX equivalents:
 ```zsh
 # ✅ Good - zsh native
 ARGC                   # number of arguments (not $#)
-argv                   # array of arguments (not $@ or $*)
+argv                   # array of arguments (not $*)
 argv[1]                # first argument (not $1)
 argv[-1]               # last argument
 status                 # exit code of last command (not $?)
 
 # ❌ Bad - POSIX/bash style
 $#                     # use ARGC instead
-$@, $*                 # use argv instead
+$*                     # use argv instead
 $?                     # use status instead
 ```
 
-**Note:** `$1`, `$2` etc. are acceptable when clearer (e.g., in simple 2-3 arg functions), but `ARGC` is always preferred over `$#`.
+**Note:** `$1`, `$2` etc. are acceptable when clearer (e.g., in simple 2-3 arg functions), and `"$@"` is the standard way to forward arguments (e.g., `_fn_init "$@"`). `ARGC` is always preferred over `$#`.
 
 **Elegant arithmetic with `status`:** Inside `(( ))`, variables don't need `$` prefix, making exit code checks particularly clean:
 
@@ -189,7 +204,7 @@ Filter files directly in glob patterns instead of `find` + `grep`.
 # Example: find vs zsh
 # BASH: find . -maxdepth 1 -type d -not -name '.*'
 # ZSH:
-echo *(/)
+print -l *(/)
 ```
 
 ---
@@ -351,7 +366,7 @@ mapfile[log.txt]="New log entry"
 
 ## Parsing Options (`zparseopts`)
 
-Built-in option parser. Replaces `getopt` and manual `case` loops.
+Built-in option parser for `lib/` functions. Replaces `getopt` and manual `case` loops. Commands in `functions/` use [fn.zsh](FN.md) instead.
 
 ```zsh
 zmodload zsh/zutil
@@ -481,41 +496,7 @@ esac
 - **Never** use `[ ]` (use `[[ ]]`)
 - **Never** use `echo` (use `print`)
 - **Never** call `dirname`, `basename`, `realpath` (use `:h`, `:t`, `:A`)
+- **Never** call external commands where a zsh builtin exists (`stat` → `zstat`)
+- **Never** use `return $?` (plain `return` keeps the last status)
+- **Never** use `exit` in functions (use `return`)
 - **Never** write bash-compatible code
-
----
-
-## Code Style Checklist
-
-```zsh
-#!/bin/zsh
-# ✅ Shebang present
-# ✅ Tracking calls at top and bottom
-zfile_track_start ${0:A}
-
-# ✅ Check tool availability
-if is_installed tool; then
-
-    # ✅ Use [[ ]] for file/string tests
-    [[ -f $file ]] && source "$file"
-
-    # ✅ Use (( )) for numeric comparisons - NEVER -lt/-gt/-eq etc.
-    (( ARGC < 2 )) && return 1
-    (( count > 0 )) && process
-
-    # ✅ Use (( )) for arithmetic
-    (( count++ ))
-    (( total += n ))
-
-    # ✅ Use print for output
-    print "Message"
-
-    # ✅ Local variables in functions
-    local var="value"
-
-fi
-
-# ✅ Tracking at end
-zfile_track_end ${0:A}
-```
-

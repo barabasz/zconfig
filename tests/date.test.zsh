@@ -1,3 +1,5 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # Tests for lib/date.zsh (runner sets TZ=UTC)
 
 ## days_in_month handles leading zeros from strftime (audit bug #8)

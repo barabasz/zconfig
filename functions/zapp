@@ -110,7 +110,7 @@ local zdotdir="${ZDOTDIR:-$confdir/zsh}"
 local recipes_dir="${ZSH_RECIPES_DIR:-$zdotdir/recipes}"
 local recipe_file="$recipes_dir/$app_id.kdl"
 
-# --- Output helpers ----------------------------------------------------------
+## Output helpers
 
 _zapp_heading() {
     (( ARGC == 1 )) || return 2
@@ -167,12 +167,12 @@ _zapp_line() {
 _zapp_run() {
     if (( ! quiet_mode )); then
         "$@"
-        return $?
+        return
     fi
 
     local tmp="/tmp/zapp.$$.${RANDOM}.${RANDOM}.log"
     "$@" >"$tmp" 2>&1
-    local rc=$?
+    local rc=$status
     if (( rc != 0 )) && [[ -s "$tmp" ]]; then
         cat "$tmp" >&2
     fi
@@ -180,7 +180,7 @@ _zapp_run() {
     return $rc
 }
 
-# --- KDL helpers -------------------------------------------------------------
+## KDL helpers
 
 _zapp_get() {
     (( ARGC == 2 )) || return 2
@@ -256,7 +256,7 @@ _zapp_expand_path() {
     REPLY="$value"
 }
 
-# --- Link helpers ------------------------------------------------------------
+## Link helpers
 
 # For linking: reply = state, action, current destination.
 _zapp_link_status() {
@@ -362,7 +362,7 @@ _zapp_unlink_expected() {
     (( ARGC == 2 )) || return 2
     local real_path="$1" link_path="$2" current=""
 
-    _zapp_preflight_managed_link "$real_path" "$link_path" || return $?
+    _zapp_preflight_managed_link "$real_path" "$link_path" || return
     [[ -L "$link_path" ]] || return 1
 
     current=$(resolve_link "$link_path" 2>/dev/null) || return 1
@@ -371,7 +371,7 @@ _zapp_unlink_expected() {
     command rm "$link_path"
 }
 
-# --- Parse and validate ------------------------------------------------------
+## Parse and validate
 
 if [[ ! -f "$recipe_file" ]]; then
     printe "Recipe not found: ${c}${recipe_file}${x}"
@@ -411,7 +411,7 @@ if [[ "$schema" != "1" ]]; then
     return 1
 fi
 
-# --- Bundle metadata ---------------------------------------------------------
+## Bundle metadata
 
 local bundle_name="" bundle_description="" include_count=0
 if [[ "$root_type" == bundle ]]; then
@@ -459,7 +459,7 @@ if [[ "$root_type" == bundle ]]; then
     fi
 fi
 
-# --- Recipe metadata ---------------------------------------------------------
+## Recipe metadata
 
 local name="" command="" description="" homepage=""
 local has_install=0 package="" recipe_method="brew" method="brew" install_type=""
@@ -706,7 +706,7 @@ if [[ "$root_type" == recipe ]]; then
     fi
 fi
 
-# --- Recursive run state ----------------------------------------------------
+## Recursive run state
 
 if (( ! ${+parameters[_zapp_processed]} )); then
     local -A _zapp_processed=()
@@ -730,7 +730,7 @@ fi
 _zapp_active[$app_id]=1
 _zapp_stack+=("$app_id")
 
-# --- Bundle execution -------------------------------------------------------
+## Bundle execution
 
 if [[ "$root_type" == bundle ]]; then
     _zapp_heading "Bundle"
@@ -786,7 +786,7 @@ if [[ "$root_type" == bundle ]]; then
         [[ "$force_method" == brew ]] && nested_opts+=(--brew)
         [[ "$force_method" == apt ]] && nested_opts+=(--apt)
         (( test_mode )) && nested_opts+=(--test)
-        zapp "${nested_opts[@]}" "$action" "$included_id" || return $?
+        zapp "${nested_opts[@]}" "$action" "$included_id" || return
         _zapp_subkv "State" "processed"
     done
 
@@ -803,7 +803,7 @@ if [[ "$root_type" == bundle ]]; then
     return 0
 fi
 
-# --- Recipe execution -------------------------------------------------------
+## Recipe execution
 
 _zapp_heading "Recipe"
 _zapp_kv "ID" "$app_id"
@@ -826,7 +826,7 @@ fi
 if [[ "$action" == install || "$action" == remove || "$action" == link || "$action" == unlink ]] && \
    [[ "$ghconf_state" == available ]]; then
     if (( config_auto )); then
-        _zapp_preflight_managed_link "$config_real_path" "$config_link_path" || return $?
+        _zapp_preflight_managed_link "$config_real_path" "$config_link_path" || return
     fi
 
     local pre_i pre_selector pre_source pre_target pre_real pre_link
@@ -843,11 +843,11 @@ if [[ "$action" == install || "$action" == remove || "$action" == link || "$acti
         pre_real="$GHCONFDIR/$pre_source"
         _zapp_expand_path "$pre_target"
         pre_link="$REPLY"
-        _zapp_preflight_managed_link "$pre_real" "$pre_link" || return $?
+        _zapp_preflight_managed_link "$pre_real" "$pre_link" || return
     done
 fi
 
-# --- Dependencies: install before the application ---------------------------
+## Dependencies: install before the application
 
 if [[ "$action" == install ]] && (( dependency_count )); then
     local dep_i dep_selector dependency dep_file dep_type cycle_path
@@ -898,7 +898,7 @@ if [[ "$action" == install ]] && (( dependency_count )); then
         [[ "$force_method" == brew ]] && dep_opts+=(--brew)
         [[ "$force_method" == apt ]] && dep_opts+=(--apt)
         (( test_mode )) && dep_opts+=(--test)
-        zapp "${dep_opts[@]}" install "$dependency" || return $?
+        zapp "${dep_opts[@]}" install "$dependency" || return
         _zapp_subkv "State" "processed"
     done
 fi
@@ -916,7 +916,7 @@ if [[ "$action" == remove ]] && (( dependency_count )); then
     done
 fi
 
-# --- Application package ----------------------------------------------------
+## Application package
 
 local installed_now=0
 if [[ "$action" == install || "$action" == remove ]]; then
@@ -961,7 +961,7 @@ if [[ "$action" == install || "$action" == remove ]]; then
                 fi
             else
                 _zapp_kv "Action" "install with $method: $package"
-                _zapp_run app_install "$method" "$package" "$install_type" || return $?
+                _zapp_run app_install "$method" "$package" "$install_type" || return
                 installed_now=1
 
                 if [[ -n "$command" ]] && ! is_installed "$command"; then
@@ -980,7 +980,7 @@ if [[ "$action" == install || "$action" == remove ]]; then
                 fi
             else
                 _zapp_kv "Action" "remove with $method: $package"
-                _zapp_run app_remove "$method" "$package" "$install_type" || return $?
+                _zapp_run app_remove "$method" "$package" "$install_type" || return
                 if app_is_installed "$method" "$package" "$install_type"; then
                     printe "Package '${c}${package}${x}' is still installed after removal."
                     return 1
@@ -990,7 +990,7 @@ if [[ "$action" == install || "$action" == remove ]]; then
     fi
 fi
 
-# --- Extras: install only ---------------------------------------------------
+## Extras: install only
 
 if [[ "$action" == install ]] && (( extra_count )); then
     local i selector extra extra_type cycle_path
@@ -1025,7 +1025,7 @@ if [[ "$action" == install ]] && (( extra_count )); then
             [[ "$force_method" == brew ]] && nested_opts+=(--brew)
             [[ "$force_method" == apt ]] && nested_opts+=(--apt)
             (( test_mode )) && nested_opts+=(--test)
-            zapp "${nested_opts[@]}" install "$extra" || return $?
+            zapp "${nested_opts[@]}" install "$extra" || return
             _zapp_subkv "State" "processed"
         else
             local extra_method="${force_method:-brew}"
@@ -1040,7 +1040,7 @@ if [[ "$action" == install ]] && (( extra_count )); then
                 _zapp_subkv "State" "would process"
             else
                 _zapp_subkv "Action" "install $extra"
-                _zapp_run app_install "$extra_method" "$extra" "" || return $?
+                _zapp_run app_install "$extra_method" "$extra" "" || return
                 _zapp_subkv "State" "installed"
             fi
             _zapp_processed[$extra]=1
@@ -1053,7 +1053,7 @@ if [[ "$action" == remove ]] && (( extra_count )); then
     _zapp_kv "Action" "preserve; extras are not removed automatically"
 fi
 
-# --- Config link/unlink -----------------------------------------------------
+## Config link/unlink
 
 if [[ "$action" == install || "$action" == link ]]; then
     local strict_link=0
@@ -1080,8 +1080,8 @@ if [[ "$action" == install || "$action" == link ]]; then
                     _zapp_kv "Action" "would ${reply[2]}"
                 else
                     _zapp_kv "Action" "${reply[2]}"
-                    _zapp_preflight_managed_link "$config_real_path" "$config_link_path" || return $?
-                    _zapp_run lns "$config_real_path" "$config_link_path" || return $?
+                    _zapp_preflight_managed_link "$config_real_path" "$config_link_path" || return
+                    _zapp_run lns "$config_real_path" "$config_link_path" || return
                 fi
             else
                 _zapp_kv "User config" "not found"
@@ -1152,8 +1152,8 @@ if [[ "$action" == install || "$action" == link ]]; then
                 _zapp_kv "Action" "would ${reply[2]}"
             else
                 _zapp_kv "Action" "${reply[2]}"
-                _zapp_preflight_managed_link "$real_path" "$link_path" || return $?
-                _zapp_run lns "$real_path" "$link_path" || return $?
+                _zapp_preflight_managed_link "$real_path" "$link_path" || return
+                _zapp_run lns "$real_path" "$link_path" || return
             fi
         done
     fi
@@ -1264,7 +1264,7 @@ if [[ "$action" == remove || "$action" == unlink ]]; then
     fi
 fi
 
-# --- Setup: install only ----------------------------------------------------
+## Setup: install only
 
 if [[ "$action" == install ]] && (( mkdir_count || run_count )); then
     local i selector mkdir_path label cmd item_when
@@ -1280,7 +1280,7 @@ if [[ "$action" == install ]] && (( mkdir_count || run_count )); then
         item_when="always"
         _zapp_get "$recipe_file" "${selector}.when" && item_when="$REPLY"
 
-        if [[ "$item_when" == new && $installed_now -eq 0 ]]; then
+        if [[ "$item_when" == new ]] && (( ! installed_now )); then
             _zapp_kv "Skip" "mkdir $mkdir_path (when=new)"
         elif (( test_mode )); then
             _zapp_kv "mkdir $i" "would create $mkdir_path"
@@ -1303,7 +1303,7 @@ if [[ "$action" == install ]] && (( mkdir_count || run_count )); then
         _zapp_get "$recipe_file" "${selector}.command"
         cmd="$REPLY"
 
-        if [[ "$item_when" == new && $installed_now -eq 0 ]]; then
+        if [[ "$item_when" == new ]] && (( ! installed_now )); then
             _zapp_kv "Skip" "${label:-$cmd} (when=new)"
             continue
         fi
@@ -1322,7 +1322,7 @@ if [[ "$action" == install ]] && (( mkdir_count || run_count )); then
     done
 fi
 
-# --- Result -----------------------------------------------------------------
+## Result
 
 _zapp_heading "Result"
 if (( test_mode )); then
@@ -1330,7 +1330,7 @@ if (( test_mode )); then
 else
     case "$action" in
         install)
-            if [[ -n "$command" && $has_install -eq 1 ]]; then
+            if [[ -n "$command" ]] && (( has_install )); then
                 if is_installed "$command"; then
                     local final_info
                     final_info=$(zinfo -s "$command" 2>/dev/null)

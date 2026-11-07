@@ -14,16 +14,16 @@ typeset -U path fpath manpath cdpath
 # Initialize path components array in strict priority order
 local -a path_components
 
-# === HIGHEST PRIORITY (Venvs & Language Runtimes) ===
+## Highest priority (venvs and language runtimes)
 path_components+=(
-    $VENVDIR/python/bin(N)                     # 1. Główny venv Pythona
+    $VENVDIR/python/bin(N)                     # 1. Main Python venv
     $HOME/.cargo/bin(N)                        # 2. Rust / Cargo
 )
 
-# === PLATFORM-SPECIFIC PATHS ===
+## Platform-specific paths
 if [[ $OSTYPE == darwin* ]]; then
     path_components+=(
-        /opt/homebrew/opt/python@3.14/libexec/bin(N) # 3. Fallback dla Pythona z Homebrew (przed /usr/bin)
+        /opt/homebrew/opt/python@3.14/libexec/bin(N) # 3. Homebrew Python fallback (before /usr/bin)
         /opt/homebrew/bin(N)
         /opt/homebrew/sbin(N)
         $BINDIR(N)
@@ -42,7 +42,7 @@ elif [[ $OSTYPE == linux* ]]; then
     )
 fi
 
-# === RE-ORDER PATH STRICTLY ===
+## Re-order PATH strictly
 # 1. Filter existing $path to remove any occurrences of our target components
 for entry in $path_components; do
     path=(${path:#$entry})

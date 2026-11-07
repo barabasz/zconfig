@@ -40,12 +40,12 @@ local -a _fn_examples=(
 local -A opts=() args=()
 _fn_init "$@" || return $REPLY
 
-# --- Constants ---
+## Constants
 local -r USER_AGENT="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
 local -r DEFAULT_SCHEME="https"
 local -r DATE_FMT="%Y-%m-%d %H:%M %Z"
 
-# --- Helper Functions ---
+## Helper Functions
 
 # Extract value from JSON (simple key-value)
 _urlinfo_json_val() {
@@ -95,7 +95,7 @@ _urlinfo_fmt_date() {
     print -r -- $formatted
 }
 
-# --- Main Logic ---
+## Main Logic
 
 local url="${args[url]}"
 local -F start_time=$EPOCHREALTIME
@@ -153,7 +153,7 @@ fmt+="%{time_starttransfer}|%{time_total}|%{num_redirects}|%{scheme}|%{http_vers
 # Execute main request
 local output
 output=$(curl "${curl_args[@]}" -w "$fmt" "$url" 2>/dev/null)
-local -i curl_status=$?
+local -i curl_status=$status
 
 # Clear progress line
 printf "\r\033[K"
@@ -312,7 +312,7 @@ if (( ${+opts[ipinfo]} )) && [[ -n $ip_json ]]; then
     print ""
 fi
 
-# --- Display Output ---
+## Display Output
 
 # Request
 local display_url=$url_effective

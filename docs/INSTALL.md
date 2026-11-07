@@ -22,10 +22,10 @@ The installer will:
 1. Check system requirements (macOS or Debian-based Linux)
 2. Install `sudo` (Linux, if missing)
 3. Sync timezone/clock and update system packages (Linux: `apt update && apt upgrade`)
-4. Install core utilities (Linux: `unzip`, `coreutils`)
+4. Generate English and Polish locales and install core utilities (Linux: `unzip`, `coreutils`)
 5. Install `git`
 6. Install Homebrew (if not present)
-7. Install utilities: `bat`, `curl`, `dig`, `eza`, `fzf`, `gh`, `glow`, `grep`, `htop`, `kitty-terminfo`, `lsof`, `man`, `sed`, `tldr`, `tmux`, `tput`, `yazi`, `yq`, `zoxide`, `zsh`
+7. Install utilities: `bat`, `curl`, `dasel`, `dig`, `eza`, `fzf`, `gh`, `glow`, `grep`, `htop`, `kitty-terminfo`, `lsof`, `man`, `sed`, `tldr`, `tmux`, `tput`, `yazi`, `yq`, `zoxide`, `zsh`
 8. Install `oh-my-posh` prompt theme engine
 9. Handle existing installation (backup/remove)
 10. Clone the repository to `~/.config/zsh`
@@ -72,15 +72,16 @@ If you prefer to install manually:
 
 ## Updating
 
-To update zconfig and all plugins:
+To update zconfig:
 
 ```zsh
 zupdate
 ```
 
-Or update only specific components:
+Or choose what to update:
 
 ```zsh
+zupdate -a    # Update everything (zconfig, plugins, system packages)
 zupdate -c    # Update only zconfig repository
 zupdate -p    # Update only plugins
 zupdate -s    # Update system packages (brew/apt)

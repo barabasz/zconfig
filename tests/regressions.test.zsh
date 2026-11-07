@@ -1,3 +1,5 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # Regression tests for issues found in review (varia, compile, archive,
 # hardware, plugins, fn)
 
@@ -34,7 +36,7 @@ ln -s $tmp/arch/target $tmp/arch/latest
 ( cd $tmp/arch && compress out latest >/dev/null )
 local -a entries=("${(@f)$(tar -tzf $tmp/arch/out.tar.gz)}")
 assert_eq "${#${(@)entries:#latest/*}}" 0 "archive entries use the symlink name"
-assert_ok test "${entries[(Ie)latest/f]}" -gt 0
+assert_eq "$(( ${entries[(Ie)latest/f]} > 0 ))" 1 "archive contains latest/f"
 mkdir -p $tmp/arch/y && tar -xzf $tmp/arch/out.tar.gz -C $tmp/arch/y
 assert_fail test -L $tmp/arch/y/latest
 assert_eq "$(<$tmp/arch/y/latest/f)" hi "top-level directory symlink is followed"
@@ -123,3 +125,19 @@ for fnfile in $REPO_DIR/functions/*(.); do
     shadow+=(${(M)${(f)"$(<$fnfile)"}:#[[:space:]]#(local|typeset)*[[:space:]](commands|functions|aliases|options|parameters|builtins|modules)([[:space:]=]*|)})
 done
 assert_eq "${(j:|:)shadow}" "" "no local commands/functions/... in functions/"
+
+## rmln
+
+# A local variable named path used to empty PATH, so rm was not found
+fpath=($REPO_DIR/functions $fpath)
+autoload -Uz rmln
+local rmln_dir=$(mktemp -d)
+ln -s /etc/hosts $rmln_dir/link
+assert_ok rmln $rmln_dir/link
+assert_eq "$(print -r -- $rmln_dir/link(N@))" "" "rmln removes the symlink"
+rm -rf $rmln_dir
+
+## Test runner
+
+# Exported colors from inc/colors.zsh must not leak into tests
+assert_eq "$r$g$y$b$p$c$w$x" "" "color variables are empty in tests"

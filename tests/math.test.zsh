@@ -1,3 +1,5 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # Tests for lib/math.zsh
 
 ## min / max (numeric, not lexical: audit bug #4)

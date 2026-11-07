@@ -29,7 +29,7 @@ if [[ -f $brew_mac_path ]]; then
     path_prepend "/opt/homebrew/bin"
     
     # Manpages and Info setup
-    [ -z "${MANPATH-}" ] || export MANPATH=":${MANPATH#:}"
+    [[ -z ${MANPATH-} ]] || export MANPATH=":${MANPATH#:}"
     export INFOPATH="/opt/homebrew/share/info:${INFOPATH:-}"
 
 elif [[ -f $brew_linux_path ]]; then
@@ -45,7 +45,7 @@ elif [[ -f $brew_linux_path ]]; then
     path_remove "/home/linuxbrew/.linuxbrew/bin"
     path_prepend "/home/linuxbrew/.linuxbrew/bin"
     
-    [ -z "${MANPATH-}" ] || export MANPATH=":${MANPATH#:}"
+    [[ -z ${MANPATH-} ]] || export MANPATH=":${MANPATH#:}"
     export INFOPATH="/home/linuxbrew/.linuxbrew/share/info:${INFOPATH:-}"
 fi
 

@@ -1,53 +1,43 @@
 # zconfig: Development Guidelines
 
-Part of [zconfig](../README.md) documentation.
+Part of [zconfig](../README.md) documentation. Project rules: how files are organized and how to add components.
 
 See also:
-- [ZSH.md](ZSH.md) - Zsh coding style
+- [ZSH.md](ZSH.md) - Zsh coding style and comments
 - [FN.md](FN.md) - Function library for user-facing functions
 - [NAMING.md](NAMING.md) - Naming conventions
 - [EXAMPLES.md](EXAMPLES.md) - Code examples and common patterns
 
-## Do's
+## Rules
 
-- Always use file tracking in sourced files (`zfile_track_start`/`zfile_track_end` in `lib/`, `inc/`, `apps/`, `plugins/`)
-- Do NOT use file tracking in autoloaded functions (`functions/`) — they are not sourced
-- Check tool availability before configuring (`is_installed`)
-- Follow zsh coding style (see [ZSH.md](ZSH.md))
-- Use `fn.zsh` library for all user-facing functions in `functions/` (metadata, options, args, examples)
-- Use `zparseopts` for parsing command-line options (not `case`/`getopts`)
+- Write zsh only; `install.sh` is the only exception (see [ZSH.md](ZSH.md))
+- Keep zconfig self-contained: it must work without any other repository, so handle unset `$GHDIR` and `$GHCONFDIR`
+- Before writing a helper, check `lib/` (`zman`, [FUNCTIONS.md](FUNCTIONS.md)); put a new helper in `lib/` if other code can use it
+- Follow the file type rules and templates below
+- Use the `fn.zsh` library for all user-facing functions in `functions/`
+- Keep only native zsh commands in `functions/`, not wrappers for scripts in other languages or repositories
+- Use `zparseopts` for options of `lib/` functions (not `case`/`getopts`)
+- Guard every integration with an availability check; never assume a tool is installed
 - Use lazy loading for slow tools (see [EXAMPLES.md](EXAMPLES.md#lazy-loading-pattern))
-- Use `load_plugin` for plugins (handles compilation)
-- Keep plugin directories in `.gitignore`
-- Use `REPLY`/`reply` for returning values from functions (no subshells)
-- Use zsh path modifiers (`:t`, `:h`, `:e`, `:r`, `:A`) instead of `basename`/`dirname`
-- Use expansion flags instead of piping to external commands
-- Use correct exit codes: `0` = success, `1` = error, `2` = invalid usage, `127` = not found
-
-## Don'ts
-
-- Never skip file tracking in sourced files (`lib/`, `inc/`, `apps/`, `plugins/`)
-- Never add file tracking to autoloaded functions (`functions/`)
-- Never assume tools are installed — always guard with `is_installed`
-- Don't use `case $1` or `getopts` for option parsing (use `zparseopts`)
-- Don't put heavy operations in `.zshenv` (runs for every shell, including scripts)
-- Don't use subshells when `REPLY`/`reply` can be used instead
-- Don't commit plugin directories (only wrapper files)
-- Don't shadow zsh reserved variable names: `path`, `fpath`, `cdpath`, `mailpath`, `manpath`
-- Don't use bash constructs: `echo` (use `print`), `$#` (use `ARGC`), `$?` (use `status`), `$1` (use `argv[1]`)
-- Don't use external commands where zsh builtins exist (`stat` → `zstat`, `basename` → `:t`, `dirname` → `:h`)
-- Don't use `return $?` — it's redundant (functions return last command's exit code by default)
-- Don't use `exit` in functions — use `return`
+- Use the plugin loaders for plugins; never commit plugin directories, only wrapper files
+- Don't put heavy operations in `.zshenv` (it runs for every shell, including scripts)
+- Keep documentation in `docs/`; only `README.md` and `CLAUDE.md` stay in the root
+- Describe each fact in one place and link to it from others
+- After a change, update the documentation and consider adding tests
 
 ## File Types and Their Rules
 
-| Location | Tracking | `fn.zsh` | Shebang | Purpose |
-|----------|----------|----------|---------|---------|
+| Location | Tracking | `fn.zsh` | First line | Purpose |
+|----------|----------|----------|------------|---------|
 | `lib/*.zsh` | Yes | No | `#!/bin/zsh` | Helper functions (sourced) |
 | `inc/*.zsh` | Yes | No | `#!/bin/zsh` | Config modules (sourced) |
-| `apps/*.zsh` | Yes | No | `#!/bin/zsh` | App integrations (sourced) |
-| `plugins/*.zsh` | Yes | No | `#!/bin/zsh` | Plugin wrappers (sourced) |
-| `functions/*` | No | Yes | None | User commands (autoloaded) |
+| `apps/*.zsh` | Yes, after guards | No | `#!/bin/zsh` | App integrations (sourced) |
+| `plugins/*.zsh` | By the plugin loader | No | `#!/bin/zsh` | Plugin wrappers (sourced) |
+| `functions/*` | No | Yes | License header | User commands (autoloaded) |
+| `tests/*.test.zsh` | No | No | License header | Test files |
+| `scripts/*.zsh` | No | No | `#!/usr/bin/env zsh` | Maintenance scripts |
+
+Files in `functions/` are autoloaded, not sourced, so they must not use file tracking. For the tracking system, see [ZFILES.md](ZFILES.md).
 
 ## Adding Components
 
@@ -104,107 +94,88 @@ See also:
 ### App Integrations (`apps/`)
 
 1. Create `apps/{tool}.zsh`
-2. Use template:
+2. Use the template. The guard comes **before** tracking; a guard after `zfile_track_start` would leave the file marked as still loading:
    ```zsh
    #!/bin/zsh
-   zfile_track_start ${0:A}
+   # Part of zconfig · https://github.com/barabasz/zconfig · MIT License
 
+   # Short description of the integration
+
+   # Guard: exit immediately if {tool} is not installed
    is_installed {tool} || return
+
+   # Shell files tracking - keep at the top (after guards)
+   zfile_track_start ${0:A}
 
    # Configuration here
 
+   # Shell files tracking - keep at the end
    zfile_track_end ${0:A}
    ```
-3. For priority loading, use `_` prefix (e.g., `_brew.zsh`)
+
+To install a tool and link its configuration, add a recipe instead (see [ZAPP.md](ZAPP.md)).
 
 ### Plugins (`plugins/`)
 
-1. Install: `install_plugin <name> <github-user/repo>`
-2. Create wrapper `plugins/<name>.zsh`:
-   ```zsh
-   #!/bin/zsh
-   zfile_track_start ${0:A}
+`inc/plugins.zsh` lists all plugins and loads each one in one of three ways:
 
-   # Pre-load configuration (optional)
-   # export PLUGIN_OPTION=value
+| Function | Use for |
+|----------|---------|
+| `load_plugin_directly <name> <repo>` | Plugin without configuration |
+| `load_plugin_wrapper <name>` | Plugin with configuration in `plugins/<name>.zsh` |
+| `source_plugin <name>` | Standalone single-file plugin `plugins/<name>.zsh` |
 
-   load_plugin <name>
+Missing plugins are installed automatically when `ZSH_PLUGINS_AUTOINSTALL=1`. For manual management, see the plugin functions in [FUNCTIONS.md](FUNCTIONS.md) (`install_plugin`, `update_plugins`, `list_plugins`, ...).
 
-   # Post-load configuration (optional)
-   # plugin_command --setup
+Wrapper template (no tracking calls: the loader tracks the file):
 
-   zfile_track_end ${0:A}
-   ```
+```zsh
+#!/bin/zsh
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
+# Plugin name
+# Plugin URL
+
+# Pre-load configuration (optional)
+# export PLUGIN_OPTION=value
+
+load_plugin <name> <github-user/repo>
+
+# Post-load configuration (optional)
+# plugin_command --setup
+```
 
 Plugin directories (`plugins/<name>/`) are git clones and must be in `.gitignore`.
 
 ### User Functions (`functions/`)
 
 1. Create `functions/{name}` (no extension, no shebang, no tracking)
-2. Write function body directly (no function declaration)
+2. Start with the header, then write the function body directly (no function declaration):
+   ```zsh
+   # Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+   #
+   # One-line description
+   # Use '{name} --help' for more information.
+   ```
 3. Use `fn.zsh` library for metadata, options, and args (see [FN.md](FN.md))
 
 ### Include Files (`inc/`)
 
-1. Create `inc/{purpose}.zsh`
-2. Add tracking calls
-3. Source it in `.zshenv` or `.zshrc`
-
-## Common Patterns
-
-### Guard for optional tools
-
-```zsh
-# apps/tool.zsh
-is_installed tool || return
-```
-
-### Conditional config by OS
-
-```zsh
-if is_macos; then
-    export TOOL_PATH=/opt/homebrew/opt/tool
-elif is_debian_based; then
-    export TOOL_PATH=/usr/local/tool
-fi
-```
-
-### Returning values without subshells
-
-```zsh
-# Bad - subshell overhead
-result=$(my_func "$input")
-
-# Good - REPLY protocol
-my_func "$input"
-result="$REPLY"
-```
-
-### Lazy loading
-
-```zsh
-# apps/heavytool.zsh
-if is_installed heavytool; then
-    heavytool() {
-        unfunction heavytool
-        eval "$(command heavytool init zsh)"
-        heavytool "$@"
-    }
-fi
-```
+1. Create `inc/{purpose}.zsh`, using the `lib/` file template above
+2. Source it in `.zshenv` or `.zshrc`
 
 ## Performance
 
-- Measure startup: `zfiles` or `time zsh -lic "exit"`
+- Measure startup: `zspeed`, `zfiles`
 - Files taking > 10ms are suspicious — investigate
 - Use lazy loading for slow app initializations
-- Prefer zsh builtins over external commands (`(( ))` over `expr`, `[[ ]]` over `test`)
-- Use `${+var}` instead of `[[ -n "$var" ]]` to check if variable is set
-- Avoid unnecessary forks/subshells — use parameter expansion and `REPLY`
+- Prefer zsh builtins over external commands, and avoid unnecessary forks and subshells (see [ZSH.md](ZSH.md))
 
 ## Bytecode Compilation
 
 Files in `lib/`, `inc/`, `apps/` and the startup files (`.zshrc`, `.zshenv`, ...) are automatically compiled to `.zwc` bytecode on shell startup (when `ZSH_AUTOCOMPILE=1`). All `functions/` are compiled into one digest, `functions.zwc`, which zsh uses for autoloading.
+
+Only changed files are recompiled (timestamps are compared), and zsh uses a `.zwc` file only when it is newer than its source.
 
 **No manual action needed** - after editing any `.zsh` file:
 1. First shell startup uses the source file (newer) and recompiles
@@ -218,31 +189,16 @@ clean_zsh_config        # Remove all .zwc files
 compile_dir <dir>       # Compile single directory
 compile_functions_dir <dir>  # Compile functions into <dir>.zwc digest
 clean_dir <dir>         # Clean single directory
+needs_compile <file>    # Check if a file needs recompilation
 ```
-
-## Configuration Variables
-
-Configuration variables in `inc/env.zsh` control shell behavior. Useful for debugging:
-
-```zsh
-# Start shell without apps (debug app issues)
-ZSH_LOAD_APPS=0 zsh
-
-# Start shell without plugins (debug plugin issues)
-ZSH_LOAD_PLUGINS=0 zsh
-
-# Minimal shell
-ZSH_LOAD_APPS=0 ZSH_LOAD_PLUGINS=0 ZSH_AUTOCOMPILE=0 zsh
-```
-
-See [README.md](../README.md#configuration-variables) for the full list.
 
 ## Debugging
 
+Configuration variables can disable parts of the shell, which helps to isolate a problem (see [README.md](../README.md#configuration-variables)).
+
 ```zsh
-# Enable debug output
-export ZSH_DEBUG=1
-source ~/.zshenv
+# Show the load time of each file
+ZSH_ZFILE_DEBUG=1 zsh -lic "exit"
 
 # Syntax check
 zsh -n lib/files.zsh
@@ -250,7 +206,6 @@ zsh -n lib/files.zsh
 # Unit tests (all, or only files matching a pattern)
 zsh tests/run.zsh
 zsh tests/run.zsh math
-
-# Test function
-is_file /etc/hosts && print "OK" || print "FAIL"
 ```
+
+`tests/structure.test.zsh` also acts as the lint: it checks file templates, comments, the forbidden constructs from [ZSH.md](ZSH.md) in all zsh code, and the documentation layout.

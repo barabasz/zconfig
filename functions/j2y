@@ -58,7 +58,7 @@ if [[ -n $output ]]; then
     else
         yq -P -oy "$input" > "$output"
     fi
-    (( $? == 0 )) && prints "Converted: ${c}$input${x} -> ${c}$output${x}"
+    (( status == 0 )) && prints "Converted: ${c}$input${x} -> ${c}$output${x}"
 else
     if [[ $input == "-" ]]; then
         yq -P -oy < /dev/stdin

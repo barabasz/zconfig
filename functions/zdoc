@@ -7,9 +7,9 @@ local -A _fn=(
     [info]="Display zconfig documentation"
     [desc]="View markdown documentation files from the zconfig repository.
             Supports interactive file selection or direct access by name/number."
-    [version]="0.4.3"
+    [version]="0.4.4"
     [created]="2025"
-    [modified]="2026-02-02"
+    [modified]="2026-11-07"
     [license]="MIT"
     [author]="Andrzej Barabasz"
 )
@@ -28,10 +28,8 @@ local -a _fn_examples=(
 local -A opts=() args=()
 _fn_init "$@" || return $REPLY
 
-# ============================================================================
-# DOCUMENTATION FILES - easy to extend
+## Documentation files
 # Format: "filename:description"
-# ============================================================================
 local -a docs=(
     "README.md:Main documentation file"
     "docs/STRUCTURE.md:Directory structure overview"
@@ -41,6 +39,7 @@ local -a docs=(
     "docs/GUIDELINES.md:Development guidelines"
     "docs/NAMING.md:Naming conventions"
     "docs/ZSH.md:Zsh coding style"
+    "docs/ZAPP.md:Application recipes (zapp)"
     "docs/ZFILES.md:File tracking documentation"
     "docs/FN.md:Function library documentation"
 )

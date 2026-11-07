@@ -146,7 +146,7 @@ if [[ -n "${args[file]}" ]]; then
     fi
 
     _match_file "${args[file]}"
-    local match_status=$?
+    local match_status=$status
 
     if (( match_status == 0 )); then
         file_path="$REPLY"

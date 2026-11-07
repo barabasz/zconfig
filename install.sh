@@ -22,12 +22,10 @@
 # Primary test targets: current macOS and Ubuntu Server.
 # Older distribution releases are not a compatibility target.
 
-# =============================================================================
-# Configuration
-# =============================================================================
+## Configuration
 
-SCRIPT_VERSION="0.8.14"
-SCRIPT_DATE="2026-10-05"
+SCRIPT_VERSION="0.8.15"
+SCRIPT_DATE="2026-11-07"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
 ZSHENV_LINK="$HOME/.zshenv"
@@ -82,10 +80,8 @@ esac
 export HOMEBREW_NO_ENV_HINTS=1
 export HOMEBREW_NO_EMOJI=1
 
-# =============================================================================
-# Colors and output functions (bash/zsh compatible)
+## Colors and output functions (bash/zsh compatible)
 # Same color scheme as inc/colors.zsh
-# =============================================================================
 
 if [[ -t 1 ]]; then
     r=$'\033[0;31m'     # red
@@ -230,9 +226,7 @@ print_comment() {
     printf "${d}# %s${x}\n" "$1"
 }
 
-# =============================================================================
-# Helper functions
-# =============================================================================
+## Helper functions
 
 # Detect OS type and set TOTAL_STEPS accordingly
 detect_os() {
@@ -350,10 +344,8 @@ abort_missing() {
     return 1
 }
 
-# =============================================================================
-# Sudo wrapper functions - separate authentication from command input
+## Sudo wrapper functions - separate authentication from command input
 # Recover Linux credentials after cache invalidation without another prompt.
-# =============================================================================
 
 # Initialize sudo in the foreground, before any privileged background command.
 # Linux: called after install_sudo. macOS: called when privileges are needed.
@@ -630,9 +622,7 @@ spin() {
 track_install() { INSTALLED+=("$1"); }
 track_skip()    { SKIPPED+=("$1"); }
 
-# =============================================================================
-# install_utils - Universal package installer
-# =============================================================================
+## install_utils - Universal package installer
 # Usage: install_utils "Header" tool1 tool2 ...
 # Format: "command:brew_package:apt_package[:critical]"
 #
@@ -652,7 +642,6 @@ track_skip()    { SKIPPED+=("$1"); }
 #   "gh:gh:"            # Both platforms: brew
 #   "unzip::unzip"      # Linux only: apt
 #   "zsh:zsh:zsh:1"     # Critical (fail if can't install)
-# =============================================================================
 install_utils() {
     local header="$1"
     shift
@@ -818,9 +807,7 @@ prompt_start_zsh() {
     fi
 }
 
-# =============================================================================
-# Requirement checks
-# =============================================================================
+## Requirement checks
 
 check_os() {
     print_header "Checking operating system"
@@ -1055,6 +1042,7 @@ install_extra_utils() {
         "$sevenzip_cmd:sevenzip:7zip" # Official 7-Zip: apt on Linux, Homebrew on macOS
         "bat:bat:"       # cat replacement with syntax highlighting
         "curl::curl"     # URL transfers - used by network.zsh, wanip
+        "dasel:dasel:"   # data query tool - reads zapp recipes
         "dig::dnsutils"  # DNS lookup - used by network.zsh, mdig, wanip
         "eza:eza:"       # ls replacement; Homebrew on both platforms
         "fzf:fzf:"       # fuzzy finder
@@ -1190,9 +1178,7 @@ minimize_login_info() {
     print_success "Login information minimized"
 }
 
-# =============================================================================
-# Installation steps
-# =============================================================================
+## Installation steps
 
 handle_existing() {
     print_header "Checking for existing installation"
@@ -1442,9 +1428,7 @@ post_install_fixes() {
     fi
 }
 
-# =============================================================================
-# Main installation flow
-# =============================================================================
+## Main installation flow
 
 main() {
     # Detect OS first (sets TOTAL_STEPS for correct counter display)

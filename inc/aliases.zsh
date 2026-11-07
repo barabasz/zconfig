@@ -69,7 +69,7 @@ alias youtube-dl='yt-dlp'
 alias ytdl='yt-dlp'
 
 
-# --- Shadowing Aliases (Require checks) ---
+## Shadowing Aliases (Require checks)
 # We use direct hash lookup (( ${+commands[cmd]} )) which is faster than calling is_installed function
 
 # bat -> cat

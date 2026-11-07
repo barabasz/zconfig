@@ -29,27 +29,6 @@ jobs:
           done
           (( failed == 0 ))
 
-      - name: Lint (forbidden constructs from docs/ZSH.md)
-        shell: zsh {0}
-        run: |
-          setopt extendedglob
-          integer failed=0
-          local file line
-          integer n
-          for file in lib/*.zsh; do
-            n=0
-            for line in "${(@f)$(<$file)}"; do
-              (( n++ ))
-              if [[ $line == *local*[[:space:]]path([[:space:]=]*|) ]] ||
-                 [[ $line == *[[:space:]]-eq[[:space:]]* ]] ||
-                 [[ $line == [[:space:]]#echo[[:space:]]* ]]; then
-                print "::error file=$file,line=$n::forbidden construct: $line"
-                (( failed++ ))
-              fi
-            done
-          done
-          (( failed == 0 ))
-
       - name: Unit tests
         run: zsh tests/run.zsh
 

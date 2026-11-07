@@ -6,19 +6,25 @@ Code examples and common patterns.
 ## OS-Specific Configuration
 
 ```zsh
-# apps/mytool.zsh
 #!/bin/zsh
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+
+# mytool integration
+
+# Guard: exit immediately if mytool is not installed
+is_installed mytool || return
+
+# Shell files tracking - keep at the top (after guards)
 zfile_track_start ${0:A}
 
-if is_installed mytool; then
-    if is_macos; then
-        export MYTOOL_PATH=/opt/homebrew/opt/mytool
-    elif is_debian_based; then
-        export MYTOOL_PATH=/usr/local/mytool
-    fi
-    export PATH=$MYTOOL_PATH/bin:$PATH
+if is_macos; then
+    export MYTOOL_PATH=/opt/homebrew/opt/mytool
+elif is_debian_based; then
+    export MYTOOL_PATH=/usr/local/mytool
 fi
+path_prepend $MYTOOL_PATH/bin
 
+# Shell files tracking - keep at the end
 zfile_track_end ${0:A}
 ```
 
@@ -33,27 +39,40 @@ zfile_track_end ${0:A}
 ## Custom Autoloaded Function
 
 ```zsh
-# functions/devinfo
-local python_ver node_ver git_ver
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
+# Display versions of development tools
+# Use 'devinfo --help' for more information.
 
-python_ver=$(python3 --version 2>&1 | get_version)
-node_ver=$(node --version 2>&1 | get_version)
-git_ver=$(git --version 2>&1 | get_version)
+local -A _fn=(
+    [info]="Display versions of development tools"
+    [version]="1.0.0"
+    [required]="python3 node git"
+)
 
+local -a _fn_args=()
+local -a _fn_opts=()
+local -a _fn_commands=()
+local -a _fn_examples=()
+
+local -A opts=() args=()
+_fn_init "$@" || return $REPLY
+
+local tool
 print "Development Environment:"
-print "  Python: ${y}${python_ver}${x}"
-print "  Node.js: ${y}${node_ver}${x}"
-print "  Git: ${y}${git_ver}${x}"
+for tool in python3 node git; do
+    printkv "  $tool" "$(zver $tool)"
+done
 ```
 
 ## Performance Measurement
 
 ```zsh
-# Measure startup time
-$ time zsh -lic "exit"
+# Benchmark startup time
+$ zspeed
 
-# Detailed breakdown
-$ ZSH_DEBUG=1 zsh -lic "exit"
+# Load time of each file, while the shell starts
+$ ZSH_ZFILE_DEBUG=1 zsh -lic "exit"
 
 # Full report
 $ zfiles
@@ -62,50 +81,29 @@ $ zfiles
 ## Lazy Loading Pattern
 
 ```zsh
-# apps/heavytool.zsh
-if is_installed heavytool; then
-    heavytool() {
-        unfunction heavytool
-        eval "$(command heavytool init zsh)"
-        heavytool "$@"
-    }
-fi
+# apps/heavytool.zsh, between the tracking calls
+heavytool() {
+    unfunction heavytool
+    eval "$(command heavytool init zsh)"
+    heavytool "$@"
+}
 ```
 
 ## Plugin with Configuration
 
 ```zsh
-# plugins/zsh-autosuggestions.zsh
 #!/bin/zsh
-zfile_track_start ${0:A}
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
+# zsh-autosuggestions
+# https://github.com/zsh-users/zsh-autosuggestions
 
 # Configuration before loading
 ZSH_AUTOSUGGEST_STRATEGY=(history completion)
 ZSH_AUTOSUGGEST_BUFFER_MAX_SIZE=20
 
-load_plugin zsh-autosuggestions
+load_plugin zsh-autosuggestions zsh-users/zsh-autosuggestions
 
 # Keybinding after loading
 bindkey '^[[Z' autosuggest-accept
-
-zfile_track_end ${0:A}
-```
-
-## Manual Compilation
-
-```zsh
-# Compile entire configuration
-compile_zsh_config
-
-# Compile quietly (as done automatically on startup)
-compile_zsh_config -q
-
-# Compile single directory
-compile_dir "$ZSH_LIB_DIR"
-
-# Clean all compiled files
-clean_zsh_config
-
-# Check if file needs recompilation
-needs_compile lib/strings.zsh && echo "needs compile"
 ```

@@ -1197,7 +1197,7 @@ _fn_init() {
     local -A raw_opts=()
     set -- "${processed_args[@]}"
     zparseopts -D -E -A raw_opts -- "${zparse_spec[@]}" 2>/dev/null
-    local zparse_status=$?
+    local zparse_status=$status
     local zparse_err=""
 
     if (( zparse_status != 0 )); then

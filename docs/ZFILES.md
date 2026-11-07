@@ -18,27 +18,16 @@ zfile_track_start ${0:A}   # Start tracking (top of file)
 zfile_track_end ${0:A}     # End tracking (bottom of file)
 ```
 
-## Usage Pattern
-
-Every sourced file must include tracking calls:
-
-```zsh
-#!/bin/zsh
-zfile_track_start ${0:A}
-
-# ... file content ...
-
-zfile_track_end ${0:A}
-```
+Tracking works in interactive shells only. Which files use it, and the file templates, are described in [GUIDELINES.md](GUIDELINES.md#file-types-and-their-rules).
 
 ## Debug Output
 
-When `ZSH_DEBUG=1`:
+When `ZSH_ZFILE_DEBUG=1`, each tracked file prints its load time:
 
 ```
-✅ bootstrap.zsh sourced in 1.89ms
-✅ xdg.zsh sourced in 0.45ms
-✅ files.zsh sourced in 0.67ms
+modules.zsh     —     0.45 ms
+xdg.zsh         —     0.32 ms
+files.zsh       —     0.67 ms
 ```
 
 ## Reporting

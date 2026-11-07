@@ -32,7 +32,7 @@ assert_rc() {
     local -i expected=$1
     shift
     "$@" >/dev/null 2>&1
-    local -i rc=$?
+    local -i rc=$status
     if (( rc == expected )); then
         (( T_PASS++ ))
     else
@@ -58,8 +58,10 @@ _tests_load_lib() {
     zmodload zsh/random 2>/dev/null
     typeset -g ZDOTDIR=$REPO_DIR ZSH_DEBUG=0
     typeset -g ZSH_LIB_DIR=$REPO_DIR/lib ZSH_FUNCS_DIR=$REPO_DIR/functions
-    # Color variables used by print.zsh are empty, so output is plain text
-    typeset -g r g y b p c w x
+    # Color variables used by print.zsh are empty, so output is plain text;
+    # explicit assignment, because a bare typeset keeps values inherited from
+    # the environment (inc/colors.zsh exports them)
+    typeset -g r= g= y= b= p= c= w= x=
     local file
     for file in $ZSH_LIB_DIR/*.zsh(N.on); do
         if ! source $file; then

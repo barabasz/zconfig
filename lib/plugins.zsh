@@ -38,7 +38,7 @@ _plugin_source() {
     local file=$1
     zfile_track_start $file
     source "$file"
-    local -i rc=$?
+    local -i rc=$status
     zfile_track_end $file
     if (( rc )); then
         printe "Failed to source $file"

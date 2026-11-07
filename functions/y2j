@@ -64,7 +64,7 @@ if [[ -n $output ]]; then
     else
         yq "${yq_opts[@]}" "$input" > "$output"
     fi
-    (( $? == 0 )) && prints "Converted: ${c}$input${x} -> ${c}$output${x}"
+    (( status == 0 )) && prints "Converted: ${c}$input${x} -> ${c}$output${x}"
 else
     if [[ $input == "-" ]]; then
         yq "${yq_opts[@]}" < /dev/stdin

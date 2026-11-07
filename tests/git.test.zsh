@@ -1,3 +1,5 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # Tests for lib/git.zsh (repository discovery, parallel fetch, status parsing)
 # Builds throw-away repositories with a local bare "remote" in a temp directory
 
@@ -73,7 +75,7 @@ assert_ok fetch_git_repos $reply
 git clone -q $tmp/remotes/clean.git $tmp/gh/broken
 git -C $tmp/gh/broken remote set-url origin $tmp/remotes/missing.git
 fetch_git_repos $tmp/gh/clean $tmp/gh/broken
-assert_eq "$?:${(j: :)${(@)reply:t}}" "1:broken" "fetch_git_repos reports failed repos"
+assert_eq "$status:${(j: :)${(@)reply:t}}" "1:broken" "fetch_git_repos reports failed repos"
 assert_rc 2 fetch_git_repos
 
 ## get_git_status after fetch
@@ -124,7 +126,7 @@ fpath=($REPO_DIR/functions $fpath)
 autoload -Uz zgit
 local out
 out=$(GHDIR=$tmp/gh zgit status -n 2>&1)
-assert_eq "$?" 0 "zgit status -n rc"
+assert_eq "$status" 0 "zgit status -n rc"
 local -a out_lines=("${(@f)out}")
 assert_eq "${#${(@M)out_lines:#*/8  *}}" 8 "zgit status: 8 repositories (no plain/hidden/.DS_Store)"
 assert_eq "${#${(@M)out_lines:#*behind*"1 behind (pull needed)"}}" 1 "zgit status: behind"
@@ -134,7 +136,7 @@ assert_eq "${#${(@M)out_lines:#*conflict*merge in progress · 1 conflicted*}}" 1
 assert_eq "${#${(@M)out_lines:#*noup*feature*no upstream branch}}" 1 "zgit status: no upstream"
 assert_eq "${#${(@M)out_lines:#*broken*}}" 1 "zgit status: broken remote listed"
 out=$(GHDIR=$tmp/gh zgit status 2>&1)
-assert_eq "$?" 1 "zgit status rc when a fetch fails"
+assert_eq "$status" 1 "zgit status rc when a fetch fails"
 assert_eq "${#${(@M)${(@f)out}:#*broken*fetch failed*}}" 1 "zgit status: fetch failure shown"
 
 ## zgit pull: fast-forwards repos that are behind, one line per repository
@@ -156,7 +158,7 @@ git -C $tmp/work/fileview commit -qm "add changed.txt"
 git -C $tmp/work/fileview push -q origin main 2>/dev/null
 
 out=$(GHDIR=$tmp/gh zgit pull -f 2>&1)
-assert_eq "$?" 1 "zgit pull rc when a repository fails"
+assert_eq "$status" 1 "zgit pull rc when a repository fails"
 out_lines=("${(@f)out}")
 assert_eq "${#${(@M)out_lines:#*/11  *}}" 11 "zgit pull: one line per repository"
 assert_eq "${#${(@M)out_lines:#*behind*updated*"1 commit · 1 file +1 -0"}}" 1 "zgit pull: behind updated"

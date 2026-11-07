@@ -55,14 +55,17 @@ Part of [zconfig](../README.md) documentation. Conventions for naming functions,
 **Library Files:** `{category}.zsh`
 - Examples: `files.zsh`, `system.zsh`, `strings.zsh`
 
-**App Files:** `{tool}.zsh` or `_{tool}.zsh` (priority loading)
-- Examples: `brew.zsh`, `fzf.zsh`, `_brew.zsh`
+**App Files:** `{tool}.zsh`
+- Examples: `brew.zsh`, `fzf.zsh`
 
 **Plugin Wrappers:** `{plugin-name}.zsh`
 - Examples: `f-sy-h.zsh`, `zsh-autosuggestions.zsh`
 
 **Include Files:** `{purpose}.zsh`
 - Examples: `modules.zsh`, `colors.zsh`, `options.zsh`
+
+**Recipes:** `{id}.kdl`, where `id` matches the recipe or bundle ID
+- Examples: `mc.kdl`, `terminal.kdl`
 
 **Root Config Files:** `.z{name}` or `.zsh{name}`
 - Examples: `.zshenv`, `.zshrc`, `.zprofile`

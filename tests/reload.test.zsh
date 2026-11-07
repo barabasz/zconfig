@@ -1,3 +1,5 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
 # Tests for reload_zconfig (lib/shell.zsh) and the reload step of zupdate
 # Uses a throw-away lib/ and functions/ in a temp directory
 

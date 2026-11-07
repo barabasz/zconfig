@@ -103,7 +103,7 @@ fi
 
 if (( show_all || show_info )); then
     cmd_size=$(get_cmd_size "$cmd" 2>/dev/null)
-    [[ -n "$cmd_size" && "$cmd_size" -gt 0 ]] && cmd_size_fmt=$(format_size "$cmd_size")
+    [[ -n "$cmd_size" ]] && (( cmd_size > 0 )) && cmd_size_fmt=$(format_size "$cmd_size")
 fi
 
 # Set reply array for scripting
