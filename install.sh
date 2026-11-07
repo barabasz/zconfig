@@ -13,8 +13,8 @@
 #  6. Installing extra utilities like 7-Zip, eza, fzf, etc.
 #  7. Installing the Z shell itself
 #  8. Installing oh-my-posh prompt theme engine
-#  9. Handling existing installation (backup/remove)
-# 10. Cloning the zconfig repository to ~/.config/zsh
+#  9. Cloning the zconfig repository to a staging directory
+# 10. Replacing any existing installation (backup/remove) with the new clone
 # 11. Creating symlink ~/.zshenv -> ~/.config/zsh/.zshenv
 # 12. Minimizing login info: .hushlogin, MOTD scripts (Linux only)
 # 13. Setting zsh as default shell
@@ -24,10 +24,11 @@
 
 ## Configuration
 
-SCRIPT_VERSION="0.8.15"
+SCRIPT_VERSION="0.8.16"
 SCRIPT_DATE="2026-11-07"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
+ZCONFIG_STAGING="$ZCONFIG_DIR.new"
 ZSHENV_LINK="$HOME/.zshenv"
 
 XDG_CONFIG_HOME=${XDG_CONFIG_HOME:-$HOME/.config}
@@ -1214,6 +1215,7 @@ handle_existing() {
             read -r response
 
             if [[ "$response" != "yes" ]]; then
+                rm -rf "$ZCONFIG_STAGING"
                 print_info "Installation cancelled. Your changes are safe."
                 print_info "Commit your changes first: ${g}cd $ZCONFIG_DIR && git add -A && git commit -m 'backup'${x}"
                 return 1
@@ -1221,6 +1223,11 @@ handle_existing() {
 
             print_warning "Proceeding despite uncommitted changes..."
         fi
+    fi
+
+    # History is ignored by git, so it would be lost with the old directory
+    if [[ -f "$ZCONFIG_DIR/.zsh_history" ]]; then
+        cp -p "$ZCONFIG_DIR/.zsh_history" "$ZCONFIG_STAGING/"
     fi
 
     # Ask if user wants backup (default: no)
@@ -1253,12 +1260,26 @@ clone_repository() {
     # Ensure parent directory exists
     mkdir -p "$(dirname "$ZCONFIG_DIR")"
 
-    # Clone repository
-    if spin "Cloning from $c$ZCONFIG_REPO$x..." git clone --quiet --depth 1 "$ZCONFIG_REPO" "$ZCONFIG_DIR"; then
-        print_success "Repository cloned to $c$ZCONFIG_DIR$x"
+    # Clone to a staging directory: an existing installation is touched only
+    # after the new one is available
+    rm -rf "$ZCONFIG_STAGING"
+    if spin "Cloning from $c$ZCONFIG_REPO$x..." git clone --quiet --depth 1 "$ZCONFIG_REPO" "$ZCONFIG_STAGING"; then
+        print_success "Repository cloned"
         return 0
     else
+        rm -rf "$ZCONFIG_STAGING"
         print_error "Failed to clone repository"
+        return 1
+    fi
+}
+
+# Move the staged clone to its final location
+activate_repository() {
+    if mv "$ZCONFIG_STAGING" "$ZCONFIG_DIR"; then
+        print_success "Installed to $c$ZCONFIG_DIR$x"
+        return 0
+    else
+        print_error "Failed to move $c$ZCONFIG_STAGING$x to $c$ZCONFIG_DIR$x"
         return 1
     fi
 }
@@ -1431,6 +1452,9 @@ post_install_fixes() {
 ## Main installation flow
 
 main() {
+    # The current directory may be the installation directory, which gets replaced
+    cd "$HOME" || return 1
+
     # Detect OS first (sets TOTAL_STEPS for correct counter display)
     detect_os
 
@@ -1453,11 +1477,14 @@ main() {
     install_extra_utils || return 1
     install_omp
 
+    # Cloning zconfig repository
+    clone_repository || return 1
+
     # Handle existing installation
     handle_existing || return 1
 
-    # Cloning zconfig repository
-    clone_repository || return 1
+    # Moving the clone to its final location
+    activate_repository || return 1
 
     # Creating .zshenv symlink
     create_symlink || return 1

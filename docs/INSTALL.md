@@ -27,8 +27,8 @@ The installer will:
 6. Install Homebrew (if not present)
 7. Install utilities: `bat`, `curl`, `dasel`, `dig`, `eza`, `fzf`, `gh`, `glow`, `grep`, `htop`, `kitty-terminfo`, `lsof`, `man`, `sed`, `tldr`, `tmux`, `tput`, `yazi`, `yq`, `zoxide`, `zsh`
 8. Install `oh-my-posh` prompt theme engine
-9. Handle existing installation (backup/remove)
-10. Clone the repository to `~/.config/zsh`
+9. Clone the repository to a staging directory
+10. Replace any existing installation (backup/remove) with the new clone, keeping `.zsh_history`
 11. Create symlink `~/.zshenv` → `~/.config/zsh/.zshenv`
 12. Minimize login info (Linux: `.hushlogin`, disable MOTD scripts)
 13. Set zsh as your default shell
