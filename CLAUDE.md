@@ -18,6 +18,7 @@ Targets: current macOS and Debian-based Linux (mainly Ubuntu Server).
 ## Working Agreement
 
 - **When unsure, ask.** The user always prefers to talk it through over a blind decision.
+- **Talk to the user in Polish.** Code, comments, docs and commit messages are in English.
 - **Zsh only, using 100% of its features.** Compatibility with bash or other shells does not matter. The only exception is `install.sh` (bash, because it runs before zsh exists).
 - **Reuse before writing.** Before building a helper, check whether `lib/` already has it (`docs/FUNCTIONS.md`). If it doesn't, and other code could use it, consider adding it to `lib/`.
 - **DRY and single source of truth,** in code and in docs. Never describe the same thing in two places, link instead. Contradictions in the docs are the worst outcome.
@@ -91,7 +92,18 @@ CI (`.github/workflows/ci.yml`) runs the syntax check and tests on Ubuntu and ma
 - **Global aliases** such as `G` can break code that is parsed at runtime; that is why `compile_file` and `reload_zconfig` set `noaliases`.
 - **The running shell keeps old code.** After a change, test in a new `zsh`, or use `reload_zconfig` (`lib/`, `functions/`) or `reload` (everything).
 - **`tests/structure.test.zsh` is the lint.** It enforces file templates, comments, forbidden constructs and the docs layout. Fix the code rather than weakening a check.
+- **`zsh -n` really performs `$(<file)` reads,** so a test using them on files created at runtime fails the CI syntax check while passing locally. Use `$(cat file)` in tests, and run `zsh -n` on every new file.
 - **`*.zwc` files are generated** and ignored by git. Never edit them.
+- **Some local data is not in git:** `.zsh_history`, `.zsh_sessions/`, `cache/` and plugin clones. Removing the installation directory loses the first two for good.
+
+### Working on `install.sh`
+
+- **Never run it for real on a working machine.** It replaces `~/.config/zsh` and `~/.zshenv`, the very directory you are working in. Run it with a throw-away home instead: `env -i HOME=<sandbox> USER=$USER SHELL=/bin/zsh TERM=$TERM PATH=<path> bash install.sh </dev/null`. First check what the change does outside `$HOME`.
+- **Real from-scratch tests are done by the user,** on a clean Ubuntu VM. Ask for such a run when a change needs it, especially for `sudo`, `apt`, locales and `chsh`, which a sandbox on macOS doesn't exercise.
+- **A push to `main` is a release.** The install one-liner fetches `install.sh` from `HEAD`, so it reaches users at once.
+- **It must run on macOS `/bin/bash` 3.2,** which is old and differs from current bash.
+- **By default it asks no questions** (`INTERACTIVE=0`): an existing installation is removed without a backup, after only an uncommitted-changes check.
+- **Never remove anything before its replacement exists.** Update `TOTAL_STEPS` when adding or removing steps, and extend `tests/install.test.zsh`, which runs the real functions in bash.
 
 ## Definition of Done
 
@@ -102,5 +114,8 @@ CI (`.github/workflows/ci.yml`) runs the syntax check and tests on Ubuntu and ma
 
 ## To Do
 
-- **Installation:** decide how the dotfiles repository reaches a new machine. `install.sh` doesn't handle it; for now it is cloned by hand to `$GHDIR/config`.
+- **Installation (`install.sh`):**
+  - Decide how the dotfiles repository reaches a new machine. `install.sh` doesn't handle it; for now it is cloned by hand to `$GHDIR/config`.
+  - The timezone is hard-coded to `Europe/Warsaw` on Linux, which is wrong for other users of this public repo. Make it configurable or detect it.
+  - Cosmetics: the summary shows no version for `dasel`, and the last step prints nothing when there is nothing to fix.
 - **`zapp`:** see Known Gaps in [docs/ZAPP.md](docs/ZAPP.md#known-gaps).
