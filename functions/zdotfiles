@@ -1,0 +1,76 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
+# Clone the dotfiles repository with application configuration
+# Use 'zdotfiles --help' for more information.
+
+local -A _fn=(
+    [info]="Clone the dotfiles repository with application configuration"
+    [desc]="Clones a dotfiles repository to ${c}~/GitHub/config${x} and makes it available
+            as ${c}\$GHCONFDIR${x}, so ${c}zapp${x} can link configuration from it.
+            A private GitHub repository needs ${c}gh${x}: when the plain clone fails,
+            ${c}gh auth login${x} is started if needed and the clone is repeated."
+    [version]="0.1.0"
+    [created]="2026-11-07"
+    [modified]="2026-11-07"
+    [license]="MIT"
+    [author]="Andrzej Barabasz"
+    [required]="git"
+    [notes]="Nothing is linked automatically: use ${c}zapp link <app>${x} for what you need.
+             An existing clone is left untouched; update it with ${c}zgit pull${x}."
+)
+
+local -a _fn_args=(
+    "repo|GitHub owner/name, or any URL accepted by git|r"
+)
+
+local -a _fn_opts=()
+local -a _fn_commands=()
+
+local -a _fn_examples=(
+    "zdotfiles owner/config|Clone a GitHub repository, public or private"
+    "zdotfiles git@example.com:me/config.git|Clone from any other git server"
+)
+
+local -A opts=() args=()
+_fn_init "$@" || return $REPLY
+
+# The location apps/git.zsh looks for to set $GHCONFDIR
+local target=$HOME/GitHub/config
+local url=${args[repo]}
+
+if [[ -e $target || -L $target ]]; then
+    if is_git_repo $target; then
+        printi "Dotfiles repository already present: ${c}$target${x}"
+        return 0
+    fi
+    printe "$target exists and is not a git repository."
+    return 1
+fi
+
+# GitHub shorthand, but not a relative path or an scp-like address
+[[ $url =~ '^[^./:][^/:]*/[^/:]+$' ]] && url=https://github.com/${url%.git}.git
+
+mkdir -p ${target:h} || return 1
+
+# A private repository has to fail here instead of asking for a password
+if ! GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=true git clone --quiet $url $target 2>/dev/null; then
+    if [[ $url != https://github.com/* ]] || ! is_installed gh; then
+        printe "Cannot clone $url."
+        return 1
+    fi
+    printi "Plain clone failed, trying with GitHub authentication."
+    if ! gh auth status &>/dev/null && ! gh auth login; then
+        printe "GitHub authentication failed."
+        return 1
+    fi
+    if ! gh repo clone $url $target; then
+        printe "Cannot clone $url."
+        return 1
+    fi
+fi
+
+# Sets $GHDIR and $GHCONFDIR in this shell, no restart needed
+source $ZSH_APPS_DIR/git.zsh
+
+prints "Dotfiles repository cloned to ${c}$target${x}"
+printi "Link application configuration with ${g}zapp link <app>${x}"

@@ -13,18 +13,18 @@ export LANG=en_US.UTF-8
 export LANGUAGE=en_US:en:C
 export LC_MESSAGES=en_US.UTF-8
 
-# Polish locale
-export LC_ADDRESS=pl_PL.UTF-8
-export LC_COLLATE=pl_PL.UTF-8
-export LC_CTYPE=pl_PL.UTF-8
-export LC_IDENTIFICATION=pl_PL.UTF-8
-export LC_MEASUREMENT=pl_PL.UTF-8
-export LC_MONETARY=pl_PL.UTF-8
-export LC_NAME=pl_PL.UTF-8
-export LC_NUMERIC=pl_PL.UTF-8
-export LC_PAPER=pl_PL.UTF-8
-export LC_TELEPHONE=pl_PL.UTF-8
-export LC_TIME=pl_PL.UTF-8
+# Regional formats
+export LC_ADDRESS=$ZSH_LOCALE
+export LC_COLLATE=$ZSH_LOCALE
+export LC_CTYPE=$ZSH_LOCALE
+export LC_IDENTIFICATION=$ZSH_LOCALE
+export LC_MEASUREMENT=$ZSH_LOCALE
+export LC_MONETARY=$ZSH_LOCALE
+export LC_NAME=$ZSH_LOCALE
+export LC_NUMERIC=$ZSH_LOCALE
+export LC_PAPER=$ZSH_LOCALE
+export LC_TELEPHONE=$ZSH_LOCALE
+export LC_TIME=$ZSH_LOCALE
 
 # Do not set LC_ALL, it overrides all other LC_* settings
 export LC_ALL=
@@ -38,7 +38,7 @@ __ensure_locales() {
     sudo -n true 2>/dev/null || return 0
 
     local needs_generation=false
-    local locales_to_check=("en_US.UTF-8" "pl_PL.UTF-8")
+    local locales_to_check=("en_US.UTF-8" "$ZSH_LOCALE")
 
     # Install locales package if missing
     if ! dpkg -s locales &>/dev/null; then

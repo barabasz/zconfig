@@ -9,6 +9,9 @@ cache/*
 # history file
 .zsh_history
 
+# settings of this machine
+/local.zsh
+
 # sessions folder
 .zsh_sessions/
 

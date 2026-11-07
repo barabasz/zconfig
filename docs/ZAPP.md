@@ -18,7 +18,7 @@ A recipe can manage a package, dependencies, configuration symlinks, setup actio
 ## Requirements
 
 - [dasel](https://github.com/TomWright/dasel) reads the KDL files. It is required for every action, and `install.sh` installs it.
-- `$GHCONFDIR` is optional. Any dotfiles repository works; `apps/git.zsh` sets the variable when `~/GitHub/config` exists. Without it, `install` and `remove` still handle packages, and `link`/`unlink` fail with an error.
+- `$GHCONFDIR` is optional. Any dotfiles repository works; [`zdotfiles`](INSTALL.md#dotfiles-repository) clones it, and `apps/git.zsh` sets the variable when `~/GitHub/config` exists. Without it, `install` and `remove` still handle packages, and `link`/`unlink` fail with an error.
 - `$ZSH_RECIPES_DIR` overrides the recipe directory (default: `$ZDOTDIR/recipes`).
 
 ## Usage

@@ -66,6 +66,7 @@ All configuration variables are defined in `inc/env.zsh` with sensible defaults.
 | `ZSH_LOGIN_INFO` | 0 | Show login info on startup |
 | `ZSH_SYS_INFO` | 0 | Show system info on startup |
 | `ZSH_AUTOCOMPILE` | 1 | Auto-compile `.zsh` to `.zwc` bytecode |
+| `ZSH_LOCALE` | `pl_PL.UTF-8` | Regional formats, see [INSTALL.md](docs/INSTALL.md#locale) |
 | `ZSH_LOAD_LIB` | 1 | Load library files from `lib/` |
 | `ZSH_LOAD_USER_FUNCS` | 1 | Load functions from `functions/` |
 | `ZSH_LOAD_SHELL_FUNCS` | 1 | Autoload shell functions (zargs, zmv, etc.) |
@@ -138,6 +139,7 @@ The most important commands; all of them are listed in [FUNCTIONS.md](docs/FUNCT
 | `zdoc` | Browse and view documentation files |
 | `zman` | List all functions from `lib/` and `functions/` |
 | `zapp` | Install applications and link their configuration |
+| `zdotfiles` | Clone the dotfiles repository with application configuration |
 | `zgit` | Git wrapper for bulk operations on repositories |
 | `zinfo` | Display version, path, and description of any command |
 | `zfiles` | Show loaded shell files with status and load time |

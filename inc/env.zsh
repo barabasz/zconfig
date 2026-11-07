@@ -21,6 +21,9 @@ export ZSH_APPS_DIR=$ZDOTDIR/apps
 export ZSH_FUNCS_DIR=$ZDOTDIR/functions
 export ZSH_PLUGINS_DIR=$ZDOTDIR/plugins
 
+# Settings of this machine, not tracked by git; variables below keep their values
+[[ -r $ZDOTDIR/local.zsh ]] && source $ZDOTDIR/local.zsh
+
 # System directories
 export LOCALDIR=$HOME/.local
 export TMPDIR=$LOCALDIR/tmp
@@ -51,6 +54,9 @@ WORDCHARS='_-'
 
 # Time format for the 'time' command
 TIMEFMT=$'\nreal\t%E\nuser\t%U\nsys\t%S\ncpu\t%P'
+
+# Regional formats (see inc/locales.zsh)
+export ZSH_LOCALE=${ZSH_LOCALE:-pl_PL.UTF-8}
 
 # Library files configuration
 export ZSH_LOAD_LIB=${ZSH_LOAD_LIB:-1}           # set to 1 to load library files from lib/

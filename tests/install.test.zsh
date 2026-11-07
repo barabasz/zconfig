@@ -56,4 +56,68 @@ assert_eq "$(cat $sandbox/home/.config/zsh/.zshenv)" "new" "installation is repl
 local -a backups=($sandbox/home/.config/zsh.bak.*(N/))
 assert_eq "${#backups}" 1 "backup is created"
 
+## dasel reports its version through a subcommand only
+local stubs=$sandbox/stubs
+mkdir -p $stubs
+print -l '#!/bin/sh' '[ "$1" = version ] && echo 3.11.2 || exit 80' > $stubs/dasel
+chmod +x $stubs/dasel
+local version_funcs=$(sed -n -e '/^cmd_exists() {/,/^}/p' -e '/^get_version() {/,/^}/p' $REPO_DIR/install.sh)
+assert_eq "$(PATH=$stubs:$PATH FUNCS=$version_funcs bash -c 'eval "$FUNCS"; get_version dasel')" "3.11.2" "dasel version"
+
+## The timezone is optional: a default, an override, or none at all
+local timezone_code=$(sed -n -e '/^ZCONFIG_TIMEZONE=/p' -e '/^configure_timezone() {/,/^}/p' $REPO_DIR/install.sh)
+
+# Usage: _timezone_run [VAR=value]
+# Prints the arguments of the privileged call, if there is one
+_timezone_run() {
+    env -u ZCONFIG_TIMEZONE "$@" FUNCS=$timezone_code bash -c '
+        eval "$FUNCS"
+        print_info() { :; }; print_warning() { :; }
+        do_sudo() { echo "$*"; }
+        configure_timezone
+    '
+}
+assert_eq "$(_timezone_run)" "timedatectl set-timezone Europe/Warsaw" "default timezone"
+assert_eq "$(_timezone_run ZCONFIG_TIMEZONE=Asia/Tokyo)" "timedatectl set-timezone Asia/Tokyo" "chosen timezone"
+assert_eq "$(_timezone_run ZCONFIG_TIMEZONE=)" "" "empty value keeps the system timezone"
+
+## The locale is checked before anything is installed
+local locale_code=$(sed -n -e '/^DEFAULT_LOCALE=/p' -e '/^ZCONFIG_LOCALE=/p' -e '/^check_locale() {/,/^}/p' \
+                           -e '/^save_locale() {/,/^}/p' $REPO_DIR/install.sh)
+
+# Usage: _locale_run <function> [VAR=value]
+_locale_run() {
+    env -u ZCONFIG_LOCALE "${@:2}" HOME=$sandbox/locale FUNCS=$locale_code FN=$1 bash -c '
+        eval "$FUNCS"
+        print_info() { :; }; print_warning() { :; }; print_error() { :; }
+        ZCONFIG_DIR=$HOME
+        $FN
+    ' >/dev/null 2>&1
+}
+mkdir -p $sandbox/locale
+assert_ok _locale_run check_locale
+assert_ok _locale_run check_locale ZCONFIG_LOCALE=de_DE.UTF-8
+assert_fail _locale_run check_locale ZCONFIG_LOCALE=de_DE
+assert_fail _locale_run check_locale 'ZCONFIG_LOCALE=de_DE.UTF-8/; rm -rf x'
+
+## Only a non-default locale is saved, and later shells read it
+_locale_run save_locale
+assert_fail test -e $sandbox/locale/local.zsh
+_locale_run save_locale ZCONFIG_LOCALE=de_DE.UTF-8
+mkdir -p $sandbox/shell/.config/zsh $sandbox/shell-default $sandbox/stubs-sudo
+mv $sandbox/locale/local.zsh $sandbox/shell/.config/zsh/
+# No passwordless sudo here, so that inc/locales.zsh leaves the system alone
+print -l '#!/bin/sh' 'exit 1' > $sandbox/stubs-sudo/sudo
+chmod +x $sandbox/stubs-sudo/sudo
+
+# Usage: _locale_shell <home>
+_locale_shell() {
+    env -u ZSH_LOCALE -u ZDOTDIR HOME=$1 PATH=$sandbox/stubs-sudo:$PATH INC=$REPO_DIR/inc zsh -fc '
+        source $INC/zfiles.zsh; source $INC/env.zsh; source $INC/locales.zsh
+        print -r -- "$LC_TIME $LC_MESSAGES"
+    '
+}
+assert_eq "$(_locale_shell $sandbox/shell)" "de_DE.UTF-8 en_US.UTF-8" "saved locale reaches the shell"
+assert_eq "$(_locale_shell $sandbox/shell-default)" "pl_PL.UTF-8 en_US.UTF-8" "default locale"
+
 rm -rf $sandbox

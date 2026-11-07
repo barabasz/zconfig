@@ -21,8 +21,8 @@ Run this single command:
 The installer will:
 1. Check system requirements (macOS or Debian-based Linux)
 2. Install `sudo` (Linux, if missing)
-3. Sync timezone/clock and update system packages (Linux: `apt update && apt upgrade`)
-4. Generate English and Polish locales and install core utilities (Linux: `unzip`, `coreutils`)
+3. Set the [timezone](#timezone), sync the clock and update system packages (Linux: `apt update && apt upgrade`)
+4. Generate English and [regional locales](#locale) and install core utilities (Linux: `unzip`, `coreutils`)
 5. Install `git`
 6. Install Homebrew (if not present)
 7. Install utilities: `bat`, `curl`, `dasel`, `dig`, `eza`, `fzf`, `gh`, `glow`, `grep`, `htop`, `kitty-terminfo`, `lsof`, `man`, `sed`, `tldr`, `tmux`, `tput`, `yazi`, `yq`, `zoxide`, `zsh`
@@ -33,6 +33,26 @@ The installer will:
 12. Minimize login info (Linux: `.hushlogin`, disable MOTD scripts)
 13. Set zsh as your default shell
 14. Start zsh with new configuration
+
+Application configuration is a separate, optional step: see [Dotfiles Repository](#dotfiles-repository).
+
+### Timezone
+
+On Linux, the installer sets the timezone to `Europe/Warsaw`. Choose another one with `ZCONFIG_TIMEZONE`, or set it empty to keep the timezone of the system:
+
+```bash
+ZCONFIG_TIMEZONE=Asia/Tokyo /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/barabasz/zconfig/HEAD/install.sh)"
+```
+
+### Locale
+
+Messages are in English, and regional formats (dates, numbers, sorting) use `pl_PL.UTF-8`. Choose another locale with `ZCONFIG_LOCALE`:
+
+```bash
+ZCONFIG_LOCALE=de_DE.UTF-8 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/barabasz/zconfig/HEAD/install.sh)"
+```
+
+The installer saves a non-default choice as `ZSH_LOCALE` in `~/.config/zsh/local.zsh`, a file for settings of one machine that git ignores. A reinstallation starts without it, so give the variable again. After the installation, edit that file instead; on Linux the shell generates a missing locale when `sudo` needs no password.
 
 ## Manual Installation
 
@@ -69,6 +89,18 @@ If you prefer to install manually:
    ```zsh
    zhelp
    ```
+
+## Dotfiles Repository
+
+zconfig works on its own. To also use your configuration of other programs, clone your dotfiles repository (one directory per program, as in `~/.config`) after the installation:
+
+```zsh
+zdotfiles owner/config
+```
+
+It lands in `~/GitHub/config`, and is available as `$GHCONFDIR` at once. A private GitHub repository is handled too: when the plain clone fails, `zdotfiles` runs `gh auth login` if needed, which also works on a server without a browser.
+
+Nothing is linked automatically. Link what you need with `zapp link <app>`, see [ZAPP.md](ZAPP.md).
 
 ## Updating
 

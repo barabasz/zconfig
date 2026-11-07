@@ -7,7 +7,7 @@
 # This script installs zconfig by:
 #  1. Checking system requirements (macOS or Debian-based Linux)
 #  2. Installing sudo and updating system packages (Linux only)
-#  3. Generating English and Polish locales, then installing core utilities (Linux only)
+#  3. Generating English and regional locales, then installing core utilities (Linux only)
 #  4. Installing git (xcode-select on macOS, apt on Linux)
 #  5. Installing Homebrew (if not present)
 #  6. Installing extra utilities like 7-Zip, eza, fzf, etc.
@@ -24,12 +24,19 @@
 
 ## Configuration
 
-SCRIPT_VERSION="0.8.16"
+SCRIPT_VERSION="0.8.17"
 SCRIPT_DATE="2026-11-07"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
 ZCONFIG_STAGING="$ZCONFIG_DIR.new"
 ZSHENV_LINK="$HOME/.zshenv"
+
+# Linux timezone; set it empty to keep the timezone of the system
+ZCONFIG_TIMEZONE=${ZCONFIG_TIMEZONE-Europe/Warsaw}
+
+# Regional formats; the default must match ZSH_LOCALE in inc/env.zsh
+DEFAULT_LOCALE="pl_PL.UTF-8"
+ZCONFIG_LOCALE=${ZCONFIG_LOCALE:-$DEFAULT_LOCALE}
 
 XDG_CONFIG_HOME=${XDG_CONFIG_HOME:-$HOME/.config}
 XDG_CACHE_HOME=${XDG_CACHE_HOME:-$HOME/.local/cache}
@@ -274,6 +281,9 @@ get_version() {
     elif [[ "$cmd" == "tmux" ]]; then
         # -v enables verbose logging; only -V reports tmux's version.
         output=$("$cmd" -V 2>/dev/null) || { echo "unknown"; return 1; }
+    elif [[ "$cmd" == "dasel" ]]; then
+        # dasel has no version flags, only a subcommand.
+        output=$("$cmd" version 2>/dev/null) || { echo "unknown"; return 1; }
     else
         output=$("$cmd" --version 2>/dev/null) || \
         output=$("$cmd" -v 2>/dev/null) || \
@@ -795,6 +805,9 @@ installation_successful() {
     print_info "  - Download and install required plugins"
     print_info "  - Compile zsh files for faster loading"
     printf "\n"
+    print_info "To add application configuration, clone your dotfiles repository:"
+    print_info "  ${g}zdotfiles <repo>${x} (see ${g}zdotfiles --help${x})"
+    printf "\n"
 }
 
 # Prompt to start zsh
@@ -833,6 +846,14 @@ check_os() {
             return 1
             ;;
     esac
+}
+
+# The value ends up in /etc/locale.gen, in sed patterns and in a sourced file.
+check_locale() {
+    local pattern='^[a-z]{2,3}_[A-Z]{2}\.UTF-8$'
+    [[ "$ZCONFIG_LOCALE" =~ $pattern ]] && return 0
+    print_error "Invalid ZCONFIG_LOCALE: $ZCONFIG_LOCALE (expected a form like de_DE.UTF-8)"
+    return 1
 }
 
 install_sudo() {
@@ -923,18 +944,25 @@ ROOT_SCRIPT
     fi
 }
 
+configure_timezone() {
+    if [[ -z "$ZCONFIG_TIMEZONE" ]]; then
+        print_info "Keeping the system timezone"
+    elif do_sudo timedatectl set-timezone "$ZCONFIG_TIMEZONE"; then
+        print_info "Set timezone to ${c}$ZCONFIG_TIMEZONE${x}"
+    else
+        print_warning "Could not set timezone to $ZCONFIG_TIMEZONE (see $DEBUGLOG)"
+    fi
+}
+
 update_system() {
     is_debian || return 0
 
     print_header "Updating system packages"
 
+    configure_timezone
+
     # Let systemd choose the installed NTP provider (e.g. chrony or timesyncd).
     # Enabling NTP does not mean synchronization has already completed.
-    if do_sudo timedatectl set-timezone Europe/Warsaw; then
-        print_info "Set timezone to ${c}Europe/Warsaw${x}"
-    else
-        print_warning "Could not set timezone to Europe/Warsaw (see $DEBUGLOG)"
-    fi
     if do_sudo timedatectl set-ntp true; then
         local synced
         synced=$(timedatectl show --property=NTPSynchronized --value 2>>"$DEBUGLOG")
@@ -962,12 +990,12 @@ update_system() {
     return 0
 }
 
-# zconfig uses English messages and Polish formatting in inc/locales.zsh.
+# zconfig uses English messages and regional formats in inc/locales.zsh.
 # Generate both before starting zsh: its sudo-based repair cannot run after
 # cleanup_sudo has invalidated the installer credentials.
 configure_locales() {
     is_debian || return 0
-    print_header "Configuring English and Polish locales"
+    print_header "Configuring locales"
 
     if [[ "$(dpkg-query -W -f='${Status}' locales 2>/dev/null)" != "install ok installed" ]]; then
         if ! spin "Installing locales via apt..." apt_install locales; then
@@ -977,7 +1005,8 @@ configure_locales() {
         track_install "locales"
     fi
 
-    local required=(en_US.UTF-8 pl_PL.UTF-8)
+    local required=(en_US.UTF-8)
+    [[ "$ZCONFIG_LOCALE" != en_US.UTF-8 ]] && required+=("$ZCONFIG_LOCALE")
     local loc available needs_generation=0
     available=$(LC_ALL=C locale -a 2>>"$DEBUGLOG") || return 1
     for loc in "${required[@]}"; do
@@ -1007,7 +1036,7 @@ configure_locales() {
                 return 1
             fi
         done
-        if ! spin "Generating en_US.UTF-8 and pl_PL.UTF-8..." do_sudo env LC_ALL=C locale-gen; then
+        if ! spin "Generating ${required[*]}..." do_sudo env LC_ALL=C locale-gen; then
             print_error "Failed to generate required locales (see $DEBUGLOG)"
             return 1
         fi
@@ -1021,7 +1050,7 @@ configure_locales() {
         fi
     done
     export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 LANGUAGE=en_US:en:C
-    print_success "Locales available: en_US.UTF-8, pl_PL.UTF-8"
+    print_success "Locales available: ${required[*]}"
     return 0
 }
 
@@ -1284,6 +1313,17 @@ activate_repository() {
     fi
 }
 
+# Shells started later must know the choice too: inc/env.zsh reads local.zsh,
+# which git ignores, so the installation stays free of uncommitted changes.
+save_locale() {
+    [[ "$ZCONFIG_LOCALE" == "$DEFAULT_LOCALE" ]] && return 0
+    if printf 'export ZSH_LOCALE=${ZSH_LOCALE:-%s}\n' "$ZCONFIG_LOCALE" >> "$ZCONFIG_DIR/local.zsh"; then
+        print_info "Saved locale ${c}$ZCONFIG_LOCALE${x} in ${c}$ZCONFIG_DIR/local.zsh${x}"
+    else
+        print_warning "Could not save locale $ZCONFIG_LOCALE; set ZSH_LOCALE by hand"
+    fi
+}
+
 create_symlink() {
     print_header "Creating .zshenv symlink"
 
@@ -1446,6 +1486,8 @@ post_install_fixes() {
         else
             print_warning "Failed to create bat symlink"
         fi
+    else
+        print_success "No fixes needed"
     fi
 }
 
@@ -1463,6 +1505,7 @@ main() {
 
     # Requirement checks
     check_os || return 1
+    check_locale || return 1
     install_sudo || return 1
     if is_debian; then
         init_sudo || return 1
@@ -1485,6 +1528,7 @@ main() {
 
     # Moving the clone to its final location
     activate_repository || return 1
+    save_locale
 
     # Creating .zshenv symlink
     create_symlink || return 1

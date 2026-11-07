@@ -13,7 +13,7 @@ Targets: current macOS and Debian-based Linux (mainly Ubuntu Server).
 
 **zconfig is self-contained.** Once installed, it needs no other repository.
 
-**Dotfiles repository (optional):** configuration of other programs lives in a separate repo of the "dotfiles" kind, with one directory per program, as in `~/.config`. Any such repo works. It is available as `$GHCONFDIR`, and `zapp` symlinks configuration from it. The author's own one is private, so never copy its content into this public repo.
+**Dotfiles repository (optional):** configuration of other programs lives in a separate repo of the "dotfiles" kind, with one directory per program, as in `~/.config`. Any such repo works. `zdotfiles` clones it after the installation, it is available as `$GHCONFDIR`, and `zapp` symlinks configuration from it. The author's own one is private, so never copy its content into this public repo.
 
 ## Working Agreement
 
@@ -94,7 +94,7 @@ CI (`.github/workflows/ci.yml`) runs the syntax check and tests on Ubuntu and ma
 - **`tests/structure.test.zsh` is the lint.** It enforces file templates, comments, forbidden constructs and the docs layout. Fix the code rather than weakening a check.
 - **`zsh -n` really performs `$(<file)` reads,** so a test using them on files created at runtime fails the CI syntax check while passing locally. Use `$(cat file)` in tests, and run `zsh -n` on every new file.
 - **`*.zwc` files are generated** and ignored by git. Never edit them.
-- **Some local data is not in git:** `.zsh_history`, `.zsh_sessions/`, `cache/` and plugin clones. Removing the installation directory loses the first two for good.
+- **Some local data is not in git:** `.zsh_history`, `.zsh_sessions/`, `local.zsh`, `cache/` and plugin clones. Removing the installation directory loses the first three for good.
 
 ### Working on `install.sh`
 
@@ -103,6 +103,7 @@ CI (`.github/workflows/ci.yml`) runs the syntax check and tests on Ubuntu and ma
 - **A push to `main` is a release.** The install one-liner fetches `install.sh` from `HEAD`, so it reaches users at once.
 - **It must run on macOS `/bin/bash` 3.2,** which is old and differs from current bash.
 - **By default it asks no questions** (`INTERACTIVE=0`): an existing installation is removed without a backup, after only an uncommitted-changes check.
+- **Customization goes through variables only.** The one-liner stays as simple as it is, every option has a default, and a variable (`ZCONFIG_*`) only overrides it.
 - **Never remove anything before its replacement exists.** Update `TOTAL_STEPS` when adding or removing steps, and extend `tests/install.test.zsh`, which runs the real functions in bash.
 
 ## Definition of Done
@@ -114,8 +115,4 @@ CI (`.github/workflows/ci.yml`) runs the syntax check and tests on Ubuntu and ma
 
 ## To Do
 
-- **Installation (`install.sh`):**
-  - Decide how the dotfiles repository reaches a new machine. `install.sh` doesn't handle it; for now it is cloned by hand to `$GHDIR/config`.
-  - The timezone is hard-coded to `Europe/Warsaw` on Linux, which is wrong for other users of this public repo. Make it configurable or detect it.
-  - Cosmetics: the summary shows no version for `dasel`, and the last step prints nothing when there is nothing to fix.
 - **`zapp`:** see Known Gaps in [docs/ZAPP.md](docs/ZAPP.md#known-gaps).
