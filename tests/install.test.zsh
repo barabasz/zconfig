@@ -39,20 +39,20 @@ _install_run() {
 ## A failed clone leaves the existing installation untouched
 _install_run $sandbox/missing no
 assert_eq "$status" 1 "failed clone is reported"
-assert_eq "$(<$sandbox/home/.config/zsh/.zshenv)" "old" "failed clone keeps the installation"
+assert_eq "$(cat $sandbox/home/.config/zsh/.zshenv)" "old" "failed clone keeps the installation"
 assert_ok test -L $sandbox/home/.zshenv
 assert_fail test -e $sandbox/home/.config/zsh.new
 
 ## A successful clone replaces the installation and keeps the history
 _install_run $origin no
 assert_eq "$status" 0 "replacing the installation succeeds"
-assert_eq "$(<$sandbox/home/.config/zsh/.zshenv)" "new" "installation is replaced"
-assert_eq "$(<$sandbox/home/.config/zsh/.zsh_history)" "history" "history is kept"
+assert_eq "$(cat $sandbox/home/.config/zsh/.zshenv)" "new" "installation is replaced"
+assert_eq "$(cat $sandbox/home/.config/zsh/.zsh_history)" "history" "history is kept"
 assert_fail test -e $sandbox/home/.config/zsh.new
 
 ## A backup keeps the old installation aside
 _install_run $origin yes
-assert_eq "$(<$sandbox/home/.config/zsh/.zshenv)" "new" "installation is replaced after backup"
+assert_eq "$(cat $sandbox/home/.config/zsh/.zshenv)" "new" "installation is replaced after backup"
 local -a backups=($sandbox/home/.config/zsh.bak.*(N/))
 assert_eq "${#backups}" 1 "backup is created"
 
