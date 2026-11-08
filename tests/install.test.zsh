@@ -120,6 +120,26 @@ _locale_shell() {
 assert_eq "$(_locale_shell $sandbox/shell)" "de_DE.UTF-8 en_US.UTF-8" "saved locale reaches the shell"
 assert_eq "$(_locale_shell $sandbox/shell-default)" "pl_PL.UTF-8 en_US.UTF-8" "default locale"
 
+## A failed su explains that the root account may have no password
+local bootstrap_code=$(sed -n '/^bootstrap_sudo() {/,/^}/p' $REPO_DIR/install.sh)
+
+# Usage: _bootstrap_run <message of su>
+_bootstrap_run() {
+    : > $sandbox/bootstrap.log
+    env MSG=$1 FUNCS=$bootstrap_code DEBUGLOG=$sandbox/bootstrap.log bash -c '
+        eval "$FUNCS"
+        print_info() { printf "info: %s\n" "$1"; }; print_error() { :; }; print_log() { :; }
+        su() { printf "%s\n" "$MSG" >&2; return 1; }
+        g= x=
+        bootstrap_sudo
+    ' 2>/dev/null
+}
+out=$(_bootstrap_run "su: Authentication failure")
+assert_eq "${#${(@M)${(@f)out}:#info: The root account may have no password*}}" 1 "root password hint"
+assert_eq "${#${(@M)${(@f)out}:#info:   sudo usermod -aG sudo *}}" 1 "usermod hint"
+out=$(_bootstrap_run "visudo: syntax error")
+assert_eq "${#${(@M)${(@f)out}:#info: The root account*}}" 0 "no root hint for other errors"
+
 ## The clock is synchronized again instead of trusting a stale status
 local clock_code=$(sed -n -e '/^sync_clock() {/,/^}/p' -e '/^clock_resync() {/,/^}/p' -e '/^uptime_seconds() {/,/^}/p' \
                           -e '/^explain_apt_error() {/,/^}/p' $REPO_DIR/install.sh)

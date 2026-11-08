@@ -9,9 +9,9 @@ local -A _fn=(
             as ${c}\$GHCONFDIR${x}, so ${c}zapp${x} can link configuration from it.
             A private GitHub repository needs ${c}gh${x}: when the plain clone fails,
             ${c}gh auth login${x} is started if needed and the clone is repeated."
-    [version]="0.1.0"
+    [version]="0.1.1"
     [created]="2026-11-07"
-    [modified]="2026-11-07"
+    [modified]="2026-11-08"
     [license]="MIT"
     [author]="Andrzej Barabasz"
     [required]="git"
@@ -59,7 +59,8 @@ if ! GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=true git clone --quiet $url $target 2>/de
         return 1
     fi
     printi "Plain clone failed, trying with GitHub authentication."
-    if ! gh auth status &>/dev/null && ! gh auth login; then
+    # Only the choices that fit an https clone of github.com, so fewer questions
+    if ! gh auth status &>/dev/null && ! gh auth login --hostname github.com --git-protocol https --web; then
         printe "GitHub authentication failed."
         return 1
     fi

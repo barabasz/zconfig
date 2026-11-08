@@ -74,7 +74,7 @@ out=$(PATH=$stubs:$PATH; _dotfiles_run $home owner/config 2>&1)
 assert_eq "$status" 0 "clone through gh succeeds"
 local -a calls=("${(@f)$(cat $log)}")
 assert_eq "${calls[1]}" "git clone --quiet https://github.com/owner/config.git $home/GitHub/config" "shorthand becomes a URL"
-assert_eq "${calls[3]}" "gh auth login" "gh logs in when needed"
+assert_eq "${calls[3]}" "gh auth login --hostname github.com --git-protocol https --web" "gh logs in when needed"
 assert_eq "${calls[4]}" "gh repo clone https://github.com/owner/config.git $home/GitHub/config" "gh repeats the clone"
 
 ## A failed login stops before cloning

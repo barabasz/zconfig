@@ -24,7 +24,7 @@
 
 ## Configuration
 
-SCRIPT_VERSION="0.8.20"
+SCRIPT_VERSION="0.8.21"
 SCRIPT_DATE="2026-11-08"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
@@ -942,7 +942,8 @@ ROOT_SCRIPT
 
     # Only output is piped: su still reads authentication from the terminal.
     # Capture su's status rather than tee's status, without enabling pipefail.
-    local root_status tee_status
+    local root_status tee_status log_start
+    log_start=$(wc -l < "$DEBUGLOG")
     print_log "Executing sudo bootstrap via su"
     su -c "$root_script" 2>&1 | tee -a "$DEBUGLOG"
     local pipeline_status=("${PIPESTATUS[@]}")
@@ -953,6 +954,11 @@ ROOT_SCRIPT
         return 0
     else
         print_error "Failed to prepare sudo access (root command exit: $root_status, logging exit: $tee_status; see $DEBUGLOG)"
+        # Ubuntu locks the root password by default, so su cannot succeed there
+        if tail -n "+$((log_start + 1))" "$DEBUGLOG" | grep -q "Authentication failure"; then
+            print_info "The root account may have no password (the default on Ubuntu). An administrator can grant access instead:"
+            print_info "  ${g}sudo usermod -aG sudo $username${x}, then log in again and run the installer again"
+        fi
         return 1
     fi
 }
