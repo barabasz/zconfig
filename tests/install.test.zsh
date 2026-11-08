@@ -122,7 +122,7 @@ assert_eq "$(_locale_shell $sandbox/shell-default)" "pl_PL.UTF-8 en_US.UTF-8" "d
 
 ## The clock is synchronized again instead of trusting a stale status
 local clock_code=$(sed -n -e '/^sync_clock() {/,/^}/p' -e '/^clock_resync() {/,/^}/p' -e '/^uptime_seconds() {/,/^}/p' \
-                          -e '/^explain_apt_clock_error() {/,/^}/p' $REPO_DIR/install.sh)
+                          -e '/^explain_apt_error() {/,/^}/p' $REPO_DIR/install.sh)
 
 # Usage: _clock_run <function> [VAR=value]...
 # Stubs print every privileged call and every message, one per line
@@ -135,7 +135,7 @@ _clock_run() {
         systemctl() { [[ "$3" == "$ACTIVE" ]]; }
         chronyc() { echo "run: chronyc $*"; [[ -z "$CHRONY_FAIL" ]]; }
         timedatectl() { echo "{ Leap=0 }"; }
-        c= x=
+        c= g= x=
         $FN
     ' 2>&1
 }
@@ -177,8 +177,40 @@ assert_eq "$(bash -c "$(sed -n '/^uptime_seconds() {/,/^}/p' $REPO_DIR/install.s
 
 ## A failed package list update explains a clock that is behind
 print "E: Release file for http://example/InRelease is not valid yet (invalid for another 1h)." > $sandbox/clock.log
-assert_eq "${#${(@M)${(@f)$(_clock_run explain_apt_clock_error)}:#warning: The system clock is behind*}}" 1 "clock hint"
+assert_eq "${#${(@M)${(@f)$(_clock_run explain_apt_error)}:#warning: The system clock is behind*}}" 1 "clock hint"
 print "E: Failed to fetch http://example/InRelease" > $sandbox/clock.log
-assert_eq "$(_clock_run explain_apt_clock_error)" "" "no clock hint for other errors"
+assert_eq "$(_clock_run explain_apt_error)" "" "no clock hint for other errors"
+print -l "E: Could not get lock /var/lib/apt/lists/lock. It is held by process 1 (apt-get)" "█ Command FAILED" > $sandbox/clock.log
+assert_eq "${#${(@M)${(@f)$(_clock_run explain_apt_error)}:#warning: Another apt process*}}" 1 "lock hint"
+
+## apt waits for a lock held by another apt, but not for other errors
+local apt_code=$(sed -n '/^apt_run() {/,/^}/p' $REPO_DIR/install.sh)
+
+# Usage: _apt_run <attempts that find the lock taken> [<exit code after them>]
+# Prints the exit code and the number of attempts
+_apt_run() {
+    : > $sandbox/apt.log
+    env LOCKED=$1 RC=${2:-0} FUNCS=$apt_code DEBUGLOG=$sandbox/apt.log bash -c '
+        eval "$FUNCS"
+        print_log() { :; }; sleep() { :; }
+        calls=0
+        do_sudo() {
+            calls=$((calls + 1))
+            if (( calls <= LOCKED )); then
+                printf "%s\n" "E: Could not get lock /var/lib/apt/lists/lock" >> "$DEBUGLOG"
+                return 100
+            fi
+            (( RC )) && printf "%s\n" "E: Some other error" >> "$DEBUGLOG"
+            return "$RC"
+        }
+        apt_run update
+        printf "%s %s\n" "${PIPESTATUS[0]}" "$calls"
+    '
+}
+assert_eq "$(_apt_run 0)" "0 1" "apt without a lock"
+assert_eq "$(_apt_run 3)" "0 4" "apt waits for the lock"
+assert_eq "$(_apt_run 0 100)" "100 1" "other apt errors are not retried"
+assert_eq "$(_apt_run 2 100)" "100 3" "an error after the lock is not retried"
+assert_eq "$(_apt_run 99)" "100 60" "apt gives up after 60 attempts"
 
 rm -rf $sandbox

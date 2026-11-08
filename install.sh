@@ -24,7 +24,7 @@
 
 ## Configuration
 
-SCRIPT_VERSION="0.8.19"
+SCRIPT_VERSION="0.8.20"
 SCRIPT_DATE="2026-11-08"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
@@ -514,10 +514,22 @@ do_sudo() {
 }
 
 # Silent apt-get wrapper (no warnings, no needrestart prompts)
+# Another apt may hold the lock, e.g. automatic updates on a fresh system or
+# after a clock step; wait up to 10 minutes for it instead of failing.
 # Usage: apt_run update | upgrade -y | install -y <pkg>
 apt_run() {
-    do_sudo env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a \
-        apt-get -qq "$@"
+    local attempt status log_start
+    for ((attempt = 1; attempt <= 60; attempt++)); do
+        log_start=$(wc -l < "$DEBUGLOG")
+        do_sudo env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a \
+            apt-get -qq "$@"
+        status=$?
+        [[ "$status" -eq 0 ]] && return 0
+        tail -n "+$((log_start + 1))" "$DEBUGLOG" | grep -q "Could not get lock" || return "$status"
+        print_log "apt is locked by another process, waiting (attempt $attempt)"
+        sleep 10
+    done
+    return "$status"
 }
 
 # Convenience wrapper for apt install
@@ -1015,11 +1027,17 @@ clock_resync() {
     return 1
 }
 
-# apt rejects package lists dated later than the local clock
-explain_apt_clock_error() {
-    grep -q "is not valid yet" "$DEBUGLOG" 2>/dev/null || return 0
-    print_warning "The system clock is behind: package lists are newer than $(date -u '+%Y-%m-%d %H:%M UTC')"
-    print_info "Correct the clock and run the installer again (a VM restored from a snapshot with RAM keeps its old time)"
+# Explain the apt failures that have a known cause outside the installer
+explain_apt_error() {
+    # apt rejects package lists dated later than the local clock
+    if grep -q "is not valid yet" "$DEBUGLOG" 2>/dev/null; then
+        print_warning "The system clock is behind: package lists are newer than $(date -u '+%Y-%m-%d %H:%M UTC')"
+        print_info "Correct the clock and run the installer again (a VM restored from a snapshot with RAM keeps its old time)"
+    # Only the last attempt counts: an earlier lock may have been waited out
+    elif tail -n 4 "$DEBUGLOG" 2>/dev/null | grep -q "Could not get lock"; then
+        print_warning "Another apt process still holds the lock after 10 minutes (probably automatic updates)"
+        print_info "Wait until it finishes (${g}pgrep -a apt${x}) and run the installer again"
+    fi
 }
 
 update_system() {
@@ -1034,7 +1052,7 @@ update_system() {
     # Treat partial repository download failures as errors as well.
     if ! spin "Updating package lists..." apt_run -o APT::Update::Error-Mode=any update; then
         print_error "Failed to update package lists (see $DEBUGLOG)"
-        explain_apt_clock_error
+        explain_apt_error
         return 1
     fi
     if ! spin "Upgrading packages..." apt_run upgrade -y; then
