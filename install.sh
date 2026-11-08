@@ -24,7 +24,7 @@
 
 ## Configuration
 
-SCRIPT_VERSION="0.8.18"
+SCRIPT_VERSION="0.8.19"
 SCRIPT_DATE="2026-11-08"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
@@ -432,7 +432,8 @@ sudo_validate_password() {
     diagnostic=$(tail -n "+$((diagnostic_start + 1))" "$DEBUGLOG")
     SUDO_ACCESS_DENIED=0
     case "$diagnostic" in
-        *"not in the sudoers"*|*"not allowed to run sudo"*|*"may not run sudo"*|*"not allowed to execute"*) SUDO_ACCESS_DENIED=1 ;;
+        # The last pattern is sudo-rs (default on current Ubuntu)
+        *"not in the sudoers"*|*"not allowed to run sudo"*|*"may not run sudo"*|*"not allowed to execute"*|*"afraid I can't do that"*) SUDO_ACCESS_DENIED=1 ;;
     esac
     [[ "$tracing" -eq 1 ]] && set -x
     return "$status"
@@ -971,18 +972,28 @@ sync_clock() {
         print_warning "Neither chrony nor systemd-timesyncd is running; the clock is not checked"
         return 0
     fi
-    local before start drift
+    # SECONDS follows the system clock, so measure the step against uptime
+    local before up_before drift
     before=$(date +%s)
-    start=$SECONDS
+    up_before=$(uptime_seconds)
     if spin "Synchronizing the clock with $service..." clock_resync "$service"; then
-        drift=$(( $(date +%s) - before - (SECONDS - start) ))
+        drift=$(( $(date +%s) - before - ($(uptime_seconds) - up_before) ))
         if (( drift > 1 || drift < -1 )); then
             print_info "System clock corrected by ${c}${drift}s${x}"
+            # Keep the elapsed time of the installation right
+            START_TIME=$((START_TIME + drift))
         fi
         print_info "System clock is synchronized"
     else
         print_warning "Could not confirm clock synchronization (see $DEBUGLOG)"
     fi
+}
+
+# Whole seconds since boot, unaffected by changes of the system clock (Linux)
+uptime_seconds() {
+    local up rest
+    read -r up rest < /proc/uptime
+    printf '%s\n' "${up%%.*}"
 }
 
 # Restart the NTP service, then wait up to 30 s for its first fresh answer

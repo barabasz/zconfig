@@ -121,7 +121,7 @@ assert_eq "$(_locale_shell $sandbox/shell)" "de_DE.UTF-8 en_US.UTF-8" "saved loc
 assert_eq "$(_locale_shell $sandbox/shell-default)" "pl_PL.UTF-8 en_US.UTF-8" "default locale"
 
 ## The clock is synchronized again instead of trusting a stale status
-local clock_code=$(sed -n -e '/^sync_clock() {/,/^}/p' -e '/^clock_resync() {/,/^}/p' \
+local clock_code=$(sed -n -e '/^sync_clock() {/,/^}/p' -e '/^clock_resync() {/,/^}/p' -e '/^uptime_seconds() {/,/^}/p' \
                           -e '/^explain_apt_clock_error() {/,/^}/p' $REPO_DIR/install.sh)
 
 # Usage: _clock_run <function> [VAR=value]...
@@ -156,6 +156,24 @@ assert_ok _has_line "$out" "warning: Could not confirm clock synchronization (se
 out=$(_clock_run sync_clock ACTIVE=none)
 assert_eq "${#${(@M)${(@f)out}:#warning: Neither chrony*}}" 1 "no NTP service is reported"
 assert_eq "${#${(@M)${(@f)out}:#run: systemctl restart*}}" 0 "nothing is restarted without an NTP service"
+
+## A clock step is reported and kept out of the elapsed time
+out=$(env FUNCS=$clock_code bash -c '
+    eval "$FUNCS"
+    print_info() { echo "info: $1"; }; print_warning() { :; }; do_sudo() { :; }
+    systemctl() { [[ "$3" == chrony ]]; }
+    spin() { shift; "$@"; }
+    NOW=1000 START_TIME=5
+    date() { echo $NOW; }
+    uptime_seconds() { echo 50; }
+    clock_resync() { NOW=$((NOW + 3600)); }
+    c= x=
+    sync_clock
+    printf "start: %s\n" "$START_TIME"
+' 2>&1)
+assert_ok _has_line "$out" "info: System clock corrected by 3600s"
+assert_ok _has_line "$out" "start: 3605"
+assert_eq "$(bash -c "$(sed -n '/^uptime_seconds() {/,/^}/p' $REPO_DIR/install.sh); [[ -r /proc/uptime ]] || exit 0; uptime_seconds" | tr -d '0-9')" "" "uptime is whole seconds"
 
 ## A failed package list update explains a clock that is behind
 print "E: Release file for http://example/InRelease is not valid yet (invalid for another 1h)." > $sandbox/clock.log
