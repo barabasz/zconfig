@@ -120,4 +120,47 @@ _locale_shell() {
 assert_eq "$(_locale_shell $sandbox/shell)" "de_DE.UTF-8 en_US.UTF-8" "saved locale reaches the shell"
 assert_eq "$(_locale_shell $sandbox/shell-default)" "pl_PL.UTF-8 en_US.UTF-8" "default locale"
 
+## The clock is synchronized again instead of trusting a stale status
+local clock_code=$(sed -n -e '/^sync_clock() {/,/^}/p' -e '/^clock_resync() {/,/^}/p' \
+                          -e '/^explain_apt_clock_error() {/,/^}/p' $REPO_DIR/install.sh)
+
+# Usage: _clock_run <function> [VAR=value]...
+# Stubs print every privileged call and every message, one per line
+_clock_run() {
+    env "${@:2}" FUNCS=$clock_code FN=$1 DEBUGLOG=$sandbox/clock.log bash -c '
+        eval "$FUNCS"
+        print_info() { echo "info: $1"; }; print_warning() { echo "warning: $1"; }
+        spin() { shift; "$@"; }
+        do_sudo() { echo "run: $*"; }
+        systemctl() { [[ "$3" == "$ACTIVE" ]]; }
+        chronyc() { echo "run: chronyc $*"; [[ -z "$CHRONY_FAIL" ]]; }
+        timedatectl() { echo "{ Leap=0 }"; }
+        c= x=
+        $FN
+    ' 2>&1
+}
+
+# Usage: _has_line <text> <line>
+_has_line() { (( ${${(@f)1}[(Ie)$2]} )) }
+
+out=$(_clock_run sync_clock ACTIVE=chrony)
+assert_ok _has_line "$out" "run: timedatectl set-ntp true"
+assert_ok _has_line "$out" "run: systemctl restart chrony"
+assert_ok _has_line "$out" "run: chronyc waitsync 30 1 0 1"
+assert_ok _has_line "$out" "info: System clock is synchronized"
+out=$(_clock_run sync_clock ACTIVE=systemd-timesyncd)
+assert_ok _has_line "$out" "run: systemctl restart systemd-timesyncd"
+assert_ok _has_line "$out" "info: System clock is synchronized"
+out=$(_clock_run sync_clock ACTIVE=chrony CHRONY_FAIL=1)
+assert_ok _has_line "$out" "warning: Could not confirm clock synchronization (see $sandbox/clock.log)"
+out=$(_clock_run sync_clock ACTIVE=none)
+assert_eq "${#${(@M)${(@f)out}:#warning: Neither chrony*}}" 1 "no NTP service is reported"
+assert_eq "${#${(@M)${(@f)out}:#run: systemctl restart*}}" 0 "nothing is restarted without an NTP service"
+
+## A failed package list update explains a clock that is behind
+print "E: Release file for http://example/InRelease is not valid yet (invalid for another 1h)." > $sandbox/clock.log
+assert_eq "${#${(@M)${(@f)$(_clock_run explain_apt_clock_error)}:#warning: The system clock is behind*}}" 1 "clock hint"
+print "E: Failed to fetch http://example/InRelease" > $sandbox/clock.log
+assert_eq "$(_clock_run explain_apt_clock_error)" "" "no clock hint for other errors"
+
 rm -rf $sandbox

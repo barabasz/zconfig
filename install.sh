@@ -24,8 +24,8 @@
 
 ## Configuration
 
-SCRIPT_VERSION="0.8.17"
-SCRIPT_DATE="2026-11-07"
+SCRIPT_VERSION="0.8.18"
+SCRIPT_DATE="2026-11-08"
 ZCONFIG_REPO="https://github.com/barabasz/zconfig.git"
 ZCONFIG_DIR="$HOME/.config/zsh"
 ZCONFIG_STAGING="$ZCONFIG_DIR.new"
@@ -954,31 +954,76 @@ configure_timezone() {
     fi
 }
 
+# A clock restored with a VM snapshot, or one that drifted, can still be
+# reported as synchronized. Restarting the NTP service makes it measure again
+# and step the clock, which apt needs to accept current package lists.
+sync_clock() {
+    if ! do_sudo timedatectl set-ntp true; then
+        print_warning "Could not enable network time synchronization (see $DEBUGLOG)"
+        return 0
+    fi
+    local service
+    if systemctl is-active --quiet chrony; then
+        service=chrony
+    elif systemctl is-active --quiet systemd-timesyncd; then
+        service=systemd-timesyncd
+    else
+        print_warning "Neither chrony nor systemd-timesyncd is running; the clock is not checked"
+        return 0
+    fi
+    local before start drift
+    before=$(date +%s)
+    start=$SECONDS
+    if spin "Synchronizing the clock with $service..." clock_resync "$service"; then
+        drift=$(( $(date +%s) - before - (SECONDS - start) ))
+        if (( drift > 1 || drift < -1 )); then
+            print_info "System clock corrected by ${c}${drift}s${x}"
+        fi
+        print_info "System clock is synchronized"
+    else
+        print_warning "Could not confirm clock synchronization (see $DEBUGLOG)"
+    fi
+}
+
+# Restart the NTP service, then wait up to 30 s for its first fresh answer
+# Usage: clock_resync chrony|systemd-timesyncd
+clock_resync() {
+    do_sudo systemctl restart "$1" || return 1
+    if [[ "$1" == chrony ]]; then
+        # Remaining correction below 1 s, checked every second
+        chronyc waitsync 30 1 0 1
+        return
+    fi
+    # A restarted timesyncd has no NTP message until a server answers, and it
+    # steps the clock when handling that answer
+    local i
+    for ((i = 0; i < 30; i++)); do
+        [[ -n "$(timedatectl show-timesync --property=NTPMessage --value 2>/dev/null)" ]] && return 0
+        sleep 1
+    done
+    return 1
+}
+
+# apt rejects package lists dated later than the local clock
+explain_apt_clock_error() {
+    grep -q "is not valid yet" "$DEBUGLOG" 2>/dev/null || return 0
+    print_warning "The system clock is behind: package lists are newer than $(date -u '+%Y-%m-%d %H:%M UTC')"
+    print_info "Correct the clock and run the installer again (a VM restored from a snapshot with RAM keeps its old time)"
+}
+
 update_system() {
     is_debian || return 0
 
     print_header "Updating system packages"
 
     configure_timezone
-
-    # Let systemd choose the installed NTP provider (e.g. chrony or timesyncd).
-    # Enabling NTP does not mean synchronization has already completed.
-    if do_sudo timedatectl set-ntp true; then
-        local synced
-        synced=$(timedatectl show --property=NTPSynchronized --value 2>>"$DEBUGLOG")
-        case "$synced" in
-            yes) print_info "System clock is synchronized" ;;
-            no) print_info "Network time synchronization enabled; clock synchronization is pending" ;;
-            *) print_warning "Network time synchronization enabled; could not read clock synchronization status" ;;
-        esac
-    else
-        print_warning "Could not enable network time synchronization (see $DEBUGLOG)"
-    fi
+    sync_clock
     print_info "Current time: ${c}$(date '+%Y-%m-%d %H:%M:%S %Z')${x}"
 
     # Treat partial repository download failures as errors as well.
     if ! spin "Updating package lists..." apt_run -o APT::Update::Error-Mode=any update; then
         print_error "Failed to update package lists (see $DEBUGLOG)"
+        explain_apt_clock_error
         return 1
     fi
     if ! spin "Upgrading packages..." apt_run upgrade -y; then
