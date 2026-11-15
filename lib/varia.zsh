@@ -6,7 +6,8 @@ zfile_track_start ${0:A}
 
 ##
 # Miscellaneous helper functions and metaprogramming utilities
-# Depends on: print.zsh (printe, printi, prints, yesno), inc/colors.zsh
+# Depends on: print.zsh (printe, printi, prints, yesno), inc/colors.zsh,
+#             zsh/datetime, zsh/system, zsh/zselect (race_first)
 ##
 
 ## Debugging and loading
@@ -164,6 +165,81 @@ retry() {
         (( i < attempts )) && sleep $delay
     done
     return $rc
+}
+
+## Parallel execution
+
+# Run commands in parallel and return the first accepted output line
+# Each command runs in its own process substitution, which prints its PID and
+# then execs the command, so the PID is the command itself and can be killed
+# directly; zselect waits on all outputs at once. The remaining commands are
+# killed as soon as one line is accepted, so the total time is that of the
+# fastest command, bounded by the timeout. Commands are split with (z), not
+# eval, so they must be external commands, not functions or shell code.
+# The filter function gets each line, returns 0 to accept it and sets REPLY
+# to the value to return; without a filter every non-empty line is accepted.
+# Usage: race_first [-t seconds] [-f filter] <label|command> [label|command...]
+# Example: race_first -t 2 "a|curl -fsS https://a.example" "b|dig +short b.example"
+# Output: accepted value (stdout); also sets REPLY, and reply=(value label)
+# Returns: 0 success, 1 nothing accepted within the timeout, 2 invalid usage
+race_first() {
+    local -A o
+    zparseopts -D -A o t: f: || return 2
+    (( ARGC >= 1 )) || { _lib_usage "race_first [-t seconds] [-f filter] <label|command>..."; return }
+    local timeout=${o[-t]:-${ZSH_NET_TIMEOUT:-2}} filter=${o[-f]:-}
+    [[ $timeout == (<->|<->.<->|.<->) ]] && (( timeout > 0 )) || return 2
+    [[ -z $filter ]] || (( ${+functions[$filter]} )) || return 2
+
+    local -A pids labels
+    local entry fd line value=""
+    for entry; do
+        exec {fd}< <(print -r -- $sysparams[pid]; exec ${(Q)${(z)entry#*|}} 2>/dev/null)
+        read -r -u $fd line
+        pids[$fd]=$line
+        labels[$fd]=${entry%%|*}
+    done
+
+    local -F deadline=$(( EPOCHREALTIME + timeout )) left
+    local -A ready
+    local -i eof
+    local winner=""
+    while (( ${#pids} )) && [[ -z $winner ]]; do
+        (( left = deadline - EPOCHREALTIME ))
+        (( left > 0.01 )) || break
+        ready=()
+        zselect -t $(( int(left * 100) )) -A ready -r ${(k)pids} || break
+        for fd in ${(k)ready}; do
+            # read fails at EOF, but a last line without a newline is still set
+            line=""
+            read -r -t $left -u $fd line && eof=0 || eof=1
+            if [[ -n $line ]]; then
+                if [[ -z $filter ]]; then
+                    value=$line
+                    winner=$labels[$fd]
+                elif $filter "$line"; then
+                    value=$REPLY
+                    winner=$labels[$fd]
+                fi
+            fi
+            if (( eof )); then
+                exec {fd}<&-
+                unset "pids[$fd]"
+            fi
+            [[ -n $winner ]] && break
+        done
+    done
+
+    # Cancel everything still running, including a winner that has not exited
+    for fd in ${(k)pids}; do
+        kill $pids[$fd] 2>/dev/null
+        exec {fd}<&-
+    done
+
+    REPLY=$value
+    reply=()
+    [[ -n $winner ]] || return 1
+    reply=($value $winner)
+    print -r -- $value
 }
 
 ## Command detection

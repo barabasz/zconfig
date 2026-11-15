@@ -9,6 +9,7 @@ zfile_track_start ${0:A}
 # validation and small utilities (url_encode/url_decode live in strings.zsh)
 # Depends on: system.zsh (is_macos, is_linux), print.zsh (output),
 #             fn.zsh (_FN_TYPES regex patterns, single source for validation),
+#             varia.zsh (race_first for get_public_ip),
 #             zsh/net/tcp (ztcp), zsh/zselect
 # TCP checks use a timeout (default ZSH_NET_TIMEOUT=2 seconds), because ztcp
 # itself has none and may hang on filtered ports.
@@ -223,29 +224,90 @@ get_local_ip6() {
     print -r -- "$REPLY"
 }
 
-# Get public IPv4 address (WAN)
-# DNS (dig) first for speed, then HTTP services as fallback
-# Usage: get_public_ip
-# Output: IP address (stdout); also sets REPLY
-# Returns: 0 success, 1 failure, 2 invalid usage
+# Extract a public IP address from one line of a service answer (internal)
+# DNS TXT answers are quoted, and some HTTP services answer with text such as
+# "IP Address: 1.2.3.4", so quotes are removed and the last word is checked.
+# Usage: _public_ip_parse <4|6> <line>
+# Output: sets REPLY to the address
+# Returns: 0 valid address, 1 otherwise, 2 invalid usage
+_public_ip_parse() {
+    (( ARGC == 2 )) || return 2
+    local -a words=(${=${2//[\"$'\r']/}})
+    REPLY=${words[-1]:-}
+    if (( $1 == 6 )); then
+        is_valid_ipv6 "$REPLY"
+    else
+        is_valid_ip "$REPLY"
+    fi
+}
+
+# race_first filter for IPv4 answers in get_public_ip (internal)
+# Usage: _public_ip_filter4 <line>
+# Returns: 0 valid address (in REPLY), 1 otherwise
+_public_ip_filter4() { _public_ip_parse 4 "$1" }
+
+# race_first filter for IPv6 answers in get_public_ip (internal)
+# Usage: _public_ip_filter6 <line>
+# Returns: 0 valid address (in REPLY), 1 otherwise
+_public_ip_filter6() { _public_ip_parse 6 "$1" }
+
+# Get public IP address (WAN), asking DNS and HTTP services in parallel
+# All services are queried at once with race_first: the first valid answer
+# wins and the other queries are cancelled, so a dead service costs nothing.
+# DNS needs dig; HTTP uses curl, or wget when curl is missing.
+# Usage: get_public_ip [-6] [-t seconds]
+# Output: IP address (stdout); also sets REPLY, and reply=(address service)
+# Returns: 0 success, 1 no answer within the timeout (default ZSH_NET_TIMEOUT),
+#          2 invalid usage, 127 neither dig, curl nor wget is installed
 get_public_ip() {
+    local -A o
+    zparseopts -D -A o 6 t: || return 2
     (( ARGC == 0 )) || return 2
-    REPLY=""
+    local t=${o[-t]:-$ZSH_NET_TIMEOUT} v=4
+    [[ $t == (<->|<->.<->|.<->) ]] && (( t > 0 )) || return 2
+    (( ${+o[-6]} )) && v=6
+    # dig accepts only whole seconds
+    local -i dig_time=$(( t < 1 ? 1 : int(t) ))
+
+    local -a dns http
+    if (( v == 4 )); then
+        dns=(
+            "Cloudflare (DNS)|TXT CH whoami.cloudflare @1.1.1.1"
+            "Google (DNS)|TXT o-o.myaddr.l.google.com @ns1.google.com"
+            "Akamai (DNS)|whoami.akamai.net @ns1-1.akamaitech.net"
+            "OpenDNS (DNS)|myip.opendns.com @resolver1.opendns.com"
+        )
+        http=(
+            icanhazip.com ifconfig.me/ip ipinfo.io/ip api.ipify.org
+            ipcomet.com/api/ip checkip.amazonaws.com ifconfig.co
+            ipecho.net/plain ip.me api.getpublicip.com/ip
+        )
+    else
+        dns=(
+            "Cloudflare (DNS)|TXT CH whoami.cloudflare @2606:4700:4700::1111"
+            "Google (DNS)|TXT o-o.myaddr.l.google.com @ns1.google.com"
+            "OpenDNS (DNS)|AAAA myip.opendns.com @resolver1.opendns.com"
+        )
+        http=(icanhazip.com ifconfig.me/ip api6.ipify.org ifconfig.co)
+    fi
+
+    local -a services
+    local entry url
     if (( ${+commands[dig]} )); then
-        REPLY=$(command dig +short +time=2 +tries=1 -4 myip.opendns.com @resolver1.opendns.com 2>/dev/null)
-        [[ -z $REPLY ]] && REPLY=$(command dig +short +time=2 +tries=1 -4 TXT o-o.myaddr.l.google.com @ns1.google.com 2>/dev/null)
-        REPLY=${REPLY//\"/}
+        for entry in $dns; do
+            services+=("${entry%%|*}|dig +short +time=$dig_time +tries=1 -$v ${entry#*|}")
+        done
     fi
-    if [[ -z $REPLY ]]; then
+    for url in $http; do
         if (( ${+commands[curl]} )); then
-            REPLY=$(command curl -4 -fsS -m 2 https://api.ipify.org 2>/dev/null) ||
-                REPLY=$(command curl -4 -fsS -m 2 https://ifconfig.me/ip 2>/dev/null)
+            services+=("${url%%/*}|curl -$v -fsS -m $t https://$url")
         elif (( ${+commands[wget]} )); then
-            REPLY=$(command wget -qO- --timeout=2 https://api.ipify.org 2>/dev/null)
+            services+=("${url%%/*}|wget -$v -qO- -T $t --tries=1 https://$url")
         fi
-    fi
-    is_valid_ip "$REPLY" || { REPLY=""; return 1 }
-    print -r -- "$REPLY"
+    done
+    (( ${#services} )) || { REPLY=""; reply=(); return 127 }
+
+    race_first -t $t -f _public_ip_filter$v $services
 }
 
 # Get default gateway IP

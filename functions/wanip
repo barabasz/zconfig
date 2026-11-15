@@ -5,108 +5,54 @@
 
 local -A _fn=(
     [info]="Retrieve the public IP address (IPv4 or IPv6)"
-    [desc]="Queries multiple services (DNS and HTTP) to retrieve your public IP address.
-            Falls back to the next service if one fails."
-    [version]="0.6.15"
+    [desc]="Queries many DNS and HTTP services in parallel and prints the first valid answer.
+            The remaining queries are cancelled, so a slow or dead service does not delay the result."
+    [version]="0.7.0"
     [created]="2024-02-26"
-    [modified]="2026-02-02"
+    [modified]="2026-11-15"
     [license]="MIT"
     [author]="Andrzej Barabasz"
-    [notes]="Requires curl or dig. DNS services are faster but only support IPv4."
+    [notes]="Requires dig, curl or wget. DNS services use dig, HTTP services use curl, or wget without curl.
+             The timeout bounds the whole query, not each service. The service list is in get_public_ip (lib/network.zsh)."
 )
 
+local -a _fn_args=()
 local -a _fn_opts=(
     "ipv6|6|Get IPv6 address instead of IPv4"
-    "verbose|V|Show which service was used"
-    "timeout|t|Timeout in seconds|sec|integer[1;30]"
+    "verbose|V|Show which service answered first and how fast"
+    "timeout|t|Timeout in seconds (default: 2)|sec|integer[1;30]"
 )
-
+local -a _fn_commands=()
 local -a _fn_examples=(
     "wanip|Get IPv4 address"
     "wanip -6|Get IPv6 address"
-    "wanip -V|Show service name"
-    "wanip -t 5|Set 5 second timeout"
+    "wanip -V|Show the fastest service"
+    "wanip -t 5|Wait up to 5 seconds"
 )
 
 local -A opts=() args=()
 _fn_init "$@" || return $REPLY
 
-local timeout=${opts[timeout]:-1}
+local -a ip_opts=(-t ${opts[timeout]:-2})
+(( ${+opts[ipv6]} )) && ip_opts+=(-6)
 
-# Check Dependencies
-local has_dig=0 has_curl=0
-(( ${+commands[dig]} )) && has_dig=1
-(( ${+commands[curl]} )) && has_curl=1
-
-if (( ! has_dig && ! has_curl )); then
-    printe "Missing dependencies: 'curl' or 'dig' required."
-    return 1
-fi
-
-# Define Services (Format: "ServiceName:Command")
-local -a services=()
-
-if (( ${+opts[ipv6]} )); then
-    # IPv6 Services (curl only)
-    if (( has_curl )); then
-        services+=(
-            "icanhazip.com:curl -6 -fsS -m $timeout https://icanhazip.com"
-            "ifconfig.me:curl -6 -fsS -m $timeout https://ifconfig.me/ip"
-            "ipify.org:curl -6 -fsS -m $timeout https://api6.ipify.org"
-        )
-    fi
-else
-    # IPv4 Services
-    if (( has_dig )); then
-        services+=(
-            "OpenDNS (DNS):dig +short -4 myip.opendns.com @resolver1.opendns.com"
-            "Akamai (DNS):dig +short -4 whoami.akamai.net @ns1-1.akamaitech.net"
-            "Google (DNS):dig -4 TXT +short o-o.myaddr.l.google.com @ns1.google.com"
-        )
-    fi
-    if (( has_curl )); then
-        services+=(
-            "icanhazip.com:curl -4 -fsS -m $timeout https://icanhazip.com"
-            "ifconfig.me:curl -4 -fsS -m $timeout https://ifconfig.me/ip"
-            "ipify.org:curl -4 -fsS -m $timeout https://api.ipify.org"
-            "ipecho.net:curl -4 -fsS -m $timeout https://ipecho.net/plain"
-        )
-    fi
-fi
-
-if (( ${#services} == 0 )); then
-    printe "No services available for the selected protocol."
-    return 1
-fi
-
-# Execute Services
-local ip="" service_name="" service_cmd=""
-
-for service_info in "${services[@]}"; do
-    service_name=${service_info%%:*}
-    service_cmd=${service_info#*:}
-
-    ip=$(eval "$service_cmd" 2>/dev/null)
-
-    # Trim whitespace and quotes
-    ip="${ip##[[:space:]]#}"
-    ip="${ip%%[[:space:]]#}"
-    ip=${ip//\"/}
-
-    # Validation
-    local valid=0
-    if (( ${+opts[ipv6]} )); then
-        [[ "$ip" == *:* ]] && valid=1
-    else
-        [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && valid=1
-    fi
-
-    if (( valid )); then
-        (( ${+opts[verbose]} )) && printi "IP found using $service_name"
-        print -- "$ip"
-        return 0
-    fi
-done
-
-printe "Failed to retrieve public IP address"
-return 1
+local -F start=$EPOCHREALTIME
+get_public_ip $ip_opts >/dev/null
+case $status in
+    0)
+        if (( ${+opts[verbose]} )); then
+            local ms
+            printf -v ms "%.0f" $(( (EPOCHREALTIME - start) * 1000 ))
+            printi "IP found using $reply[2] in $ms ms"
+        fi
+        print -r -- $REPLY
+        ;;
+    127)
+        printe "Missing dependencies: 'dig', 'curl' or 'wget' required."
+        return 1
+        ;;
+    *)
+        printe "Failed to retrieve public IP address"
+        return 1
+        ;;
+esac
