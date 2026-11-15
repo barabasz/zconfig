@@ -194,8 +194,11 @@ get_local_ips() {
             [[ $words[1] == $family && $line != *temporary* ]] && reply+=(${words[2]%%\%*})
         done
     elif (( ${+commands[ip]} )); then
+        # An array, because ${iface:+dev $iface} would be one word "dev eth0"
+        local -a dev=()
+        [[ -n $iface ]] && dev=(dev $iface)
         # One line per address: "2: eth0    inet 192.168.1.10/24 brd ..."
-        for line in "${(@f)$(command ip -$ver -o addr show ${iface:+dev "$iface"} scope global 2>/dev/null)}"; do
+        for line in "${(@f)$(command ip -$ver -o addr show $dev scope global 2>/dev/null)}"; do
             words=(${=line})
             local -i idx=${words[(i)$family]}
             (( idx < ${#words} )) && [[ $line != *temporary* ]] && reply+=(${words[idx+1]%%/*})

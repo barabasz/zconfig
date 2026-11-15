@@ -49,7 +49,8 @@ assert_rc 2 _public_ip_parse 4
 assert_rc 2 get_public_ip extra
 assert_rc 2 get_public_ip -t 0
 assert_rc 2 get_public_ip -t abc
-assert_rc 127 eval 'path=(/nonexistent); get_public_ip'
+# In a subshell, so the emptied path does not leak into the next tests
+assert_eq "$(path=(/nonexistent); get_public_ip; print -r -- $status)" 127 "get_public_ip: no dig, curl nor wget"
 
 ## Local IP: invalid usage and unknown interfaces
 assert_rc 2 get_local_ips a b
@@ -69,3 +70,25 @@ assert_rc 2 myip -l -V
 assert_rc 2 myip -t 0
 assert_fail myip -l -i no_such_iface0
 assert_eq "$(myip -l -i no_such_iface0 2>/dev/null)" "" "myip -l: no label, nothing on stdout"
+
+## Local IP on Linux: "dev <iface>" reaches ip as two words (fake ip, any OS;
+## each argument is matched separately, because "$*" would hide a joined word)
+local fake=$(mktemp -d)
+cat > $fake/ip <<'IP'
+#!/bin/sh
+case "$1|$2|$3|$4|$5|$6|$7|$8|$9" in
+    "-4|route|show|default|||||") printf '%s\n' "default via 192.168.1.1 dev ens18 proto dhcp metric 100" ;;
+    "-4|-o|addr|show|dev|ens18|scope|global|")
+        printf '%s\n' '2: ens18    inet 192.168.1.108/24 metric 100 brd 192.168.1.255 scope global dynamic ens18\       valid_lft 56649sec' ;;
+    "-6|-o|addr|show|dev|ens18|scope|global|")
+        printf '%s\n' '2: ens18    inet6 fd9f::9bee/64 scope global dynamic mngtmpaddr noprefixroute \       valid_lft 1685sec' ;;
+esac
+IP
+chmod +x $fake/ip
+assert_eq "$(is_macos() { return 1 }; path=($fake $path); get_local_ips)" 192.168.1.108 \
+    "get_local_ips: Linux, active interface"
+assert_eq "$(is_macos() { return 1 }; path=($fake $path); get_local_ip ens18)" 192.168.1.108 \
+    "get_local_ip: Linux, given interface"
+assert_eq "$(is_macos() { return 1 }; path=($fake $path); get_local_ip6)" fd9f::9bee \
+    "get_local_ip6: Linux, active interface"
+command rm -rf -- $fake
