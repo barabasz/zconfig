@@ -12,7 +12,6 @@ zfile_track_start ${0:A}
 alias info='sysinfo && logininfo'
 alias reload="reload_shell"
 alias cls='clear'
-alias myip='curl icanhazip.com'
 alias ds='du -sh ./*/'
 
 # Internal functions
