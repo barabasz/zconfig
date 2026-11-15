@@ -50,3 +50,22 @@ assert_rc 2 get_public_ip extra
 assert_rc 2 get_public_ip -t 0
 assert_rc 2 get_public_ip -t abc
 assert_rc 127 eval 'path=(/nonexistent); get_public_ip'
+
+## Local IP: invalid usage and unknown interfaces
+assert_rc 2 get_local_ips a b
+assert_rc 2 get_local_ips -x
+assert_fail get_local_ips no_such_iface0
+assert_fail get_local_ip no_such_iface0
+assert_fail get_local_ip6 no_such_iface0
+assert_eq "$REPLY" "" "get_local_ip6: empty REPLY when not found"
+
+## myip: LAN-only and WAN-only options are rejected for the other part
+fpath=($REPO_DIR/functions $fpath)
+autoload -Uz myip
+assert_rc 2 myip -w -i en0
+assert_rc 2 myip -w -a
+assert_rc 2 myip -l -t 5
+assert_rc 2 myip -l -V
+assert_rc 2 myip -t 0
+assert_fail myip -l -i no_such_iface0
+assert_eq "$(myip -l -i no_such_iface0 2>/dev/null)" "" "myip -l: no label, nothing on stdout"

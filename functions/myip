@@ -1,0 +1,111 @@
+# Part of zconfig · https://github.com/barabasz/zconfig · MIT License
+#
+# Show the local (LAN) and public (WAN) IP addresses
+# Use 'myip --help' for more information.
+
+local -A _fn=(
+    [info]="Show the local (LAN) and public (WAN) IP addresses"
+    [desc]="Without options, prints both addresses with 'lan:' and 'wan:' labels.
+            With -l or -w, prints only that address without a label, for use in scripts.
+            The public address comes from many DNS and HTTP services queried in parallel:
+            the first valid answer wins and the remaining queries are cancelled."
+    [version]="1.0.0"
+    [created]="2024-02-26"
+    [modified]="2026-11-15"
+    [license]="MIT"
+    [author]="Andrzej Barabasz"
+    [notes]="LAN addresses come from the active (default route) interface unless -i is given.
+             WAN needs dig, curl or wget; the service list is in get_public_ip (lib/network.zsh).
+             The timeout bounds the whole WAN query, not each service.
+             -i and -a apply to LAN only, -t and -V to WAN only.
+             Returns 1 when any requested address is not found."
+)
+
+local -a _fn_args=()
+local -a _fn_opts=(
+    "lan|l|Show only the local (LAN) address"
+    "wan|w|Show only the public (WAN) address"
+    "ipv6|6|Show IPv6 addresses instead of IPv4"
+    "interface|i|LAN: use this network interface|iface"
+    "all|a|LAN: show all addresses of the interface"
+    "timeout|t|WAN: timeout in seconds (default: 2)|sec|integer[1;30]"
+    "verbose|V|WAN: show which service answered first and how fast"
+)
+local -a _fn_commands=()
+local -a _fn_examples=(
+    "myip|Show LAN and WAN IPv4 addresses"
+    "myip -w|Print only the public address"
+    "myip -l -i en0|Print the address of interface en0"
+    "myip -6 -a|Show all IPv6 addresses"
+    "myip -w -V -t 5|Show the fastest service, wait up to 5 seconds"
+)
+
+local -A opts=() args=()
+_fn_init "$@" || return $REPLY
+
+# Both parts unless exactly one is asked for; labels only when both are shown
+local -i lan=1 wan=1
+local lan_tag="lan: " wan_tag="wan: "
+if (( ${+opts[lan]} != ${+opts[wan]} )); then
+    lan_tag="" wan_tag=""
+    lan=${+opts[lan]}
+    wan=${+opts[wan]}
+fi
+
+if (( ! lan )) && (( ${+opts[interface]} || ${+opts[all]} )); then
+    printe "Options -i and -a apply to the LAN address only"
+    _fn_usage_short >&2
+    return 2
+fi
+if (( ! wan )) && (( ${+opts[timeout]} || ${+opts[verbose]} )); then
+    printe "Options -t and -V apply to the WAN address only"
+    _fn_usage_short >&2
+    return 2
+fi
+
+local -a ip_opts=()
+(( ${+opts[ipv6]} )) && ip_opts+=(-6)
+local -i rc=0
+local addr
+
+## LAN
+if (( lan )); then
+    if get_local_ips $ip_opts ${opts[interface]:+"${opts[interface]}"} >/dev/null; then
+        (( ${+opts[all]} )) || reply=($reply[1])
+        for addr in $reply; do
+            print -r -- "$lan_tag$addr"
+        done
+    else
+        printe "No local IP address found${opts[interface]:+ for interface ${opts[interface]}}"
+        [[ -n $lan_tag ]] && print -r -- $lan_tag
+        rc=1
+    fi
+fi
+
+## WAN
+if (( wan )); then
+    local -F start=$EPOCHREALTIME
+    get_public_ip $ip_opts -t ${opts[timeout]:-2} >/dev/null
+    case $status in
+        0)
+            if (( ${+opts[verbose]} )); then
+                local ms
+                printf -v ms "%.0f" $(( (EPOCHREALTIME - start) * 1000 ))
+                printi "Public IP found using $reply[2] in $ms ms"
+            fi
+            print -r -- "$wan_tag$REPLY"
+            ;;
+        127)
+            printe "Missing dependencies: 'dig', 'curl' or 'wget' required"
+            [[ -n $wan_tag ]] && print -r -- $wan_tag
+            rc=1
+            ;;
+        *)
+            printe "Failed to retrieve public IP address"
+            [[ -n $wan_tag ]] && print -r -- $wan_tag
+            rc=1
+            ;;
+    esac
+fi
+
+return rc

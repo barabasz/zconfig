@@ -171,56 +171,67 @@ get_mac_address() {
     print -r -- "$REPLY"
 }
 
-# Get local IPv4 address (LAN)
+# Get all local IP addresses (LAN) of an interface
+# Without an interface, the active (default route) one is used. Loopback,
+# link-local (fe80::) and temporary IPv6 addresses are skipped.
+# Usage: get_local_ips [-6] [interface]
+# Output: addresses, one per line (stdout); also sets reply
+# Returns: 0 success, 1 none found, 2 invalid usage
+get_local_ips() {
+    local -a v6
+    zparseopts -D -F -- 6=v6 2>/dev/null || return 2
+    (( ARGC <= 1 )) || return 2
+    local iface=$1 family=inet ver=4 line
+    local -a words
+    (( ${#v6} )) && family=inet6 ver=6
+    reply=()
+    [[ -n $iface ]] || { get_active_interface >/dev/null && iface=$REPLY }
+
+    if is_macos; then
+        # "inet 192.168.1.10 netmask ..." or "inet6 fe80::1%en0 prefixlen ..."
+        for line in "${(@f)$(command ifconfig "${iface:-en0}" 2>/dev/null)}"; do
+            words=(${=line})
+            [[ $words[1] == $family && $line != *temporary* ]] && reply+=(${words[2]%%\%*})
+        done
+    elif (( ${+commands[ip]} )); then
+        # One line per address: "2: eth0    inet 192.168.1.10/24 brd ..."
+        for line in "${(@f)$(command ip -$ver -o addr show ${iface:+dev "$iface"} scope global 2>/dev/null)}"; do
+            words=(${=line})
+            local -i idx=${words[(i)$family]}
+            (( idx < ${#words} )) && [[ $line != *temporary* ]] && reply+=(${words[idx+1]%%/*})
+        done
+    elif (( ver == 4 )) && [[ -z $iface ]] && (( ${+commands[hostname]} )); then
+        # Without ip, hostname -I lists the addresses of all interfaces
+        for line in ${=$(command hostname -I 2>/dev/null)}; do
+            is_valid_ip $line && reply+=($line)
+        done
+    fi
+    reply=(${${reply:#fe80:*}:#127.*})
+    (( ${#reply} )) || return 1
+    print -rl -- $reply
+}
+
+# Get local IPv4 address (LAN), the first one of get_local_ips
 # Usage: get_local_ip [interface]
 # Output: IP address (stdout); also sets REPLY
 # Returns: 0 success, 1 not found, 2 invalid usage
 get_local_ip() {
     (( ARGC <= 1 )) || return 2
-    local iface=$1
     REPLY=""
-    if is_macos; then
-        [[ -n $iface ]] || iface=$(get_active_interface) || iface=en0
-        REPLY=$(command ipconfig getifaddr "$iface" 2>/dev/null)
-    elif [[ -z $iface ]] && (( ${+commands[hostname]} )); then
-        # hostname -I lists all addresses; take the first one
-        local ips=$(command hostname -I 2>/dev/null)
-        REPLY=${ips%% *}
-    fi
-    if [[ -z $REPLY ]] && (( ${+commands[ip]} )); then
-        [[ -n $iface ]] || iface=$(get_active_interface)
-        local -a parts=($(command ip -4 -o addr show ${iface:+dev "$iface"} scope global 2>/dev/null))
-        local -i idx=${parts[(i)inet]}
-        (( idx < ${#parts} )) && REPLY=${parts[idx+1]%%/*}
-    fi
-    [[ -n $REPLY ]] || return 1
+    get_local_ips "$@" >/dev/null || return
+    REPLY=$reply[1]
     print -r -- "$REPLY"
 }
 
-# Get local global-scope IPv6 address
+# Get local global-scope IPv6 address, the first one of get_local_ips -6
 # Usage: get_local_ip6 [interface]
 # Output: IPv6 address (stdout); also sets REPLY
 # Returns: 0 success, 1 not found, 2 invalid usage
 get_local_ip6() {
     (( ARGC <= 1 )) || return 2
-    local iface=$1
     REPLY=""
-    if is_macos; then
-        [[ -n $iface ]] || iface=$(get_active_interface) || iface=en0
-        local line
-        for line in "${(@f)$(command ifconfig "$iface" 2>/dev/null)}"; do
-            # Skip link-local (fe80::) and temporary addresses
-            if [[ $line == *inet6* && $line != *fe80:* && $line != *temporary* ]]; then
-                REPLY=${line[(w)2]}
-                break
-            fi
-        done
-    elif (( ${+commands[ip]} )); then
-        local -a parts=($(command ip -6 -o addr show ${iface:+dev "$iface"} scope global 2>/dev/null))
-        local -i idx=${parts[(i)inet6]}
-        (( idx < ${#parts} )) && REPLY=${parts[idx+1]%%/*}
-    fi
-    [[ -n $REPLY ]] || return 1
+    get_local_ips -6 "$@" >/dev/null || return
+    REPLY=$reply[1]
     print -r -- "$REPLY"
 }
 

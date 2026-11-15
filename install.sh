@@ -1151,9 +1151,9 @@ install_extra_utils() {
     local utils=(
         "$sevenzip_cmd:sevenzip:7zip" # Official 7-Zip: apt on Linux, Homebrew on macOS
         "bat:bat:"       # cat replacement with syntax highlighting
-        "curl::curl"     # URL transfers - used by network.zsh, wanip
+        "curl::curl"     # URL transfers - used by network.zsh, myip
         "dasel:dasel:"   # data query tool - reads zapp recipes
-        "dig::dnsutils"  # DNS lookup - used by network.zsh, mdig, wanip
+        "dig::dnsutils"  # DNS lookup - used by network.zsh, mdig, myip
         "eza:eza:"       # ls replacement; Homebrew on both platforms
         "fzf:fzf:"       # fuzzy finder
         "glow:glow:"     # markdown viewer
